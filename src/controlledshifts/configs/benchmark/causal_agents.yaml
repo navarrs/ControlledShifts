@@ -1,0 +1,9 @@
+# @package _global_
+
+benchmark_name: causal_agents
+
+# Path to the directory containing per-scenario JSON causal labels.
+causal_labels_path: /data/driving/waymo/causal_agents/processed_labels/
+
+# Masking strategy. One of: remove_causal, remove_noncausal, remove_noncausalequal, remove_static.
+strategy: remove_causal

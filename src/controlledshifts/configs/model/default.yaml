@@ -1,0 +1,38 @@
+_target_: controlledshifts.models.base_model.BaseModel
+config:
+  eval: null
+  model_name: null
+  extra_tags: null
+  sample_selection: false
+
+  # Training parameters
+  max_epochs: 200
+  train_batch_size: 64
+  eval_batch_size: 64
+  load_num_workers: 10 # number of workers for loading data
+  grad_clip_norm: 5
+
+
+  # General Model and Dataset Parameters, shared across all architectures
+  max_num_agents: 32
+  map_range: 100
+  max_num_roads: 384
+  max_points_per_lane: 30 # will be overwritten if manually_split_lane is True
+  map_input_size: 29
+  agents_input_size: 29
+  num_modes: 6
+  hidden_size: 256
+  center_offset_of_map: [30.0, 0.0]
+  manually_split_lane: False
+  point_sampled_interval: 1
+  num_points_each_polyline: 20
+  vector_break_dist_thresh: 1.0
+
+  past_len: ${scenario.past_len}
+  future_len: ${scenario.future_len}
+
+  monitor: "losses/val"
+
+  cache_batch: False
+  cache_every_batch_idx: 100
+  batch_cache_path: ${paths.batch_cache_path}

@@ -1,0 +1,14 @@
+defaults:
+  - default.yaml
+
+base_path: /datasets/open_scenario
+tag: 'stack_test_set_1'
+
+train_data_path: ["${paths.base_path}/processed/${paths.tag}/training"]
+train_data_tag: ["${paths.tag}-training"]
+
+val_data_path: ["${paths.base_path}/processed/${paths.tag}/validation"]
+val_data_tag: ["${paths.tag}-validation"]
+
+test_data_path: ["${paths.base_path}/processed/${paths.tag}/testing"]
+test_data_tag: ["${paths.tag}-testing"]

@@ -1,0 +1,21 @@
+# order of defaults determines the order in which configs override each other
+defaults:
+  - train.yaml
+  - _self_
+
+task_name: "eval"
+
+# set False to skip model training
+train: False
+
+# evaluate on test set, using best model weights achieved during training
+# lightning chooses best weights based on the metric specified in checkpoint callback
+test: True
+eval: True
+
+tags: ["dev"]
+
+# passing checkpoint path is necessary for evaluation
+ckpt_name: null
+exp_name: ${paths.tag}_${model.config.model_name}${sweep_type}
+ckpt_path: ${paths.ckpt_path}/${exp_name}/${ckpt_name}.ckpt

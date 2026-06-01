@@ -1,0 +1,27 @@
+# path to root directory
+# this requires PROJECT_ROOT environment variable to exist
+# you can replace it with "." if you want the root to be the current working directory
+root_dir: ${oc.env:PROJECT_ROOT}
+tag: 'mini'
+
+base_path: /data/driving/${scenario.dataset_name}
+data_cache_path: ${paths.base_path}/data_cache
+experiment_cache_path: ${paths.base_path}/${paths.tag}/model_cache
+temp_path: "temp"
+
+# path to output directory, created dynamically by hydra
+# path generation pattern is specified in `configs/hydra/default.yaml`
+# use it to store all files generated during the run, like ckpts and metrics
+# path to working directory
+work_dir: ${hydra:runtime.cwd}
+output_dir: ${hydra:runtime.output_dir}
+
+# Temporary outputs
+experiment_dir: ${exp_name}_${now:%Y-%m-%d}_${now:%H-%M-%S}
+meta_path: ${paths.experiment_cache_path}/${paths.experiment_dir}/meta
+log_path: ${paths.experiment_cache_path}/${paths.experiment_dir}/logs
+ckpt_path: ${paths.experiment_cache_path}/${paths.experiment_dir}/ckpts
+batch_cache_path: ${paths.experiment_cache_path}/${paths.experiment_dir}/batch_cache
+analysis_path: ${paths.experiment_cache_path}/${paths.experiment_dir}/analysis
+viz_path: ${paths.experiment_cache_path}/${paths.experiment_dir}/viz
+causal_labels_path: ${paths.base_path}/causal_agents/processed_labels/

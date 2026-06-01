@@ -1,0 +1,4 @@
+dataset_name: nuscenes
+past_len: 21 # history trajectory length, 2.1s
+future_len: 60 # future trajectory length, 6s
+tag: "nuscenes_past-${scenario.past_len}_future-${scenario.future_len}"

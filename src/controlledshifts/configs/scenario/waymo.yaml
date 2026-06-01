@@ -1,0 +1,4 @@
+dataset_name: waymo
+past_len: 11 # history trajectory length, 1.1s
+future_len: 80 # future trajectory length, 8s
+tag: "waymo_past-${scenario.past_len}_future-${scenario.future_len}"

@@ -1,0 +1,28 @@
+defaults:
+  - default.yaml
+
+# Combines the Causal and SafeShift Benchmarks
+tag: 'safeshift-causal-benchmark'
+
+# NOTE: for training and validation, this is using the original (unmodified) scenarios from the CausalAgents benchmark.
+train_data_path: [ "${paths.base_path}/processed/mini_causal/training" ] # list of paths to the training data
+train_data_tag: ["mini-causal-training"]
+
+val_data_path: ["${paths.base_path}/processed/mini_causal/validation" ] # list of paths to the validation data
+val_data_tag: ["mini-causal-validation"]
+
+# NOTE: for testing, we combine the CausalAgents and SafeShift benchmarks.
+test_data_path: [
+  "${paths.base_path}/processed/mini_causal/testing",
+  "${paths.base_path}/processed/remove_noncausal/validation",
+  "${paths.base_path}/processed/remove_noncausal/testing",
+  "${paths.base_path}/processed/safeshift_causal/validation",
+  "${paths.base_path}/processed/safeshift_causal/testing"
+]
+test_data_tag: [
+  "mini-causal-testing",
+  "remove-noncausal-validation",      # Perturbed Scenes by removing agents that are NOT labeled as causal to the ego.
+  "remove-noncausal-testing",
+  "safeshift-id",                     # In-Distribution Scenes determined by the SafeShift scoring strategies.
+  "safeshift-ood"                     # Out-of-Distribution Scenes determined by the SafeShift scoring strategies.
+]

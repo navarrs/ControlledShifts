@@ -1,0 +1,32 @@
+defaults:
+  - default.yaml
+
+_target_: controlledshifts.datasets.waymo_dataset.WaymoDataset
+config:
+  load_data: false
+  # Override all interpolated fields from default.yaml so this config is usable outside the full training config tree.
+  past_len: 11
+  future_len: 80
+  train_data_path: null
+  train_data_tag: null
+  val_data_path: null
+  val_data_tag: null
+  test_data_path: null
+  test_data_tag: null
+  sample_selection_strategy: all
+  sample_selection_filepath: null
+  temp_path: null
+  cache_path: null
+  overwrite_cache: false
+  max_num_agents: null
+  max_num_roads: null
+  max_points_per_lane: null
+  map_range: null
+  manually_split_lane: null
+  point_sampled_interval: null
+  num_points_each_polyline: null
+  vector_break_dist_thresh: null
+  center_offset_of_map: null
+  causal_labels_path: null
+  autolabel_agents: false
+  only_train_on_ego: true

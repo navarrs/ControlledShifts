@@ -1,0 +1,36 @@
+defaults:
+  - default.yaml
+
+tag: 'causal-agents'
+
+# NOTE: for training and validation, this is using the original (unmodified) scenarios
+train_data_path: [ "${paths.base_path}/processed/mini_causal/training" ] # list of paths to the training data
+train_data_tag: ["mini-causal-training"]
+val_data_path: ["${paths.base_path}/processed/mini_causal/validation" ] # list of paths to the validation data
+val_data_tag: ["mini-causal-validation"]
+
+# NOTE: for testing, this is using the benchmark sets which are perturbed versions of the original scenes.
+test_data_path: [
+  "${paths.base_path}/processed/mini_causal/validation",
+  "${paths.base_path}/processed/mini_causal/testing",
+  "${paths.base_path}/processed/remove_causal/validation",
+  "${paths.base_path}/processed/remove_causal/testing",
+  "${paths.base_path}/processed/remove_noncausal/validation",
+  "${paths.base_path}/processed/remove_noncausal/testing",
+  "${paths.base_path}/processed/remove_noncausalequal/validation",
+  "${paths.base_path}/processed/remove_noncausalequal/testing",
+  "${paths.base_path}/processed/remove_static/validation",
+  "${paths.base_path}/processed/remove_static/testing",
+]
+test_data_tag: [
+  "mini-causal-validation",
+  "mini-causal-testing",
+  "remove-causal-validation",         # Perturbation: removes agents that are causal to the ego.
+  "remove-causal-testing",
+  "remove-noncausal-validation",      # Perturbation: removes agents that are NOT causal to the ego.
+  "remove-noncausal-testing",
+  "remove-noncausalequal-validation", # Perturbation: removes agents that are NOT causal to the ego, but removes an
+  "remove-noncausalequal-testing",    #               amount of agents equal to the number of causal agents.
+  "remove-static-validation",         # Perturbation: removes all agents that are not moving beyond a threshold.
+  "remove-static-testing",
+]

@@ -1,0 +1,22 @@
+# @package _global_
+defaults:
+  - benchmark: causal_agents  # override via benchmark=ego_safeshift or benchmark=safeshift
+  - scenario: waymo
+  - visualization: viz_static
+  - dataset: waymo_analysis
+  - _self_
+
+# General parameters shared across all benchmarks.
+seed: 42
+num_workers: 20
+
+# If true, the source scenario file is deleted after being copied to the output directory.
+unlink_source: false
+
+# Path to the input dataset (contains split subdirectories with .pkl scenario files).
+input_data_path: /data/driving/waymo/processed/mini_causal/
+
+# Root output directory for the benchmark.
+output_data_path: /data/driving/waymo/processed/${benchmark_name}/
+
+task_name: create_benchmark

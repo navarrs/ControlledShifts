@@ -1,0 +1,64 @@
+# @package _global_
+
+# specify here default configuration
+# order of defaults determines the order in which configs override each other
+defaults:
+  - _self_
+  - hydra: default.yaml
+  - extras: default.yaml
+  - logger: many_loggers.yaml # set logger here or use command line (e.g. `python train.py logger=tensorboard`)
+  - callbacks: trajpred.yaml
+  - paths: causal_agents.yaml
+  - scenario: waymo.yaml
+  - dataset: waymo.yaml
+  - model: default.yaml
+  - trainer: gpu.yaml
+
+  # experiment configs allow for version control of specific hyperparameters
+  # e.g. best hyperparameters for given model and datamodule
+  - experiment: null
+
+  # config for hyperparameter optimization
+  - hparams_search: null
+
+  # debugging config (enable through command line, e.g. `python train.py debug=default)
+  - debug: null
+
+# task name, determines output directory path
+task_name: "train"
+
+# tags to help you identify your experiments
+# you can overwrite this in experiment configs
+# overwrite from command line with `python train.py tags="[first_tag, second_tag]"`
+tags: ["dev"]
+
+# set False to skip model training
+train: True
+
+# evaluate on test set, using best model weights achieved during training
+# lightning chooses best weights based on the metric specified in checkpoint callback
+test: True
+
+# compile model for faster training with pytorch 2.0
+compile: False
+
+# simply provide checkpoint path to resume training
+ckpt_path: null
+
+# seed for random number generators in pytorch, numpy and python.random
+seed: 42
+
+# experiment name
+sweep_type: ''
+exp_name: ${paths.tag}_${model.config.model_name}${sweep_type}
+
+# sample selection
+# either of 'all', 'random_drop', 'kmeans_random_drop', 'simple_kmeans_cosine_drop', 'gumbel_kmeans_cosine_drop'
+sample_selection_strategy: all
+sample_selection_path: null # need to specify the path where the sample selection file is saved to
+percentage: 0.45
+sample_selection_filepath: ${sample_selection_path}/sample_selection_${sample_selection_strategy}_${percentage}.json
+sample_selection_intention_points_filepath: ${sample_selection_path}/sample_selection_intention_points_${sample_selection_strategy}_${percentage}.pkl
+
+overwrite_cache: false
+autolabel_agents: false

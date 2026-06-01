@@ -1,0 +1,6 @@
+defaults:
+ - viz_static.yaml
+
+tag: scenario-causal-animated
+visualizer:
+  _target_: controlledshifts.utils.scenario_visualizers.scenario_causal_animated.ScenarioCausalAnimatedVisualizer

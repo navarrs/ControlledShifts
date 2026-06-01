@@ -1,0 +1,16 @@
+defaults:
+  - default.yaml
+
+tag: 'safeshift-benchmark'
+
+# NOTE: for training and validation, this uses the SafeShift In-Distribution (ID) subset obtained through the
+# 'asymmetric-combined' scoring strategy
+train_data_path: [ "${paths.base_path}/processed/safeshift/training" ]
+train_data_tag: ["safeshift-training"]
+val_data_path: ["${paths.base_path}/processed/safeshift/validation" ]
+val_data_tag: ["safeshift-id"]
+
+# NOTE: for training and validation, this uses the SafeShift Out-Of-Distribution (OOD) subset obtained through the
+# 'asymmetric-combined' scoring strategy
+test_data_path: ["${paths.base_path}/processed/safeshift/testing"]
+test_data_tag: ["safeshift-ood"]
