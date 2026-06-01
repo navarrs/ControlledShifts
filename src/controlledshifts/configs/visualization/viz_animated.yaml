@@ -1,0 +1,6 @@
+defaults:
+ - viz_static.yaml
+
+tag: scenario-animated
+visualizer:
+  _target_: controlledshifts.utils.scenario_visualizers.scenario_animated.ScenarioAnimatedVisualizer

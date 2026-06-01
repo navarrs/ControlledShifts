@@ -1,0 +1,22 @@
+defaults:
+  - default.yaml
+
+
+tag: 'environments-benchmark'
+
+# NOTE: for training, this uses the In-Distribution (ID) subset of the Environments benchmark
+train_data_path: [ "${paths.base_path}/processed/environments/training" ] # list of paths to the training data
+train_data_tag: ["environments-training"]
+
+val_data_path: ["${paths.base_path}/processed/environments/validation" ] # list of paths to the validation data
+val_data_tag: ["environments-id"]
+
+# NOTE: for testing, this is using the Out-Of-Distribution (OOD) subset of the Environments benchmark.
+test_data_path: [
+  "${paths.base_path}/processed/environments/validation",
+  "${paths.base_path}/processed/environments/testing",
+]
+test_data_tag: [
+  "environments-id",
+  "environments-ood",
+]

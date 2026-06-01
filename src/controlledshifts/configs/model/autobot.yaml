@@ -1,0 +1,65 @@
+defaults:
+  - default.yaml
+
+_target_: controlledshifts.models.autobot.AutoBot
+config:
+  model_name: autobot
+
+  # Add model tags
+  base_tags: lr-${model.config.optimizer.lr}_batch-size-${model.config.train_batch_size}
+  extra_tags: ${model.config.base_tags}
+
+  # Model's hyperparameters
+  hidden_size: 128
+  agents_input_size: 2
+  map_input_size: 2
+  num_encoder_layers: 2
+  num_decoder_layers: 2
+  tx_hidden_size: 384
+  tx_num_heads: 16
+  dropout: 0.1
+
+  # Model's optimization criterion
+  criterion:
+    _target_: controlledshifts.models.criterion.trajpred.TrajectoryPredictionAutoBot
+    config:
+      kl_weight: 20.0
+      entropy_weight: 40.0
+      fdeade_weight: 100.0
+      use_fdeade_aux_loss: true
+
+  # NOTE: original optimizer for reference.
+  # optimizer:
+  #   _target_: torch.optim.Adam
+  #   _partial_: true
+  #   lr: 0.00075
+  #   weight_decay: 0.01
+  #   betas: [0.9, 0.95]
+  #   eps: 0.0001
+
+  # Optimizer
+  optimizer:
+    _target_: torch.optim.AdamW
+    _partial_: true
+    lr: 0.0001
+    weight_decay: 0.01
+    betas: [0.9, 0.95]
+    eps: 0.0001
+
+  # NOTE: original scheduler for reference.
+  # scheduler:
+  #   _target_: torch.optim.lr_scheduler.MultiStepLR
+  #   _partial_: true
+  #   milestones: [10, 20, 30, 40, 50]
+  #   gamma: 0.5
+
+  # Scheduler
+  scheduler:
+    _target_: torch.optim.lr_scheduler.OneCycleLR
+    _partial_: true
+    max_lr: 0.0002
+    steps_per_epoch: 1
+    epochs: ${model.config.max_epochs}
+    pct_start: 0.02
+    div_factor: 100.0
+    final_div_factor: 10

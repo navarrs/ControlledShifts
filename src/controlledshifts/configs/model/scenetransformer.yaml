@@ -1,0 +1,64 @@
+defaults:
+  - default.yaml
+
+_target_: controlledshifts.models.scenetransformer.SceneTransformer
+config:
+  train_batch_size: 32
+  eval_batch_size: 32
+  model_name: scenetransformer
+
+  # Add model tags
+  base_tags: lr-${model.config.optimizer.lr}_batch-size-${model.config.train_batch_size}
+  extra_tags: ${model.config.base_tags}_${model.config.scenario_embedder_tags}
+
+  # Scenario Embedder
+  scenario_embedder_tags: num-heads-${model.config.scenario_embedder.num_heads}_num-roads-${model.config.max_num_roads}
+  scenario_embedder:
+    _target_: controlledshifts.models.scene.factorized_embedder.FactorizedEmbedder
+    num_pre_self_attention_blocks: 1
+    num_pre_cross_attention_blocks: 1
+    num_mid_self_attention_blocks: 1
+    num_mid_cross_attention_blocks: 1
+    num_post_self_attention_blocks: 1
+    # factorized embedder maintains a dimension (batch, num_timesteps, num_agents, hidden_size)
+    num_timesteps: ${scenario.past_len}
+    num_agents: ${model.config.max_num_agents}
+    hidden_size: 256
+    num_queries: ${model.config.num_modes}
+    widening_factor: 2
+    dropout: 0.0
+    num_heads: 4
+    bias: True
+
+  # Motion Decoder
+  motion_decoder:
+    _target_: controlledshifts.models.scene.decoder.TrajectoryDecoder
+    num_modes: ${model.config.num_modes}
+    decoding_length: ${scenario.future_len}
+    hidden_size: 256
+
+  # Model's optimization criterion
+  criterion:
+    _target_: controlledshifts.models.criterion.trajpred.TrajectoryPrediction
+    config:
+      rho_limit: 0.5
+
+  # Optimizer
+  optimizer:
+    _target_: torch.optim.AdamW
+    _partial_: true  # allows optimizer's instatiation without the model parameters (see configure_optimizers() in BaseModel)
+    lr: 0.0001
+    weight_decay: 0.01
+    betas: [0.9, 0.95]
+    eps: 0.0001
+
+  # Scheduler
+  scheduler:
+    _target_: torch.optim.lr_scheduler.OneCycleLR
+    _partial_: true
+    max_lr: 0.0002
+    steps_per_epoch: 1
+    epochs: ${model.config.max_epochs}
+    pct_start: 0.02
+    div_factor: 100.0
+    final_div_factor: 10

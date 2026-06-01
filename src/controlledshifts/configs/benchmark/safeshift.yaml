@@ -1,0 +1,12 @@
+# @package _global_
+
+benchmark_name: safeshift
+
+# Path to the SafeShift score metadata directory (contains *_infos.pkl files).
+scores_path: /data/driving/waymo/mtr_process_splits
+
+# Filename prefix used to locate the per-split metadata files.
+prefix: score_asym_combined_80_
+
+# Delete source files after copying (SafeShift input data is typically not needed after benchmark creation).
+unlink_source: true

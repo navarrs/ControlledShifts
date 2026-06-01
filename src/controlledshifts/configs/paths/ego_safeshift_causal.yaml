@@ -1,0 +1,24 @@
+defaults:
+  - default.yaml
+
+# Combines the Causal and SafeShift Benchmarks
+tag: 'ego-safeshift-causal-benchmark'
+
+# NOTE: for training and validation, this is using the In-Distribution (ID) subset of the CausalAgents benchmark, obtained
+# through Ego-SafeShift's 'gt' scoring strategy
+train_data_path: [ "${paths.base_path}/processed/causal_ego_safeshift/training" ] # list of paths to the training data
+train_data_tag: ["causal-ego-safeshift-training"]
+
+val_data_path: ["${paths.base_path}/processed/causal_ego_safeshift/validation" ] # list of paths to the validation data
+val_data_tag: ["causal-ego-safeshift-id"]
+
+# NOTE: for testing, this is using the Out-Of-Distribution (OOD) subset of the CausalAgents benchmark, obtained
+# through Ego-SafeShift's 'gt' scoring strategy
+test_data_path: [
+  "${paths.base_path}/processed/causal_ego_safeshift/validation",
+  "${paths.base_path}/processed/causal_ego_safeshift/testing",
+]
+test_data_tag: [
+  "causal-ego-safeshift-id",
+  "causal-ego-safeshift-ood",
+]

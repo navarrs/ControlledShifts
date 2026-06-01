@@ -1,0 +1,8 @@
+defaults:
+ - viz_static.yaml
+
+tag: scenario-trajpred
+visualizer:
+  _target_: controlledshifts.utils.scenario_visualizers.scenario_trajpred.ScenarioTrajpredVisualizer
+  config:
+    is_ego_centric: true

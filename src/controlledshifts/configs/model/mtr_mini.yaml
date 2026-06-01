@@ -1,0 +1,101 @@
+defaults:
+  - default.yaml
+
+_target_: controlledshifts.models.mtr.MTR
+
+# Hyperparameters mirrored from: https://github.com/cmubig/SafeShift/blob/master/tools/cfgs/mini/mtr%2B20p_64_b.yaml
+config:
+  model_name: mtr-mini
+  base_tags: lr-${model.config.optimizer.lr}_batch-size-${model.config.train_batch_size}
+  extra_tags: ${model.config.base_tags}
+
+  # Parameters needed to create the intention point clusters, which are used as candidate future endpoints for the
+  # motion decoder cross-attention.
+  intention_points_file: ./meta/${paths.tag}/intention_points.pkl
+  intention_points_num_clusters: 64
+  intention_points_max_samples: null
+
+  # Context Encoder
+  context_encoder:
+    # Agent polyline encoder
+    num_input_attr_agent: ${model.config.agents_input_size}   # 29 (mask appended internally)
+    num_channel_in_mlp_agent: 128
+    num_layer_in_mlp_agent: 3
+
+    # Map polyline encoder
+    num_input_attr_map: ${model.config.map_input_size}        # 29
+    num_channel_in_mlp_map: 32
+    num_layer_in_mlp_map: 5
+    num_layer_in_pre_mlp_map: 3
+
+    # Global attention
+    d_model: 96
+    num_attn_layers: 4
+    num_attn_head: 2
+    dropout_of_attn: 0.1
+
+    # Local attention (original local KNN requires CUDA extensions)
+    use_local_attn: false
+    num_of_attn_neighbors: 16
+
+  # Motion Decoder
+  motion_decoder:
+    d_model: 96
+    map_d_model: 64         # separate (smaller) projection for map cross-attention
+    num_attn_head: 2
+    dropout_of_attn: 0.1
+
+    object_type: ["VEHICLE", "PEDESTRIAN", "CYCLIST"] # object types to predict for, used for filtering input agents and in the decoder's output representation
+
+    num_future_frames: ${model.config.future_len} # number of future frames to predict (e.g. 30 for 6s prediction with 0.2s timesteps)
+    num_motion_modes: ${model.config.num_modes} # final number of output modes (after NMS)
+    num_decoder_layers: 5
+
+    # NMS threshold for deduplicating near-identical modes (metres)
+    nms_dist_thresh: 2.5
+
+    # Dynamic map collection: number of polylines from base region + waypoint region
+    num_base_map_polylines: 64
+    num_waypoint_map_polylines: 48
+
+    # Fixed map region offset relative to the ego-agent (metres, [x_forward, y_lateral])
+    center_offset_of_map: ${model.config.center_offset_of_map}
+
+    # Intention point clusters (.pkl produced by scripts/compute_mtr_intention_points.py).
+    # Set to null to fall back to random initialisation with a warning.
+    intention_points_file: ${model.config.intention_points_file}
+
+    # Loss weights
+    loss_weights:
+      cls: 1.0
+      reg: 1.0
+      vel: 0.5
+
+  # Criterion
+  criterion: null
+
+  # Optimizer
+  optimizer:
+    _target_: torch.optim.AdamW
+    _partial_: true
+    lr: ${model.config.lr}
+    weight_decay: 0.01
+    betas: [0.9, 0.95]
+    eps: 0.0001
+
+  # Scheduler (LambdaLR with step decay — consumed by MTR.configure_optimizers override)
+  scheduler:
+    _target_: torch.optim.lr_scheduler.LambdaLR
+    _partial_: true
+  learning_rate_sched: [22, 24, 26, 28]  # epochs at which lr is multiplied by lr_decay
+  lr: 0.001
+  lr_decay: 0.5
+  lr_clip: 0.000001
+
+  grad_clip_norm: 1000.0
+  max_num_agents: 64
+  max_num_roads: 512
+  manually_split_lane: True
+  point_sampled_interval: 1
+  num_points_each_polyline: 20
+  vector_break_dist_thresh: 1.0

@@ -1,0 +1,63 @@
+# @package _global_
+
+benchmark_name: environments
+
+# Clustering algorithm to use. Options: 'kmeans', 'hdbscan', 'agglomerative', 'ward', 'spectral'.
+clustering_algorithm: ward
+
+# Number of clusters. Used by all algorithms except 'hdbscan'.
+n_clusters: 10
+
+# Minimum cluster size for HDBSCAN (ignored by other algorithms).
+min_cluster_size: 5
+
+# Number of graph visualizations to save per cluster.
+n_examples: 10
+
+# Fraction of all scenarios used to fit the scaler and KMeans model.
+sample_percentage: 1.0
+
+# Explicit number of scenarios to use for fitting. Overrides sample_percentage when set.
+num_scenarios: null
+
+# If false, disable multiprocessing for all steps (useful for debugging with breakpoints).
+parallel: true
+
+# If true, restrict each scenario's graph to map elements within the ego-centric L∞ range filter.
+ego_centered: true
+
+# Maximum number of map elements to retain when ego_centered is true.
+num_map_elements: 384
+
+# If true, recompute all descriptors and overwrite the cache.
+overwrite: false
+
+# If true, simplify the map graph before computing NetLSD descriptors.
+simplify: false
+
+# L∞ half-width of the ego-centric range box in metres.
+map_range: 100.0
+
+# If true, visualize descriptor scatter plots per cluster using PCA or t-SNE.
+visualize_descriptor_scatter: false
+
+# Dimensionality reduction for the scatter plot: 'pca' or 'tsne'.
+reduction: tsne
+
+# Desired (train, val, test) fractions of all scenarios. Must sum to 1.0.
+prepare_splits: false
+split_ratios: [0.70, 0.15, 0.15]
+
+# Metric used to rank cluster hardness when selecting the test set.
+# 'silhouette': lowest mean silhouette clusters are hardest (most ambiguous).
+# 'dbi': highest mean Davies-Bouldin Index clusters are hardest (high intra-scatter / low inter-separation).
+hardness_metric: silhouette
+
+# Cache path
+cache_path: /data/driving/waymo/environment
+
+# If true, render per-cluster graph visualizations using visualize_scenario_graph.
+visualize_cluster_graphs: false
+
+# If true, render full scenario visualizations (agents + map) per cluster using ScenarioVisualizer.
+visualize_scenarios: true
