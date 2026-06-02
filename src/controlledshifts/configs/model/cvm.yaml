@@ -1,0 +1,44 @@
+defaults:
+  - default.yaml
+
+_target_: controlledshifts.models.cvm.ConstantVelocityModel
+config:
+  model_name: cvm
+
+  # Add model tags
+  base_tags: log-sigma-${model.config.log_sigma}_batch-size-${model.config.train_batch_size}
+  extra_tags: ${model.config.base_tags}
+
+  # CVM-specific hyperparameters. `log_sigma` controls the constant log-standard-deviation used for the
+  # bivariate-Gaussian GMM output parameters.
+  log_sigma: 0.0
+
+  # CVM does not learn — keep training to a single epoch so the trainer's fit loop only iterates the dataset once before
+  # validating/testing.
+  max_epochs: 1
+
+  # Model's optimization criterion
+  criterion:
+    _target_: controlledshifts.models.criterion.trajpred.TrajectoryPrediction
+    config:
+      rho_limit: 0.5
+
+  # Optimizer over a single dummy parameter (CVM has no trainable weights).
+  optimizer:
+    _target_: torch.optim.AdamW
+    _partial_: true
+    lr: 0.0001
+    weight_decay: 0.0
+    betas: [0.9, 0.95]
+    eps: 0.0001
+
+  # Scheduler — kept compatible with the single-epoch run.
+  scheduler:
+    _target_: torch.optim.lr_scheduler.OneCycleLR
+    _partial_: true
+    max_lr: 0.0002
+    steps_per_epoch: 1
+    epochs: ${model.config.max_epochs}
+    pct_start: 0.02
+    div_factor: 100.0
+    final_div_factor: 10
