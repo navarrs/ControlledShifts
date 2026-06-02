@@ -223,6 +223,46 @@ class BaseModel(LightningModule, ABC):
         return ego_in, agents_in, roads
 
     @staticmethod
+    def gather_ground_truth(inputs: dict, *, ego_only_history: bool = False) -> tuple[torch.Tensor, torch.Tensor]:
+        """Build the history and future ground-truth tensors expected by the criterion.
+
+        Notation:
+            B: batch size
+            N: number of agents in a scene
+            H: history length
+            F: future length
+            Da: number of agent features
+
+        Args:
+            inputs (dict): dictionary containing scenario data according to `collate_fn()` in
+                `controlledshifts/datasets/base_dataset.py`. Requires the keys ``obj_trajs``, ``obj_trajs_mask``,
+                ``center_gt_trajs``, ``center_gt_trajs_mask`` and, when ``ego_only_history`` is True,
+                ``track_index_to_predict``.
+            ego_only_history (bool): when True, restrict the history tensor to the ego agent identified by
+                ``track_index_to_predict``; otherwise keep all agents.
+
+        Returns:
+            tuple[torch.Tensor, torch.Tensor]:
+                - history_ground_truth: shape (B, N, H, Da + 1) when ``ego_only_history`` is False, or (B, H, Da + 1)
+                  when True. The last channel is the validity mask.
+                - future_ground_truth: shape (B, F, 3), where the last channel is the validity mask and the first two
+                  are the ego (x, y) ground-truth positions.
+        """
+        obj_trajs = inputs["obj_trajs"]
+        obj_trajs_mask = inputs["obj_trajs_mask"]
+        if ego_only_history:
+            # Restrict to the ego agent: history shape (B, H, Da) and mask shape (B, H).
+            idx = inputs["track_index_to_predict"].long()
+            batch_idx = torch.arange(len(idx), device=obj_trajs.device)
+            obj_trajs = obj_trajs[batch_idx, idx]
+            obj_trajs_mask = obj_trajs_mask[batch_idx, idx]
+        history_ground_truth = torch.cat([obj_trajs, obj_trajs_mask.unsqueeze(-1)], dim=-1)
+
+        center_xy = inputs["center_gt_trajs"][..., :2]  # shape (B, F, 2)
+        future_ground_truth = torch.cat([center_xy, inputs["center_gt_trajs_mask"].unsqueeze(-1)], dim=-1)
+        return history_ground_truth, future_ground_truth
+
+    @staticmethod
     def gather_scores(inputs: dict) -> ScenarioScores | None:
         """Gather scenario scores for individual and interaction safety.
 
