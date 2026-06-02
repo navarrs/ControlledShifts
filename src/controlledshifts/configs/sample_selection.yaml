@@ -60,25 +60,6 @@ paths:
   # uv run -m controlledshifts.sample_selection model=wayformer ckpt_path=/data/driving/waymo/causal-benchmark-labeled/model_cache/causal-benchmark-labeled_wayformer_2026-02-19_01-23-56/ckpts/causal-benchmark-labeled_wayformer/epoch_093.ckpt
   # experiment_dir: causal-benchmark-labeled_wayformer_2026-02-19_01-23-56
 
-  # Student Model (ckpt: epoch_140.ckpt)
-  # experiment_dir: causal-benchmark-labeled_controlledshifts_2026-02-13_19-21-01
-
-  # Causal-ST Model, run as: (ckpt: epoch_095.ckpt)
-  # uv run -m controlledshifts.sample_selection model=causal_controlledshifts ckpt_path=/data/driving/waymo/causal-benchmark-labeled/model_cache/causal-benchmark-labeled_causal-controlledshifts_2026-02-05_15-05-18/ckpts/causal-benchmark-labeled_causal-controlledshifts/epoch_095.ckpt
-  # experiment_dir: causal-benchmark-labeled_causal-controlledshifts_2026-02-05_15-05-18
-
-  # Safe-ST Model (ckpt: epoch_139.ckpt)
-  # experiment_dir: causal-benchmark-labeled_safe-controlledshifts_safe-weight_2026-01-13_18-45-53
-
-  # Safe-ST Model with focal loss (ckpt: epoch_105.ckpt)
-  # uv run -m controlledshifts.run_sample_selection model=safe_controlledshifts ckpt_path=/data/driving/waymo/causal-benchmark-labeled/model_cache/causal-benchmark-labeled_safe-controlledshifts_focal_gamma_hc_2026-03-12_12-08-48/ckpts/causal-benchmark-labeled_safe-controlledshifts_focal_gamma_hc/epoch_105.ckpt
-  # experiment_dir: causal-benchmark-labeled_safe-controlledshifts_focal_gamma_hc_2026-03-12_12-08-48
-
-  # Safe-ST Model with simplified auxiliary signal
-  # uv run -m controlledshifts.run_sample_selection model=safe_controlledshifts ckpt_path=/data/driving/waymo/causal-benchmark-labeled/model_cache/causal-benchmark-labeled_safe-controlledshifts_2026-04-15_00-50-48/ckpts/causal-benchmark-labeled_safe-controlledshifts/epoch_107.ckpt
-  # experiment_dir: causal-benchmark-labeled_safe-controlledshifts_2026-04-15_00-50-48
-
-
   # -----------------------------------------------------------
   # Experiment paths for best models on Ego SafeShift Benchmark
   # -----------------------------------------------------------
@@ -87,11 +68,6 @@ paths:
   # uv run -m controlledshifts.run_sample_selection paths=ego_safeshift_causal model=wayformer ckpt_path=/data/driving/waymo/ego-safeshift-causal-benchmark/model_cache/ego-safeshift-causal-benchmark_wayformer_2026-02-20_04-45-11/ckpts/ego-safeshift-causal-benchmark_wayformer/epoch_138.ckpt
   experiment_dir: ego-safeshift-causal-benchmark_wayformer_2026-02-20_04-45-11
 
-  # SafeST (ckpt: epoch_116.ckpt)
-  # uv run -m controlledshifts.run_sample_selection paths=ego_safeshift_causal model=safe_controlledshifts ckpt_path=/data/driving/waymo/ego-safeshift-causal-benchmark/model_cache/ego-safeshift-causal-benchmark_safe-controlledshifts_foc-tp-tok_2026-04-12_10-45-58/ckpts/ego-safeshift-causal-benchmark_safe-controlledshifts_foc-tp-tok/epoch_116.ckpt
-  # experiment_dir: ego-safeshift-causal-benchmark_safe-controlledshifts_foc-tp-tok_2026-04-12_10-45-58
-
-
   # -----------------------------------------------------------
   # Experiment paths for best models on Environments Benchmark
   # -----------------------------------------------------------
@@ -99,8 +75,3 @@ paths:
   # Wayformer (ckpt: epoch_087.ckpt)
   # uv run -m controlledshifts.run_sample_selection paths=environments model=wayformer ckpt_path=/data/driving/waymo/environments-benchmark/model_cache/environments-benchmark_wayformer_2026-04-14_10-27-47/ckpts/environments-benchmark_wayformer/epoch_087.ckpt
   # experiment_dir: environments-benchmark_wayformer_2026-04-14_10-27-47
-
-
-  # SafeST (ckpt: epoch_088.ckpt)
-  # uv run -m controlledshifts.run_sample_selection paths=environments model=safe_controlledshifts ckpt_path=/data/driving/waymo/environments-benchmark/model_cache/environments-benchmark_safe-controlledshifts_2026-04-15_16-49-54/ckpts/environments-benchmark_safe-controlledshifts/epoch_088.ckpt
-  # experiment_dir: environments-benchmark_safe-controlledshifts_2026-04-15_16-49-54

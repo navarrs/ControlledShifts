@@ -363,7 +363,7 @@ def _plot_sample_selection_sweep_heatmap(  # noqa: PLR0912, PLR0915
 
     Columns are ``(strategy, generator_model)`` pairs derived from the file paths in
     ``config.sample_selection_files``. When multiple generator-model files cover the same strategy
-    (e.g. ``wayformer/kmeans.csv`` and ``safe-controlledshifts/kmeans.csv``), each gets its own column
+    (e.g. ``wayformer/kmeans.csv``), each gets its own column
     with a disambiguating label such as ``KMeans-SC (WF)`` and ``KMeans-SC (SafeST)``.
 
     Args:
