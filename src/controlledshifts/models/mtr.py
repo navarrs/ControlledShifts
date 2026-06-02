@@ -104,19 +104,9 @@ class MTR(BaseModel):
         # (decoded_trajectories: B, M, F, 5).
         decoded_trajectories = pred_trajs[:, :, :, :5]  # (B, M, F, 5)
 
-        # Ground truth tensors
-        history_gt_trajs = input_dict["obj_trajs"]  # (B, N, H, Da)
-        history_gt_trajs_mask = input_dict["obj_trajs_mask"]  # (B, N, H)
-
-        # Use the ego-agent (track_index_to_predict) history as history_ground_truth
-        idx = input_dict["track_index_to_predict"].long()  # (B,)
-        ego_history = history_gt_trajs[torch.arange(len(idx)), idx]  # (B, H, Da)
-        ego_history_mask = history_gt_trajs_mask[torch.arange(len(idx)), idx]  # (B, H)
-        history_ground_truth = torch.cat([ego_history, ego_history_mask.unsqueeze(-1)], dim=-1)  # (B, H, Da+1)
-
-        center_gt_trajs = input_dict["center_gt_trajs"][..., :2]  # (B, F, 2)
-        center_gt_trajs_mask = input_dict["center_gt_trajs_mask"]  # (B, F)
-        future_ground_truth = torch.cat([center_gt_trajs, center_gt_trajs_mask.unsqueeze(-1)], dim=-1)  # (B, F, 3)
+        # Ground truth tensors. MTR uses the ego-agent (track_index_to_predict) history only.
+        # history_ground_truth shape: (B, H, Da + 1); future_ground_truth shape: (B, F, 3) = (x, y, mask).
+        history_ground_truth, future_ground_truth = BaseModel.gather_ground_truth(input_dict, ego_only_history=True)
 
         # Scenario embedding: expose the center-object feature
         center_feat = batch["center_objects_feature"]  # (B, Dm)

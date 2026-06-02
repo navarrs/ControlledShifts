@@ -125,15 +125,8 @@ class AutoBot(BaseModel):
                 tensors, metadata, and optional scenario scores.
         """
         inputs = batch["input_dict"]
-        history_gt_trajs = inputs["obj_trajs"]
-        history_gt_trajs_mask = inputs["obj_trajs_mask"].unsqueeze(-1)
-        history_ground_truth = torch.cat([history_gt_trajs, history_gt_trajs_mask], dim=-1)
-
-        center_gt_trajs = inputs["center_gt_trajs"][..., :2]
-        center_gt_trajs_mask = inputs["center_gt_trajs_mask"].unsqueeze(-1)
-
-        # Ground-truth trajectory shape: (B, F, 3), where 3 = (x, y, mask).
-        future_ground_truth = torch.cat([center_gt_trajs, center_gt_trajs_mask], dim=-1)
+        # history_ground_truth shape: (B, N, H, Da + 1); future_ground_truth shape: (B, F, 3) = (x, y, mask).
+        history_ground_truth, future_ground_truth = BaseModel.gather_ground_truth(inputs)
 
         # Gathered input shapes
         #   ego_agent: (B, H, Da + 1)
