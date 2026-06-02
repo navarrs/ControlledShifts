@@ -1,0 +1,143 @@
+# @package _global_
+seed: 42 # Seed for random generators
+show_run_id: false
+models_to_compare: [
+  'autobot',
+  'scenetransformer',
+  'wayformer',
+  'mtr',
+]
+
+trajectory_forecasting_metrics: [
+  'brierFDE',
+  'minFDE6',
+  'minADE6',
+  'missRate',
+  # 'collisionRate0.1',
+  'collisionRate0.25',
+]
+
+causal_metrics: [
+  'causalTP',
+  'causalTN',
+  'causalFP',
+  'causalFN',
+  'f1Score',
+  'precision',
+  'recall',
+]
+
+other_metrics: [
+  # 'Runtime',
+]
+
+# Sample selection sweep analysis — general params (overridden per analysis below)
+sample_selection_benchmark: null
+sample_selection_files: []
+sample_selection_splits_to_compare: []
+
+sample_retention_percentages: [0.45, 0.55, 0.65, 0.75, 0.85, 0.95]
+sample_selection_strategies_to_compare: [
+  'random_drop',
+  'kmeans_random_drop',
+  # 'simple_kmeans_cosine_drop',
+  # 'gumbel_kmeans_cosine_drop',
+  # 'den_tp',
+  # 'vocab_cluster_jaccard_drop',
+  # 'vocab_cluster_hamming_drop',
+]
+
+lineplot_colormap: tab10
+heatmap_colormap: RdYlGn_r
+highlight_color: dodgerblue
+add_rectangle_annotation: false
+heatmap_cell_size: 0.75        # inches per cell (controls overall figure scale)
+heatmap_label_margin: 2.2      # left margin for y-tick labels (inches)
+heatmap_xtick_margin: 1.5      # bottom margin for rotated x-tick labels (inches)
+heatmap_title_margin: 0.5      # top margin for subplot titles + suptitle (inches)
+heatmap_cbar_margin: 0.8       # right margin for colorbar (inches)
+
+# Causal agents sample selection analysis
+run_causal_agents_sample_selection_sweep_lineplot_analysis: false
+run_causal_agents_sample_selection_sweep_heatmap_analysis: false
+causal_agents_sample_selection_benchmark: 'causal-benchmark-labeled'
+causal_agents_sample_selection_files: [
+  "./meta/sample_selection_results/causal_agents/baselines/baselines.csv",
+  "./meta/sample_selection_results/causal_agents/baselines/random.csv",
+  "./meta/sample_selection_results/causal_agents/wayformer/dentp.csv",
+  "./meta/sample_selection_results/causal_agents/wayformer/kmeans.csv",
+  "./meta/sample_selection_results/causal_agents/safe-controlledshifts/kmeans.csv",
+  "./meta/sample_selection_results/causal_agents/safe-controlledshifts/token.csv",
+]
+causal_agents_sample_selection_splits_to_compare: [
+  'test/waymo-mini-causal-testing',
+  'test/waymo-remove-noncausal-testing',
+]
+
+# Ego-safeshift sample selection analysis
+run_ego_safeshift_sample_selection_sweep_lineplot_analysis: true
+run_ego_safeshift_sample_selection_sweep_heatmap_analysis: true
+ego_safeshift_sample_selection_benchmark: 'ego-safeshift-causal-benchmark'
+ego_safeshift_sample_selection_files: [
+  "./meta/sample_selection_results/ego_safeshift/baselines/baselines.csv",
+  "./meta/sample_selection_results/ego_safeshift/baselines/random.csv",
+  "./meta/sample_selection_results/ego_safeshift/wayformer/kmeans.csv",
+  # "./meta/sample_selection_results/ego_safeshift/safe-controlledshifts/kmeans.csv",
+  "./meta/sample_selection_results/ego_safeshift/safe-controlledshifts/token.csv",
+]
+ego_safeshift_sample_selection_splits_to_compare: [
+  'test/waymo-causal-ego-safeshift-id',
+  'test/waymo-causal-ego-safeshift-ood',
+]
+
+# Environments sample selection analysis
+run_environments_sample_selection_sweep_lineplot_analysis: true
+run_environments_sample_selection_sweep_heatmap_analysis: true
+environments_sample_selection_benchmark: 'environments-benchmark'
+environments_sample_selection_files: [
+  "./meta/sample_selection_results/environments/baselines/baselines.csv",
+  "./meta/sample_selection_results/environments/baselines/random.csv",
+  "./meta/sample_selection_results/environments/wayformer/kmeans.csv",
+  # "./meta/sample_selection_results/environments/safe-controlledshifts/kmeans.csv",
+  "./meta/sample_selection_results/environments/safe-controlledshifts/token.csv",
+]
+environments_sample_selection_splits_to_compare: [
+  'test/waymo-environments-id',
+  'test/waymo-environments-ood',
+]
+
+# Benchmark analysis settings
+benchmark: null
+benchmark_filepath: null
+benchmark_colormap: null
+benchmark_splits_to_compare: []
+
+# Ego-safeshift analysis
+run_ego_safeshift_analysis: false
+ego_safeshift_benchmark: 'ego-safeshift-causal-benchmark'
+ego_safeshift_filepath: "./meta/distribution_shift_results/ego_safeshift_benchmark.csv"
+ego_safeshift_colormap: colorblind
+ego_safeshift_splits_to_compare: [
+  'test/waymo-causal-ego-safeshift-id',
+  'test/waymo-causal-ego-safeshift-ood',
+]
+
+# Causal benchmark analysis
+run_causal_benchmark_analysis: false
+causal_benchmark: 'causal-benchmark-labeled'
+causal_benchmark_filepath: "./meta/distribution_shift_results/causal_benchmark.csv"
+causal_benchmark_colormap: colorblind
+causal_benchmark_splits_to_compare: [
+  'test/waymo-mini-causal-testing',
+  'test/waymo-remove-noncausal-testing',
+]
+
+# Environment benchmark analysis
+run_environments_benchmark_analysis: false
+environments_benchmark: 'environments-benchmark'
+environments_benchmark_filepath: "./meta/distribution_shift_results/environments_benchmark.csv"
+environments_benchmark_colormap: colorblind
+environments_benchmark_splits_to_compare: [
+  'test/waymo-environments-id',
+  'test/waymo-environments-ood',
+]
