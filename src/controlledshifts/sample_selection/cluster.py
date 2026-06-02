@@ -88,8 +88,7 @@ def _cluster_embeddings(config: DictConfig, embeddings: NDArray[np.float64]) -> 
 
 def random_selection_per_cluster(config: DictConfig, model_outputs: dict[str, output.ModelOutput]) -> dict[str, Any]:
     """A sample selection strategy that clusters scenario_dec embeddings using a clustering algorithm (currently only
-    K-Means is supported) and randomly drops samples per cluster proportional to each cluster's size, mirroring the
-    logic of random_selection_per_token.
+    K-Means is supported) and randomly drops samples per cluster proportional to each cluster's size.
 
     Args:
         config: encapsulates model analysis configuration parameters.
@@ -136,7 +135,7 @@ def random_selection_per_cluster(config: DictConfig, model_outputs: dict[str, ou
 
 def cosine_selection_per_cluster(config: DictConfig, model_outputs: dict[str, output.ModelOutput]) -> dict[str, Any]:
     """A sample selection strategy that clusters scenario_dec embeddings using K-Means and drops samples based on
-    cosine similarity to the cluster centroid, mirroring the logic of alignment_based_selection_per_token.
+    cosine similarity to the cluster centroid.
 
     Samples with high cosine similarity to their cluster centroid (most typical/redundant) are prioritized for
     dropping. Supports both simple (deterministic) and Gumbel-weighted (stochastic) sorting strategies.

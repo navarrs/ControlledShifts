@@ -38,7 +38,7 @@ def main(config: DictConfig) -> float | None:
     output_path = Path(config.paths.viz_path) / f"{config.split}_scenarios" / f"{config.visualization.tag}"
     output_path.mkdir(parents=True, exist_ok=True)
 
-    # Loads scenario tokenized information
+    # Loads model outputs
     batches = utils.load_batches(
         config.paths.batch_cache_path, config.num_batches, config.num_scenarios, config.seed, config.split
     )
@@ -67,18 +67,7 @@ def main(config: DictConfig) -> float | None:
             scenario = dataset.process_agent_centric_scenario(scenario)[0]
             scenario = AgentCentricScenario(**scenario)
 
-        # Choose the "best" mode to select the scenario class
         scenario_output_path = output_path
-        selected_mode = 0
-        if config.select_mode:
-            selected_mode = (
-                scenario_output.trajectory_decoder_output.mode_probabilities.value.argmax(dim=-1).detach().cpu().item()
-            )
-        tokenization_output = scenario_output.tokenization_output
-        if tokenization_output is not None:
-            scenario_class = tokenization_output.token_indices.value[selected_mode].detach().cpu().item()
-            scenario_output_path = Path(f"{output_path}/{scenario_class}")
-            scenario_output_path.mkdir(parents=True, exist_ok=True)
 
         visualizer.visualize_scenario(
             scenario,

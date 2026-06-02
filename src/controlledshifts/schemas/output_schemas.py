@@ -10,28 +10,6 @@ from pydantic_tensor.backend.torch import TorchTensor
 from pydantic_tensor.types import Float, Int
 
 
-class TokenizationOutput(BaseModel):  # pyright: ignore[reportUntypedBaseClass]
-    """Encapsulates the output values of the Tokenizers defined in 'models/scene/tokenizers'.
-    NOTE: The output values don't have a specific dimension yet, since the exact output values are still in development.
-
-    Attributes:
-        token_probabilities (TorchTensor(Float)): the probability mass over the tokens classes.
-        token_indices (TorchTensor(Int)): the selected token classes.
-        input_embedding (TorchTensor(Float)): the embedding values before encoding and/or quantizing.
-        reconstructed_embedding (TorchTensor(Float) | None): the reconstructed embedding.
-        quantized_embedding (TorchTensor(Float) | None): the discretized embedding if using quantization.
-        loss (TorchTensor(Float) | None): the loss value if tokenizer is using a dedicated loss function.
-    """
-
-    num_tokens: int = 0
-    token_probabilities: Tensor[TorchTensor, Any, Float] | None = None
-    token_indices: Tensor[TorchTensor, Any, Int]
-    input_embedding: Tensor[TorchTensor, Any, Float]
-    reconstructed_embedding: Tensor[TorchTensor, Any, Float] | None = None
-    quantized_embedding: Tensor[TorchTensor, Any, Float] | None = None
-    loss: Tensor[TorchTensor, Any, Float] | None = None
-
-
 class TrajectoryDecoderOutput(BaseModel):  # pyright: ignore[reportUntypedBaseClass]
     """Encapsulates the output values of the MotionDecoder defined in 'models/scene/decoder.py'.
     NOTE: The output values don't have a specific dimension yet, since the exact output values are still in development.
@@ -135,10 +113,8 @@ class ModelOutput(BaseModel):  # pyright: ignore[reportUntypedBaseClass]
     Attributes:
         scenario_embedding (ScenarioEmbedding): the scenario embedding output values.
         trajectory_decoder_output (TrajectoryDecoderOutput | None): the trajectory decoder output values.
-        tokenization_output (TokenizationOutput | None): the tokenization output values.
         safety_output (SafetyOutput | None): the safety output values.
         causal_output (CausalOutput | None): the causal output values.
-        causal_tokenization_output (TokenizationOutput | None): the causal tokenization output values.
         history_ground_truth (TorchTensor(Float)): the ground truth history trajectories.
         future_ground_truth (TorchTensor(Float)): the ground truth future trajectories.
         dataset_name (list[str]): the name of the dataset for each scenario in the batch.
@@ -150,10 +126,8 @@ class ModelOutput(BaseModel):  # pyright: ignore[reportUntypedBaseClass]
 
     scenario_embedding: ScenarioEmbedding
     trajectory_decoder_output: TrajectoryDecoderOutput | None = None
-    tokenization_output: TokenizationOutput | None = None
     safety_output: SafetyOutput | None = None
     causal_output: CausalOutput | None = None
-    causal_tokenization_output: TokenizationOutput | None = None
 
     # Meta Information
     history_ground_truth: Tensor[TorchTensor, Any, Float]

@@ -13,8 +13,8 @@ _GUMBEL_LARGE_EXPONENT: float = 8.0
 
 
 def aggregate_selected_samples(selected_samples: dict[Any, Any]) -> None:
-    """Helper function to aggregate the sample IDs to keep and drop across groups (tokens or clusters) into a single
-    list of samples to keep and drop. Mutates the input dictionary in place.
+    """Helper function to aggregate the sample IDs to keep and drop across groups into a single list of samples to keep
+    and drop. Mutates the input dictionary in place.
 
     Args:
         selected_samples: a dictionary containing the sample selection results per group.

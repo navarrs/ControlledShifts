@@ -30,7 +30,7 @@ ln -s ../motion/scenario/ mini
 
 To get a mini subset run the following.
 ```bash
-cd scene-tokens/src/scripts
+cd ControlledShifts/src/scripts
 uv run waymo_data_selection.py --parallel
 ```
 
@@ -78,7 +78,7 @@ gsutil cp -r "gs://waymo_open_dataset_causal_agents/cusal_labels.tfrecord" .
 
 3. Get causal agents [proto](https://github.com/google-research/causal-agents/blob/main/protos/causal_labels.proto), and compile:
 ```bash
-cd scene-tokens/src/scripts
+cd ControlledShifts/src/scripts
 protoc --python_out=. causal_agents.proto
 ```
 
@@ -139,14 +139,14 @@ gsutil -m cp -r "gs://waymo_open_dataset_motion_v_1_2_0/uncompressed/scenario/va
 
 4. Process the scenarios:
 ```bash
-cd scene-tokens/src/scripts
+cd ControlledShifts/src/scripts
 uv run waymo_data_processing.py --raw_data_path /datasets/waymo/raw/scenario/ --proc_data_path /datasets/safeshift_all --search_safeshift --safeshift_data_splits_path /datasets/mtr_process_splits --safeshift_prefix score_asym_combined_80_ --split training
 uv run waymo_data_processing.py --raw_data_path /datasets/waymo/raw/scenario/ --proc_data_path /datasets/safeshift_all --search_safeshift --safeshift_data_splits_path /datasets/mtr_process_splits --safeshift_prefix score_asym_combined_80_ --split validation
 ```
 
 2. Re-split the processed data:
 ```bash
-cd scene-tokens/src/scripts
+cd ControlledShifts/src/scripts
 uv run resplit_safeshift.py --scores_path /datasets/mtr_process_splits --scenarios_path /datasets/safeshift_all --output_path /datasets/processed/safeshift --prefix score_asym_combined_80_
 ```
 Check the files inside `mtr_process_splits` for more `prefix` values allowed.
@@ -165,7 +165,7 @@ cp -r safeshift/validation safeshit_causal
 
 3. Verify there's no data leakage between the `train` set from Causal Agents and `test/val` sets from SafeShift:
 ```bash
-cd scene-tokens/src/scripts
+cd ControlledShifts/src/scripts
 uv run verify_safeshift_causal_splits.py
 ```
 
@@ -179,6 +179,6 @@ This benchmark is similar to **SafeShift-Causal**, but the main difference is th
 
 3. Create the benchmark:
 ```bash
-cd scene-tokens/src/scripts
+cd ControlledShifts/src/scripts
 uv run create_ego_safeshift_benchmark.py
 ```

@@ -1,4 +1,4 @@
-"""Training script for SocialTokens.
+"""Training script for ControlledShifts.
 
 Example usage:
 

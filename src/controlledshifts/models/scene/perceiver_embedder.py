@@ -1,4 +1,4 @@
-"""Perceiver embedder for scenario tokenization.
+"""Perceiver embedder for scene representation.
 
 This module defines `PerceiverEmbedder`, which maps mixed scene features to encoded
 and decoded scenario embeddings with a Perceiver IO encoder-decoder stack.

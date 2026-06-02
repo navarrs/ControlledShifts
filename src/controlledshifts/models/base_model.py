@@ -511,26 +511,6 @@ class BaseModel(LightningModule, ABC):
             safety_metrics = BaseModel._compute_safety_metrics(safety_output)
             metric_dict.update(safety_metrics)
 
-        # TODO: Review these metrics.
-        # If training a model with a scenario classification head, log perplexity and mutual information.
-        # tokenization_outputs = outputs.tokenization_output
-        # if tokenization_outputs is not None:
-        #     scenario_class_probs = tokenization_outputs.token_probabilities.value
-        #     assert scenario_class_probs is not None, "Token probabilities is None"
-        #     # NOTE: the selected class does not have a ground truth value.
-        #     selected_scenario_class = scenario_class_probs.argmax(dim=-1)
-
-        #     # Perplexity measures uncertainty in the output probabilities with respect to the selected class.
-        #     perplexity = compute_perplexity(scenario_class_probs, selected_scenario_class)
-        #     loss_dict["perplexity"] = perplexity.cpu().detach().numpy()
-
-        #     # Mutual information measures how related scenario probability distributions are to their classes.
-        #     num_classes = scenario_class_probs.shape[-1]
-        #     scenario_class_onehot = F.one_hot(selected_scenario_class, num_classes)
-        #     mutual_information = compute_mutual_information(
-        #         scenario_class_probs, scenario_class_onehot, normalize=True
-        #     )
-        #     loss_dict["mutualInformation"] = mutual_information.cpu().detach().numpy()
         return metric_dict
 
     def log_info(

@@ -60,8 +60,7 @@ An example of an expected input to this script is `assets/group.csv`, and an exa
 Cache training set embeddings:
 ```bash
 uv run -m controlledshifts.run_sample_selection -m \
-    paths=waymo_causal_labeled model=controlledshifts_student sweep_type="_token-conditioning-sweep" \
-    ckpt_name=epoch_118 +model.config.sample_selection=true cache=true
+    paths=waymo_causal_labeled model=wayformer ckpt_name=epoch_118 +model.config.sample_selection=true cache=true
 ```
 
 Run training analysis only:

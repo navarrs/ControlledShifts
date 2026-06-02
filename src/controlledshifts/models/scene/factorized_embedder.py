@@ -1,4 +1,4 @@
-"""Factorized scene embedder for scenario tokenization."""
+"""Factorized scene embedder for scenario representation."""
 
 import torch
 from torch import nn
@@ -103,7 +103,6 @@ class FactorizedEmbedder(nn.Module):
         # Combine all blocks
         self.attention_blocks = nn.ModuleList(self.attention_blocks)
 
-        # Refiner layers that map factorized features into decoder-compatible scene tokens.
         # Temporal refiner summarizes time: (B, A, T, H) -> (B, A, H).
         self.temporal_refiner = nn.Sequential(nn.Linear(num_timesteps * hidden_size, hidden_size), nn.GELU())
 
@@ -158,6 +157,6 @@ class FactorizedEmbedder(nn.Module):
         # Reshape for social summary: (B, A, H) -> (B, A * H).
         # After social summary: (B, H).
         scenario_dec = self.social_refiner(scenario_dec.view(batch_size, -1))
-        # Decode into scenario tokens: (B, H) -> (B, Q, H).
+        # Decode into scenario queries: (B, H) -> (B, Q, H).
         scenario_dec = self.scenario_decoder(scenario_dec).reshape(batch_size, self.num_queries, -1)
         return ScenarioEmbedding(scenario_enc=scenario_enc, scenario_dec=scenario_dec)

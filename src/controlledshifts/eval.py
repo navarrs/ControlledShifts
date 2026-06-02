@@ -1,4 +1,4 @@
-"""Evaluation script for SocialTokens.
+"""Evaluation script for ControlledShifts.
 
 Example usage:
 

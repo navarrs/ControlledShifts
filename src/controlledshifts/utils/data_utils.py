@@ -508,109 +508,14 @@ class DynamicSampler(Sampler):
         self.idx = idx
 
 
-def separate_batches_by_group(token_infos):
-    dataset_names = token_infos["dataset_name"]
-    unique_groups = np.unique(dataset_names)
-    token_info_groups = {}
-    for group in unique_groups:
-        print(f"Separating group: {group}")
-        group_idx = np.where(dataset_names == group)[0]
-        print(f"Found {group_idx.shape[0]} elements")
-
-        # Get elements for each group
-        token_info_groups[group] = {}
-        for key, value in token_infos.items():
-            if key in ["unique_classes", "classes_counts", "num_classes"]:
-                continue
-            print(f"Key: {key} shape: {value.shape}")
-            token_info_groups[group][key] = value[group_idx]
-
-        # Re-compute number of classee
-        scenario_classes = token_info_groups[group]["scenario_classes"]
-        unique_classes, class_counts = np.unique(scenario_classes, return_counts=True)
-        num_classes = len(unique_classes)
-        token_info_groups[group]["unique_classes"] = unique_classes
-        token_info_groups[group]["classes_counts"] = class_counts
-        token_info_groups[group]["num_classes"] = num_classes
-
-    return token_info_groups
-
-
-def load_batches_list(base_data_path, num_batches, tag="val"):
-    print("Loading scenario batches...")
-    num_batches = MAX_NUM_BATCHES if num_batches is None else min(num_batches, MAX_NUM_BATCHES)
-
-    # Batch info to repack
-    dataset_names = []
-    scenario_ids = []
-    # Scenario Tokenization
-    scenario_classes = []
-    scenario_embedding = []
-    scenario_quantized_embedding = []
-    # Causal Tokenization
-    causal_gt = []
-    causal_pred = []
-    causal_classes = []
-    causal_embedding = []
-    causal_quantized_embedding = []
-
-    for n, batch_file in enumerate(Path(base_data_path).glob(f"*{tag}*")):
-        if n >= num_batches:
-            break
-        # print(f"Loading batch from: {batch_file}")
-        with batch_file.open("rb") as f:
-            batch: output.ModelOutput = pickle.load(f)
-
-        # Meta information
-        dataset_names.append(batch.dataset_name)
-        scenario_ids.append(batch.scenario_id)
-
-        # TODO: Add Trajectory outputs
-
-        # Scenario Tokenization
-        tokenization_output = batch.tokenization_output
-        scenario_classes.append(tokenization_output.token_indices.value.detach().cpu().numpy())  # (B, M)
-        scenario_embedding.append(tokenization_output.input_embedding.value.detach().cpu().numpy())  # (B, M, D)
-        scenario_quantized_embedding.append(
-            tokenization_output.quantized_embedding.value.detach().cpu().numpy()
-        )  # (B, M, T)
-
-        # Causal Tokenization
-        causal_output = batch.causal_output
-        causal_gt.append(causal_output.causal_gt.value.detach().cpu().numpy())  # (B, N)
-        causal_pred.append(causal_output.causal_pred_probs.value.detach().cpu().numpy())  # (B, N, C)
-        causal_tokenization = batch.causal_tokenization_output
-        causal_classes.append(causal_tokenization.token_indices.value.detach().cpu().numpy())  # (B, M)
-        causal_embedding.append(causal_tokenization.input_embedding.value.detach().cpu().numpy())
-        causal_quantized_embedding.append(causal_tokenization.quantized_embedding.value.detach().cpu().numpy())
-
-    # Concatenate all
-    return EasyDict(
-        {
-            "dataset_name": np.concatenate(dataset_names),
-            "scenario_ids": np.concatenate(scenario_ids),
-            "scenario_classes": np.concatenate(scenario_classes),
-            "scenario_embedding": np.concatenate(scenario_embedding),
-            "scenario_quantized_embedding": np.concatenate(scenario_quantized_embedding),
-            "causal_gt": np.concatenate(causal_gt),
-            "causal_pred": np.concatenate(causal_pred),
-            "causal_classes": np.concatenate(causal_classes),
-            "causal_embedding": np.concatenate(causal_embedding),
-            "causal_quantized_embedding": np.concatenate(causal_quantized_embedding),
-        }
-    )
-
-
 def resplit_batch(batch: output.ModelOutput) -> list[output.ModelOutput]:
     batch_resplit = {}
 
     # Unkpack model output
     batch_scenario_embedding = batch.scenario_embedding
     batch_trajectory_output = batch.trajectory_decoder_output
-    batch_tokenization_output = batch.tokenization_output
     batch_safety_output = batch.safety_output
     batch_causal_output = batch.causal_output
-    batch_causal_tokenization_output = batch.causal_tokenization_output
     batch_history_gt = batch.history_ground_truth.value
     batch_future_gt = batch.future_ground_truth.value
     batch_dataset_name = batch.dataset_name
@@ -629,16 +534,6 @@ def resplit_batch(batch: output.ModelOutput) -> list[output.ModelOutput]:
                 decoded_trajectories=batch_trajectory_output.decoded_trajectories.value[n].detach().cpu(),
                 mode_probabilities=batch_trajectory_output.mode_probabilities.value[n].detach().cpu(),
                 mode_logits=batch_trajectory_output.mode_logits.value[n].detach().cpu(),
-            )
-        tokenization_output = None
-        if batch_tokenization_output is not None:
-            probs = batch_tokenization_output.token_probabilities
-            tokenization_output = output.TokenizationOutput(
-                token_probabilities=None if probs is None else probs.value[n].detach().cpu(),
-                token_indices=batch_tokenization_output.token_indices.value[n].detach().cpu(),
-                input_embedding=batch_tokenization_output.input_embedding.value[n].detach().cpu(),
-                reconstructed_embedding=batch_tokenization_output.reconstructed_embedding.value[n].detach().cpu(),
-                quantized_embedding=batch_tokenization_output.quantized_embedding.value[n].detach().cpu(),
             )
         causal_output = None
         if batch_causal_output is not None:
@@ -661,17 +556,6 @@ def resplit_batch(batch: output.ModelOutput) -> list[output.ModelOutput]:
                 interaction_safety_logits=batch_safety_output.interaction_safety_logits.value[n].detach().cpu(),
             )
 
-        causal_tokenization_output = None
-        if batch_causal_tokenization_output is not None:
-            probs = batch_causal_tokenization_output.token_probabilities
-            causal_tokenization_output = output.TokenizationOutput(
-                token_probabilities=None if probs is None else probs.value[n].detach().cpu(),
-                token_indices=batch_causal_tokenization_output.token_indices.value[n].detach().cpu(),
-                input_embedding=batch_causal_tokenization_output.input_embedding.value[n].detach().cpu(),
-                reconstructed_embedding=batch_causal_tokenization_output.reconstructed_embedding.value[n].detach().cpu(),
-                quantized_embedding=batch_causal_tokenization_output.quantized_embedding.value[n].detach().cpu(),
-            )
-
         scenario_scores = None
         if batch_scene_score is not None:
             scenario_scores = output.ScenarioScores(
@@ -685,10 +569,8 @@ def resplit_batch(batch: output.ModelOutput) -> list[output.ModelOutput]:
         batch_resplit[scenario_id] = output.ModelOutput(
             scenario_embedding=scenario_embedding,
             trajectory_decoder_output=trajectory_decoder_output,
-            tokenization_output=tokenization_output,
             safety_output=safety_output,
             causal_output=causal_output,
-            causal_tokenization_output=causal_tokenization_output,
             history_ground_truth=batch_history_gt[n].detach().cpu(),
             future_ground_truth=batch_future_gt[n].detach().cpu(),
             dataset_name=[batch_dataset_name[n]],

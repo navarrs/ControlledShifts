@@ -66,8 +66,6 @@ causal_agents_sample_selection_files: [
   "./meta/sample_selection_results/causal_agents/baselines/random.csv",
   "./meta/sample_selection_results/causal_agents/wayformer/dentp.csv",
   "./meta/sample_selection_results/causal_agents/wayformer/kmeans.csv",
-  "./meta/sample_selection_results/causal_agents/safe-controlledshifts/kmeans.csv",
-  "./meta/sample_selection_results/causal_agents/safe-controlledshifts/token.csv",
 ]
 causal_agents_sample_selection_splits_to_compare: [
   'test/waymo-mini-causal-testing',
@@ -82,8 +80,6 @@ ego_safeshift_sample_selection_files: [
   "./meta/sample_selection_results/ego_safeshift/baselines/baselines.csv",
   "./meta/sample_selection_results/ego_safeshift/baselines/random.csv",
   "./meta/sample_selection_results/ego_safeshift/wayformer/kmeans.csv",
-  # "./meta/sample_selection_results/ego_safeshift/safe-controlledshifts/kmeans.csv",
-  "./meta/sample_selection_results/ego_safeshift/safe-controlledshifts/token.csv",
 ]
 ego_safeshift_sample_selection_splits_to_compare: [
   'test/waymo-causal-ego-safeshift-id',
@@ -98,8 +94,6 @@ environments_sample_selection_files: [
   "./meta/sample_selection_results/environments/baselines/baselines.csv",
   "./meta/sample_selection_results/environments/baselines/random.csv",
   "./meta/sample_selection_results/environments/wayformer/kmeans.csv",
-  # "./meta/sample_selection_results/environments/safe-controlledshifts/kmeans.csv",
-  "./meta/sample_selection_results/environments/safe-controlledshifts/token.csv",
 ]
 environments_sample_selection_splits_to_compare: [
   'test/waymo-environments-id',

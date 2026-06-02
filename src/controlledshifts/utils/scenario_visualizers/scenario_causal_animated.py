@@ -25,12 +25,11 @@ class ScenarioCausalAnimatedVisualizer(ScenarioCausalVisualizer, BaseVisualizer)
     ) -> None:
         """Visualizes a single scenario and saves the output to a file.
 
-        ScenarioCausalAnimatedVisualizer visualizes the scenario on three or four windows:
+        ScenarioCausalAnimatedVisualizer visualizes the scenario on three windows:
             window 1: displays the full scene zoomed out
             window 2: displays the scene with GT causal agents marked in a different color.
             window 3: displays the scene with predicted causal agents marked in a different color and with a
                 probability-based alpha value.
-            window 4: displays the scene with each agent in a different color, based on it's learned tokenization.
 
         Args:
             scenario (Scenario | AgentCentricScenario): encapsulates the scenario to visualize.
@@ -52,8 +51,7 @@ class ScenarioCausalAnimatedVisualizer(ScenarioCausalVisualizer, BaseVisualizer)
         output_filepath = f"{output_dir}/{scenario_id}_causal{suffix}.gif"
         logger.info("Visualizing scenario to %s", output_filepath)
 
-        causal_tokenization_output = model_output.causal_tokenization_output
-        num_windows = 3 if causal_tokenization_output is None else 4
+        num_windows = 3
         _, axs = plt.subplots(1, num_windows, figsize=(5 * num_windows, 5 * 1))
 
         total_timesteps = scenario.metadata.track_length
@@ -85,11 +83,6 @@ class ScenarioCausalAnimatedVisualizer(ScenarioCausalVisualizer, BaseVisualizer)
                 show_causal=CausalOutputType.PREDICTION,
                 end_timestep=timestep,
             )
-
-            # Plot remove-noncausalequal scene
-            if causal_tokenization_output is not None:
-                axs[3].set_title("Causal Token")
-                self.plot_tokenized(axs[3], scenario, model_output=model_output, end_timestep=timestep)
 
             # Prepare and save plot
             self.set_axes(axs, scenario, num_windows)
