@@ -2,13 +2,6 @@
 
 ## Installation
 
-### Install the package
-```
-uv pip install scenario-characterization
-```
-
-### Install the package in editable mode
-
 Clone the repository and install the package in editable mode:
 ```bash
 git clone git@github.com:navarrs/ControlledShifts.git
