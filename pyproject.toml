@@ -154,6 +154,7 @@ exclude = [
     "src/controlledshifts/models/components",
     "src/scripts/waymo_data_processing.py",
     "src/scripts/causal_labels_pb2.py",
+    "tests/",
 ]
 line-length = 120
 target-version = "py312"
@@ -194,6 +195,7 @@ exclude = [
   "src/controlledshifts/utils/scenario_visualizers/unitraj_viz_utils.py",
   "src/scripts/causal_labels_pb2.py",
   "src/scripts/waymo_data_processing.py",
+  "tests/",
   "tmp/**",
   # keep-sorted end
 ]

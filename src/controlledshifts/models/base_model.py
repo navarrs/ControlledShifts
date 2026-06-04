@@ -223,6 +223,28 @@ class BaseModel(LightningModule, ABC):
         return ego_in, agents_in, roads
 
     @staticmethod
+    def gather_ego_history(
+        obj_trajs: torch.Tensor, obj_trajs_mask: torch.Tensor, track_index_to_predict: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Select the ego agent's (x, y) history and validity mask out of the per-scene agent tensors.
+
+        Args:
+            obj_trajs (torch.Tensor): agent history features, shape (B, N, H, Da).
+            obj_trajs_mask (torch.Tensor): agent history validity mask, shape (B, N, H).
+            track_index_to_predict (torch.Tensor): index of the ego agent within each scene, shape (B,).
+
+        Returns:
+            tuple[torch.Tensor, torch.Tensor]:
+                - ego_xy (torch.Tensor): ego positions, shape (B, H, 2).
+                - ego_mask (torch.Tensor): ego validity mask, shape (B, H).
+        """
+        idx = track_index_to_predict.long()  # shape (B,)
+        batch_idx = torch.arange(len(idx), device=obj_trajs.device)  # shape (B,)
+        ego_xy = obj_trajs[batch_idx, idx, :, :2]  # shape (B, H, 2)
+        ego_mask = obj_trajs_mask[batch_idx, idx]  # shape (B, H)
+        return ego_xy, ego_mask
+
+    @staticmethod
     def gather_ground_truth(inputs: dict, *, ego_only_history: bool = False) -> tuple[torch.Tensor, torch.Tensor]:
         """Build the history and future ground-truth tensors expected by the criterion.
 
