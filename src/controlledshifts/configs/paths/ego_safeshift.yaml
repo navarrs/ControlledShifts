@@ -2,7 +2,7 @@ defaults:
   - default.yaml
 
 # Combines the Causal and SafeShift Benchmarks
-tag: 'ego-safeshift-causal-benchmark'
+tag: 'ego-safeshift'
 
 # NOTE: for training and validation, this is using the In-Distribution (ID) subset of the CausalAgents benchmark, obtained
 # through Ego-SafeShift's 'gt' scoring strategy

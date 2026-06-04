@@ -1,7 +1,7 @@
 defaults:
   - default.yaml
 
-tag: 'causal-benchmark-labeled'
+tag: 'causal-agents'
 
 # NOTE: for training and validation, this is using the original (unmodified) scenarios
 train_data_path: [ "${paths.base_path}/processed/mini_causal/training" ] # list of paths to the training data
