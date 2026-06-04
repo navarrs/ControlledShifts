@@ -1,0 +1,42 @@
+defaults:
+  - default.yaml
+
+_target_: controlledshifts.models.naive.NaiveModel
+config:
+  model_name: naive
+
+  # Add model tags
+  base_tags: lr-${model.config.optimizer.lr}_batch-size-${model.config.train_batch_size}
+  extra_tags: ${model.config.base_tags}
+
+  # Minimal MLP: the ego (x, y) history is flattened and passed through a single hidden layer to regress, per mode, a
+  # per-step bivariate-Gaussian future. No map, no other agents, no attention. `num_modes` is inherited from
+  # default.yaml (6).
+  agents_input_size: 2
+  mlp_hidden_size: 256
+
+  # Model's optimization criterion
+  criterion:
+    _target_: controlledshifts.models.criterion.trajpred.TrajectoryPrediction
+    config:
+      rho_limit: 0.5
+
+  # Optimizer
+  optimizer:
+    _target_: torch.optim.AdamW
+    _partial_: true
+    lr: 0.0001
+    weight_decay: 0.01
+    betas: [0.9, 0.95]
+    eps: 0.0001
+
+  # Scheduler
+  scheduler:
+    _target_: torch.optim.lr_scheduler.OneCycleLR
+    _partial_: true
+    max_lr: 0.0002
+    steps_per_epoch: 1
+    epochs: ${model.config.max_epochs}
+    pct_start: 0.02
+    div_factor: 100.0
+    final_div_factor: 10
