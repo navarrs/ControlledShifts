@@ -13,6 +13,19 @@ config:
   # bivariate-Gaussian GMM output parameters.
   log_sigma: 0.0
 
+  # Map-awareness. When `map_aware` is true the model snaps the ego onto nearby lane centerlines and advances along
+  # each lane's arc-length at the observed speed, producing one trajectory mode per candidate lane. When false (the
+  # default) the model is the plain straight-line constant-velocity baseline and these knobs are ignored.
+  map_aware: true
+  # Lanes whose nearest point is farther than this (meters) from the last observed position are not candidates.
+  lane_search_radius: 5.0
+  # Per-step speed (meters/step) below which the agent is treated as stationary and the straight-line fallback is used.
+  min_speed: 0.5
+  # Softmax temperature applied to candidate-lane scores when forming the mode probabilities.
+  score_temperature: 1.0
+  # Relative weight of heading-alignment versus proximity in the candidate-lane score.
+  alignment_weight: 1.0
+
   # CVM does not learn — keep training to a single epoch so the trainer's fit loop only iterates the dataset once before
   # validating/testing.
   max_epochs: 1

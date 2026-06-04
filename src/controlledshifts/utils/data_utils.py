@@ -644,3 +644,106 @@ def load_causal_agents_labels(causal_agents_labels_path, scenario_ids=None):
 def save_cache(cache_infos: Any, filepath: Path) -> None:
     with filepath.open("wb") as f:
         pickle.dump(cache_infos, f)
+
+def polyline_cumulative_arclength(poly_xy: torch.Tensor, poly_mask: torch.Tensor) -> torch.Tensor:
+    """Cumulative arc-length along each polyline, measured from its first point.
+
+    Segment lengths spanning a masked endpoint are treated as zero, so trailing padding points do not advance the
+    arc-length (valid points are assumed contiguous from index 0, as produced by the dataset's segment packing).
+
+    Args:
+        poly_xy (torch.Tensor): polyline point coordinates, shape ``(..., M, 2)``.
+        poly_mask (torch.Tensor): per-point validity mask, shape ``(..., M)``.
+
+    Returns:
+        torch.Tensor: cumulative arc-length at each point, shape ``(..., M)``; the first point is always 0.
+    """
+    # Per-segment displacement length between consecutive points, shape (..., M - 1).
+    seg_len = torch.linalg.norm(poly_xy[..., 1:, :] - poly_xy[..., :-1, :], dim=-1)
+    # Zero out segments whose either endpoint is invalid so padding does not inflate the length.
+    seg_valid = poly_mask[..., 1:].bool() & poly_mask[..., :-1].bool()
+    seg_len = seg_len * seg_valid.to(seg_len.dtype)
+    cum = torch.cumsum(seg_len, dim=-1)
+    # Prepend a leading zero for the first point.
+    return torch.cat([torch.zeros_like(cum[..., :1]), cum], dim=-1)
+
+
+def project_point_to_polylines(
+    point: torch.Tensor, poly_xy: torch.Tensor, poly_mask: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Project a per-sample query point onto each polyline by nearest valid vertex.
+
+    Notation:
+        B: batch size
+        P: number of polylines per sample
+        M: max number of points per polyline
+
+    Args:
+        point (torch.Tensor): query points, shape ``(B, 2)``.
+        poly_xy (torch.Tensor): polyline point coordinates, shape ``(B, P, M, 2)``.
+        poly_mask (torch.Tensor): per-point validity mask, shape ``(B, P, M)``.
+
+    Returns:
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+            - nearest_idx (torch.Tensor): index of the nearest valid vertex per polyline, shape ``(B, P)``.
+            - nearest_dist (torch.Tensor): distance from ``point`` to that vertex, shape ``(B, P)``; polylines with no
+              valid point get ``+inf``.
+            - cum_s (torch.Tensor): cumulative arc-length at each point, shape ``(B, P, M)``.
+    """
+    cum_s = polyline_cumulative_arclength(poly_xy, poly_mask)  # (B, P, M)
+    # Distance from the query point to every polyline vertex, shape (B, P, M).
+    dist = torch.linalg.norm(poly_xy - point[:, None, None, :], dim=-1)
+    # Mask invalid vertices out of the min-reduction.
+    dist = dist.masked_fill(~poly_mask.bool(), float("inf"))
+    nearest_dist, nearest_idx = dist.min(dim=-1)  # both (B, P)
+    return nearest_idx, nearest_dist, cum_s
+
+
+def interpolate_polyline_at_arclength(
+    poly_xy: torch.Tensor, poly_mask: torch.Tensor, cum_s: torch.Tensor, query_s: torch.Tensor
+) -> torch.Tensor:
+    """Sample polyline positions at arbitrary arc-lengths using linear interpolation.
+
+    Query distances beyond a polyline's total length are extrapolated by continuing straight along the final valid
+    segment direction, so a trajectory that outruns its lane keeps moving at constant velocity.
+
+    Notation:
+        G: number of polylines (group dimension)
+        M: max number of points per polyline
+        F: number of query distances per polyline
+
+    Args:
+        poly_xy (torch.Tensor): polyline point coordinates, shape ``(G, M, 2)``.
+        poly_mask (torch.Tensor): per-point validity mask, shape ``(G, M)``.
+        cum_s (torch.Tensor): cumulative arc-length at each point, shape ``(G, M)`` (see
+            :func:`polyline_cumulative_arclength`).
+        query_s (torch.Tensor): query arc-lengths, shape ``(G, F)``; expected non-negative.
+
+    Returns:
+        torch.Tensor: interpolated positions, shape ``(G, F, 2)``.
+    """
+    num_groups, num_points, _ = poly_xy.shape
+    arange_g = torch.arange(num_groups, device=poly_xy.device)
+    # Index of the last valid point per polyline, shape (G,). Clamped so single-/zero-point polylines stay in range.
+    last_idx = (poly_mask.long().sum(dim=-1) - 1).clamp(min=0)  # (G,)
+    total_len = cum_s[arange_g, last_idx]  # (G,)
+
+    # In-range linear interpolation. searchsorted finds the first point whose cum_s reaches the query distance.
+    hi = torch.searchsorted(cum_s.contiguous(), query_s.contiguous()).clamp(min=1, max=num_points - 1)  # (G, F)
+    lo = hi - 1
+    s_lo = torch.gather(cum_s, 1, lo)  # (G, F)
+    s_hi = torch.gather(cum_s, 1, hi)
+    frac = ((query_s - s_lo) / (s_hi - s_lo).clamp(min=1e-6)).clamp(0.0, 1.0)  # (G, F)
+    lo_xy = torch.gather(poly_xy, 1, lo[..., None].expand(-1, -1, 2))  # (G, F, 2)
+    hi_xy = torch.gather(poly_xy, 1, hi[..., None].expand(-1, -1, 2))
+    interp_xy = lo_xy + frac[..., None] * (hi_xy - lo_xy)
+
+    # Straight extrapolation past the last valid point, along the final segment direction.
+    end_xy = poly_xy[arange_g, last_idx]  # (G, 2)
+    end_dir = end_xy - poly_xy[arange_g, (last_idx - 1).clamp(min=0)]  # (G, 2)
+    end_dir = end_dir / torch.linalg.norm(end_dir, dim=-1, keepdim=True).clamp(min=1e-6)
+    extra = (query_s - total_len[:, None]).clamp(min=0.0)  # (G, F)
+    extrap_xy = end_xy[:, None, :] + extra[..., None] * end_dir[:, None, :]
+
+    beyond = (query_s > total_len[:, None])[..., None]  # (G, F, 1)
+    return torch.where(beyond, extrap_xy, interp_xy)
