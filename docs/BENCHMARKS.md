@@ -45,6 +45,32 @@ Test subsets for `causal_agents_all`:
 - *Remove non-causal-equal*: removes N non-causal agents, where N equals the number of causal agents.
 - *Remove static*: removes agents whose motion is below a threshold.
 
+## Non-Causal Agents
+
+A harder variant of Causal Agents that focuses on a single perturbation — removing non-causal agents — and re-organizes scenarios by difficulty instead of reusing the original mini-causal splits. Difficulty is the number of non-causal agents in a scenario: scenarios are sorted ascending by that count and the hardest ones (at or above `cutoff_percentile`) form the test set. Each scenario is materialized twice under the same split: an unperturbed `original` copy and a `perturbed` copy with non-causal agents removed, so the original and perturbed versions of the same held-out scenes can be compared. Existing `remove_noncausal` perturbed files are reused when found and generated on the fly otherwise.
+
+**Creating the benchmark:**
+```bash
+uv run -m controlledshifts.create_benchmark benchmark=non_causal_agents \
+    input_data_path=/data/driving/waymo/processed/mini_causal \
+    output_data_path=/data/driving/waymo/processed/non_causal_agents \
+    causal_labels_path=/data/driving/waymo/causal_agents/processed_labels \
+    perturbed_data_path=/data/driving/waymo/processed/remove_noncausal
+```
+
+Key options (see `configs/benchmark/non_causal_agents.yaml`):
+- `causal_labels_path`: directory containing per-scenario JSON causal labels.
+- `perturbed_data_path`: existing `remove_noncausal` output to reuse; missing scenarios are generated on the fly.
+- `cutoff_percentile`: percentile of non-causal counts at/above which scenarios go to the test set. Default: `80.0`.
+- `validation_percentage`: percentage of the train/val pool to hold out for validation. Default: `10.0`.
+
+**Training and evaluation:**
+
+`paths=non_causal_agents` trains on the reorganized original splits and evaluates on the original and perturbed versions of the hardest held-out scenes:
+```bash
+uv run -m controlledshifts.train model=[model_name] paths=non_causal_agents
+```
+
 ## SafeShift
 
 Evaluates generalization to safety-critical scenarios. Splits are derived from the full SafeShift dataset using the asymmetric-combined scoring strategy. Train/val use the In-Distribution (ID) subset; test uses the Out-of-Distribution (OOD) subset.

@@ -26,7 +26,7 @@ from numpy.random import Generator, default_rng
 from omegaconf import DictConfig
 from tqdm import tqdm
 
-from controlledshifts.benchmarks.common import collect_scenario_filepaths, create_split_dirs
+from controlledshifts.benchmarks.common import collect_scenario_filepaths, create_split_dirs, get_noncausal_mask
 from controlledshifts.utils.constants import MIN_VALID_POINTS
 
 
@@ -70,7 +70,7 @@ def _remove_causal(scenario: dict[str, Any], causal_labels: dict[str, Any], outp
         pickle.dump(scenario, f)
 
 
-def _remove_noncausal(scenario: dict[str, Any], causal_labels: dict[str, Any], output_filepath: Path) -> None:
+def remove_noncausal(scenario: dict[str, Any], causal_labels: dict[str, Any], output_filepath: Path) -> None:
     """Removes non-causal objects from a scenario by setting the last column of the trajectories to 0 for non-causal
     objects.
 
@@ -80,10 +80,7 @@ def _remove_noncausal(scenario: dict[str, Any], causal_labels: dict[str, Any], o
         output_filepath: Path to the output file.
     """
     object_ids = np.array(scenario["track_infos"]["object_id"])
-    ego_id = object_ids[scenario["sdc_track_index"]]
-
-    causal_ids = np.array(causal_labels["causal_ids"] + [ego_id], dtype=np.int64)
-    noncausal_mask = ~np.isin(object_ids, causal_ids)
+    noncausal_mask = get_noncausal_mask(scenario, causal_labels)
 
     track_infos = scenario["track_infos"]
     track_infos["causal_ids"] = causal_labels["causal_ids"]
@@ -124,10 +121,7 @@ def _remove_noncausalequal(
         random_generator: Random number generator.
     """
     object_ids = np.array(scenario["track_infos"]["object_id"])
-    ego_id = object_ids[scenario["sdc_track_index"]]
-
-    causal_ids = np.array(causal_labels["causal_ids"] + [ego_id], dtype=np.int64)
-    noncausal_mask = ~np.isin(object_ids, causal_ids)
+    noncausal_mask = get_noncausal_mask(scenario, causal_labels)
 
     num_to_remove = len(causal_labels["causal_ids"])
     agent_idxs = np.arange(len(object_ids))
@@ -251,7 +245,7 @@ def _create_scenario(  # noqa: PLR0913
         case "remove_causal":
             _remove_causal(scenario, causal_labels, output_filepath)
         case "remove_noncausal":
-            _remove_noncausal(scenario, causal_labels, output_filepath)
+            remove_noncausal(scenario, causal_labels, output_filepath)
         case "remove_noncausalequal":
             _remove_noncausalequal(scenario, causal_labels, output_filepath, random_generator)
         case "remove_static":
