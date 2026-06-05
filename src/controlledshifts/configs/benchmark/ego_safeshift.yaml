@@ -1,4 +1,6 @@
 # @package _global_
+defaults:
+  - default.yaml
 
 benchmark_name: ego_safeshift
 

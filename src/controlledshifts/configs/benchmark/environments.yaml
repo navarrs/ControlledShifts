@@ -1,4 +1,6 @@
 # @package _global_
+defaults:
+  - default.yaml
 
 benchmark_name: environments
 
@@ -44,16 +46,15 @@ visualize_descriptor_scatter: false
 # Dimensionality reduction for the scatter plot: 'pca' or 'tsne'.
 reduction: tsne
 
-# Desired (train, val, test) fractions of all scenarios. Must sum to 1.0.
+# If true, prepare train/val/test splits using the inherited split_ratios.
 prepare_splits: false
-split_ratios: [0.70, 0.15, 0.15]
 
 # Metric used to rank cluster hardness when selecting the test set.
 # 'silhouette': lowest mean silhouette clusters are hardest (most ambiguous).
 # 'dbi': highest mean Davies-Bouldin Index clusters are hardest (high intra-scatter / low inter-separation).
 hardness_metric: silhouette
 
-# Cache path
+# Path to the NetLSD descriptor cache (distinct from the inherited input_data_path / output_data_path).
 cache_path: /data/driving/waymo/environment
 
 # If true, render per-cluster graph visualizations using visualize_scenario_graph.

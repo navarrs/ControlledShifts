@@ -1,12 +1,16 @@
 # @package _global_
+defaults:
+  - default.yaml
 
 benchmark_name: causal_agents
+
+# Perturbed copies are written to output_data_path/<strategy>/ and unperturbed copies to output_data_path/original/,
+# so point at the shared parent dir. With strategy=remove_causal the perturbed output lands at
+# /data/driving/waymo/processed/remove_causal (reused by the non_causal_agents benchmark via its perturbed_data_path).
+output_data_path: /data/driving/waymo/processed
 
 # Path to the directory containing per-scenario JSON causal labels.
 causal_labels_path: /data/driving/waymo/causal_agents/processed_labels/
 
 # Masking strategy. One of: remove_causal, remove_noncausal, remove_noncausalequal, remove_static.
 strategy: remove_causal
-
-# (train, val, test) fractions of the full dataset for the random re-split. Should sum to 1.0.
-split_ratios: [0.70, 0.15, 0.15]

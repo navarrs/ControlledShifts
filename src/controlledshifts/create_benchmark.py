@@ -3,11 +3,10 @@ r"""Script used for creating benchmark dataset splits.
 Example usage:
 
     # Causal Agents benchmark
-    uv run -m controlledshifts.create_benchmark benchmark=causal_agents \\
-        input_data_path=/data/driving/waymo/processed/mini_causal \\
-        output_data_path=/data/driving/waymo/processed/causal_agents \\
-        causal_labels_path=/data/driving/waymo/causal_agents/processed_labels \\
-        strategy=remove_causal
+    uv run -m controlledshifts.create_benchmark benchmark=causal_agents strategy=remove_causal
+
+    # Non-Causal Agents benchmark
+    uv run -m controlledshifts.create_benchmark benchmark=non_causal_agents
 
     # Ego-SafeShift benchmark
     uv run -m controlledshifts.create_benchmark benchmark=ego_safeshift \\
