@@ -5,6 +5,9 @@ import shutil
 from collections.abc import Iterable
 from enum import Enum
 from pathlib import Path
+from typing import Any
+
+import numpy as np
 
 from controlledshifts import utils
 
@@ -14,6 +17,7 @@ _LOGGER = utils.get_pylogger(__name__)
 
 class Benchmark(Enum):
     CAUSAL_AGENTS = "causal_agents"
+    NON_CAUSAL_AGENTS = "non_causal_agents"
     EGO_SAFESHIFT = "ego_safeshift"
     SAFESHIFT = "safeshift"
     ENVIRONMENTS = "environments"
@@ -45,6 +49,24 @@ def create_split_dirs(output_path: Path, splits: Iterable[str] = _DEFAULT_SPLITS
     for split in splits:
         (output_path / split).mkdir(parents=True, exist_ok=True)
         _LOGGER.info("Creating benchmark subdir: %s", output_path / split)
+
+
+def get_noncausal_mask(scenario: dict[str, Any], causal_labels: dict[str, Any]) -> np.ndarray:
+    """Returns a boolean mask over a scenario's agents that is True for non-causal agents.
+
+    Non-causal agents are those whose object_id is neither in the causal labels nor the ego agent.
+
+    Args:
+        scenario: Scenario dictionary.
+        causal_labels: Causal labels dictionary with a "causal_ids" key.
+
+    Returns:
+        Boolean array of shape (num_agents,), True where the agent is non-causal.
+    """
+    object_ids = np.array(scenario["track_infos"]["object_id"])
+    ego_id = object_ids[scenario["sdc_track_index"]]
+    causal_ids = np.array(causal_labels["causal_ids"] + [ego_id], dtype=np.int64)
+    return ~np.isin(object_ids, causal_ids)
 
 
 def collect_scenario_filepaths(data_path: Path) -> list[Path]:

@@ -42,6 +42,8 @@ def main(cfg: DictConfig) -> None:
     match benchmark:
         case Benchmark.CAUSAL_AGENTS:
             benchmarks.create_causal_agents_benchmark(cfg)
+        case Benchmark.NON_CAUSAL_AGENTS:
+            benchmarks.create_non_causal_agents_benchmark(cfg)
         case Benchmark.EGO_SAFESHIFT:
             benchmarks.create_ego_safeshift_benchmark(cfg)
         case Benchmark.SAFESHIFT:

@@ -1,0 +1,17 @@
+# @package _global_
+
+benchmark_name: non_causal_agents
+
+# Path to the directory containing per-scenario JSON causal labels (used for non-causal counts and on-the-fly
+# generation of the perturbed copies).
+causal_labels_path: /data/driving/waymo/causal_agents/processed_labels/
+
+# Path to an existing remove_noncausal perturbed output to reuse. Scenarios missing from this directory are generated
+# on the fly. If the directory does not exist, all perturbed copies are generated.
+perturbed_data_path: /data/driving/waymo/processed/remove_noncausal/
+
+# Percentile threshold over non-causal counts: scenarios at or above this percentile form the test set.
+cutoff_percentile: 80.0
+
+# Percentage of the train/val pool held out for validation.
+validation_percentage: 10.0
