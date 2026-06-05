@@ -14,7 +14,7 @@ Options:
   -d <devices>      Devices (e.g. 0 or 0,1)
                     (default: 0)
   -b <benchmarks>   Benchmark(s), comma-separated
-                    (default: causal_agents, non_causal_agents, ego_safeshift, environments)
+                    (default: uniform, causal_agents, causal_agents_hard, ego_safeshift, environments)
   -e <extra>        Extra identifier for sweep type (e.g. "test")
                     (default: "")
   -n                Dry run (print commands, do not execute)
@@ -53,8 +53,9 @@ DEFAULT_MODELS=(
 )
 DEFAULT_DEVICES="0"
 DEFAULT_BENCHMARKS=(
+  uniform
   causal_agents
-  non_causal_agents
+  causal_agents_hard
   ego_safeshift
   environments
 )

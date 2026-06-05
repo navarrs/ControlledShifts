@@ -1,0 +1,184 @@
+r"""Benchmark creation for the Causal Agents Hard benchmark.
+
+A harder variant of the Causal Agents benchmark that focuses on a single perturbation (removing non-causal agents) and
+re-organizes scenarios into train/validation/testing splits by difficulty. Difficulty is the number of non-causal agents
+in a scenario: the scenarios with the most non-causal agents form the test set (following ``split_ratios``), mirroring
+how ego_safeshift/safeshift move the hardest scenarios to test.
+
+Each scenario is materialized twice under the same split: an unperturbed ``original`` copy and a ``perturbed`` copy with
+non-causal agents removed. This keeps a 1-1 correspondence so the original and perturbed versions of the same held-out
+scenarios can be compared. Existing ``remove_noncausal`` perturbed files are reused when found; otherwise they are
+generated on the fly.
+
+Output layout under output_data_path::
+
+    causal_agents_hard/
+    ├── original/          {training, validation, testing}
+    └── remove_noncausal/  {training, validation, testing}
+
+Example usage:
+
+    uv run -m controlledshifts.create_benchmark benchmark=causal_agents_hard \\
+        input_data_path=/data/driving/waymo/processed/mini_causal \\
+        output_data_path=/data/driving/waymo/processed/causal_agents_hard \\
+        causal_labels_path=/data/driving/waymo/causal_agents/processed_labels \\
+        perturbed_data_path=/data/driving/waymo/processed/remove_noncausal
+
+See configs/benchmark/causal_agents_hard.yaml for all available options.
+"""
+
+import json
+import multiprocessing
+import pickle  # nosec B403
+from functools import partial
+from pathlib import Path
+
+import numpy as np
+from numpy.random import Generator, default_rng
+from omegaconf import DictConfig
+from tqdm import tqdm
+
+from controlledshifts import utils
+from controlledshifts.benchmarks.causal_agents import remove_noncausal
+from controlledshifts.benchmarks.common import (
+    BenchmarkSplit,
+    collect_scenario_filepaths,
+    get_noncausal_mask,
+    split_ids_by_score,
+    split_mapping_to_lists,
+)
+
+
+_LOGGER = utils.get_pylogger(__name__)
+
+
+def _count_noncausal(input_filepath: Path, causal_labels_path: Path) -> tuple[str, int] | None:
+    """Counts the non-causal agents in a scenario.
+
+    Args:
+        input_filepath: Path to the input scenario pkl.
+        causal_labels_path: Directory with per-scenario JSON causal labels.
+
+    Returns:
+        Tuple of (scenario_id, non-causal count), or None if the scenario or its causal labels are missing.
+    """
+    if not input_filepath.exists():
+        return None
+
+    with input_filepath.open("rb") as f:
+        scenario = pickle.load(f)  # nosec B301
+
+    scenario_id = scenario["scenario_id"]
+    causal_labels_filepath = causal_labels_path / f"{scenario_id}.json"
+    if not causal_labels_filepath.exists():
+        return None
+
+    with causal_labels_filepath.open("r") as f:
+        causal_labels = json.load(f)
+
+    noncausal_mask = get_noncausal_mask(scenario, causal_labels)
+    return scenario_id, int(noncausal_mask.sum())
+
+
+def _prepare_perturbed_scenario(
+    input_filepath: Path, perturbed_path: Path, causal_labels_path: Path, *, overwrite: bool = False
+) -> None:
+    """Generates the ``remove_noncausal`` perturbation of a scenario flat to ``perturbed_path/<id>.pkl`` if missing.
+
+    Args:
+        input_filepath: Path to the input scenario pkl.
+        perturbed_path: Flat output directory for the perturbed dataset (no split subdirs).
+        causal_labels_path: Directory with per-scenario JSON causal labels.
+        overwrite: If False, skip scenarios already present in ``perturbed_path``. Defaults to False.
+    """
+    if not input_filepath.exists():
+        return
+
+    output_filepath = perturbed_path / f"{input_filepath.stem}.pkl"
+    if output_filepath.exists() and not overwrite:
+        return
+
+    causal_labels_filepath = causal_labels_path / f"{input_filepath.stem}.json"
+    if not causal_labels_filepath.exists():
+        return
+
+    with input_filepath.open("rb") as f:
+        scenario = pickle.load(f)  # nosec B301
+    with causal_labels_filepath.open("r") as f:
+        causal_labels = json.load(f)
+
+    remove_noncausal(scenario, causal_labels, output_filepath)
+
+
+def create_causal_agents_hard_benchmark(config: DictConfig) -> BenchmarkSplit:
+    """Creates the Causal Agents Hard benchmark split and prepares the perturbed dataset.
+
+    Computes the non-causal agent count for each scenario and splits scenarios into train/validation/testing by that
+    count (the scenarios with the most non-causal agents form the test set, following split_ratios). The
+    ``remove_noncausal`` perturbed dataset is generated flat under ``perturbed_data_path`` (reusing existing files),
+    so that both the original and perturbed datasets are complete flat datasets sharing the same split. The copy
+    targets (see ``common.plan_copy_targets``) later organize the input and the perturbed dataset into
+    ``output_data_path/{original,remove_noncausal}/<split>/``.
+
+    Args:
+        config: Hydra config.
+            Expected keys: input_data_path, output_data_path, causal_labels_path, perturbed_data_path,
+            split_ratios, num_workers, seed, overwrite.
+
+    Returns:
+        The shared BenchmarkSplit (used for both the original and perturbed datasets).
+    """
+    input_data_path = Path(config.input_data_path)
+    causal_labels_path = Path(config.causal_labels_path)
+    perturbed_data_path = Path(config.perturbed_data_path)
+    random_generator: Generator = default_rng(config.seed)
+
+    filepaths = collect_scenario_filepaths(input_data_path)
+    chunksize = max(1, len(filepaths) // (config.num_workers * 8))
+
+    with multiprocessing.Pool(config.num_workers) as pool:
+        count_results = list(
+            tqdm(
+                pool.imap_unordered(
+                    partial(_count_noncausal, causal_labels_path=causal_labels_path),
+                    filepaths,
+                    chunksize=chunksize,
+                ),
+                total=len(filepaths),
+                desc="Counting non-causal agents",
+            )
+        )
+    counts = [result for result in count_results if result is not None]
+    counted_ids = {scenario_id for scenario_id, _ in counts}
+    invalid = [fp.stem for fp in filepaths if fp.stem not in counted_ids]
+
+    split_by_id = split_ids_by_score(
+        [scenario_id for scenario_id, _ in counts],
+        np.array([count for _, count in counts]),
+        tuple(config.split_ratios),
+        random_generator,
+        hardest_highest=True,
+    )
+    split = split_mapping_to_lists(split_by_id, invalid=invalid)
+
+    perturbed_data_path.mkdir(parents=True, exist_ok=True)
+    _LOGGER.info("Preparing remove_noncausal perturbations for %d scenarios at %s", len(filepaths), perturbed_data_path)
+    with multiprocessing.Pool(config.num_workers) as pool:
+        list(
+            tqdm(
+                pool.imap_unordered(
+                    partial(
+                        _prepare_perturbed_scenario,
+                        perturbed_path=perturbed_data_path,
+                        causal_labels_path=causal_labels_path,
+                        overwrite=config.overwrite,
+                    ),
+                    filepaths,
+                    chunksize=chunksize,
+                ),
+                total=len(filepaths),
+                desc="Preparing perturbations",
+            )
+        )
+
+    return split

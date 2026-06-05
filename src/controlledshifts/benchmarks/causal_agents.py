@@ -1,18 +1,22 @@
 r"""Benchmark creation for the Causal Agents benchmark.
 
-Randomly re-splits the input scenarios into training/validation/testing (by ``split_ratios``) and materializes each
-scenario twice under its assigned split: an unperturbed copy under ``output_data_path/original/`` and a copy with a
-specific object category (causal, non-causal, static) masked out under ``output_data_path/<strategy>/``. Keeping a
-1-1 ``original``/perturbed correspondence per split lets the original and perturbed versions of the same held-out
-scenarios be compared.
+Reuses the split of a reference benchmark (``reference_benchmark``, by default ``uniform``) rather than computing its
+own, so the perturbed scenes land in the same train/validation/testing bucket as their unperturbed counterparts. As a
+preparation step, it generates the perturbed dataset for every masking strategy (causal, non-causal, non-causal-equal,
+static), written flat under ``output_data_path/<strategy>/`` with no split subdirectories. The shared split is returned
+(and saved as JSON by the entry point); the optional copy step organizes each perturbed dataset into
+``output_data_path/causal_agents/<strategy>/<split>/``. The unperturbed "original" data is not re-copied; it is served
+directly from the reference benchmark's split directories (e.g. ``processed/uniform/<split>/``).
+
+The reference split must exist before running this benchmark. Create it first with, e.g.:
+
+    uv run -m controlledshifts.create_benchmark benchmark=uniform copy_splits=true
 
 Example usage:
 
     uv run -m controlledshifts.create_benchmark benchmark=causal_agents \\
         input_data_path=/datasets/waymo/processed/mini_causal \\
-        output_data_path=/datasets/waymo/processed/causal_agents \\
-        causal_labels_path=/datasets/waymo/causal_agents/processed_labels \\
-        strategy=remove_causal
+        causal_labels_path=/datasets/waymo/causal_agents/processed_labels
 
 See configs/benchmark/causal_agents.yaml for all available options.
 """
@@ -29,14 +33,18 @@ from numpy.random import Generator, default_rng
 from omegaconf import DictConfig
 from tqdm import tqdm
 
+from controlledshifts import utils
 from controlledshifts.benchmarks.common import (
+    CAUSAL_STRATEGIES,
+    BenchmarkSplit,
     collect_scenario_filepaths,
-    copy_scenario,
-    create_split_dirs,
     get_noncausal_mask,
-    split_ids_by_ratio,
+    load_benchmark_split,
 )
 from controlledshifts.utils.constants import MIN_VALID_POINTS
+
+
+_LOGGER = utils.get_pylogger(__name__)
 
 
 def _remove_causal(scenario: dict[str, Any], causal_labels: dict[str, Any], output_filepath: Path) -> None:
@@ -214,48 +222,44 @@ def _remove_static(scenario: dict[str, Any], output_filepath: Path, threshold_di
         pickle.dump(scenario, f)
 
 
-def _create_scenario(  # noqa: PLR0913
+def _perturb_scenario(  # noqa: PLR0913
     input_filepath: Path,
-    original_path: Path,
     perturbed_path: Path,
     causal_labels_path: Path,
-    scenario_mapping: dict[str, str],
     strategy: str,
     random_generator: Generator,
+    *,
+    overwrite: bool = False,
 ) -> None:
-    """Materializes the unperturbed and perturbed copies of a scenario into its assigned split.
+    """Applies a masking strategy to a single scenario and writes it flat to ``perturbed_path/<id>.pkl``.
 
     Args:
-        input_filepath: Path to the input file.
-        original_path: Root directory for the re-split unperturbed copies.
-        perturbed_path: Root directory for the re-split perturbed copies.
-        causal_labels_path: Path to the causal labels.
-        scenario_mapping: Maps scenario_id to its split name (e.g. 'training').
-        strategy: Benchmark strategy name.
-        random_generator: Random number generator.
+        input_filepath: Path to the input scenario pkl.
+        perturbed_path: Flat output directory for the perturbed dataset (no split subdirs).
+        causal_labels_path: Directory with per-scenario JSON causal labels (unused by ``remove_static``).
+        strategy: Masking strategy name.
+        random_generator: Random number generator (used by ``remove_noncausalequal``).
+        overwrite: If False, skip scenarios already present in ``perturbed_path``. Defaults to False.
     """
     if not input_filepath.exists():
+        return
+
+    output_filepath = perturbed_path / f"{input_filepath.stem}.pkl"
+    if output_filepath.exists() and not overwrite:
         return
 
     with input_filepath.open("rb") as f:
         scenario = pickle.load(f)  # nosec B301
 
-    scenario_id = scenario["scenario_id"]
-
-    causal_labels_filepath = causal_labels_path / f"{scenario_id}.json"
-    if not causal_labels_filepath.exists():
+    if strategy == "remove_static":
+        _remove_static(scenario, output_filepath)
         return
 
+    causal_labels_filepath = causal_labels_path / f"{input_filepath.stem}.json"
+    if not causal_labels_filepath.exists():
+        return
     with causal_labels_filepath.open("r") as f:
         causal_labels = json.load(f)
-
-    split = scenario_mapping[scenario_id]
-
-    # Materialize the unperturbed copy under the re-split original tree (taken from the file, so it is unaffected by the
-    # in-memory mutation the masking strategies apply below).
-    copy_scenario(scenario_id, input_filepath, original_path / split / f"{scenario_id}.pkl")
-
-    output_filepath = perturbed_path / split / f"{scenario_id}.pkl"
 
     match strategy:
         case "remove_causal":
@@ -264,50 +268,103 @@ def _create_scenario(  # noqa: PLR0913
             remove_noncausal(scenario, causal_labels, output_filepath)
         case "remove_noncausalequal":
             _remove_noncausalequal(scenario, causal_labels, output_filepath, random_generator)
-        case "remove_static":
-            _remove_static(scenario, output_filepath)
         case _:
             error_message = f"Strategy '{strategy}' is not supported. "
             error_message += "Choose from: remove_causal, remove_noncausal, remove_noncausalequal, remove_static."
             raise ValueError(error_message)
 
 
-def create_causal_agents_benchmark(config: DictConfig) -> None:
-    """Creates benchmark scenarios for Waymo dataset following the CausalAgents strategy.
+def _prepare_perturbations(  # noqa: PLR0913
+    filepaths: list[Path],
+    output_data_path: Path,
+    causal_labels_path: Path,
+    random_generator: Generator,
+    num_workers: int,
+    *,
+    overwrite: bool = False,
+) -> None:
+    """Generates the flat perturbed dataset for every masking strategy under ``output_data_path/<strategy>/``.
 
-    Reads scenario pkl files from config.input_data_path (which may be flat / unorganized), randomly re-splits the
-    scenarios into training/validation/testing by config.split_ratios, and materializes each scenario twice under its
-    assigned split: an unperturbed copy under output_data_path/original/ and a perturbed copy under
-    output_data_path/<strategy>/. The split is deterministic for a fixed seed, so repeated runs with different
-    strategies stay aligned.
+    Args:
+        filepaths: Input scenario filepaths to perturb.
+        output_data_path: Root under which each ``<strategy>`` flat dataset directory is created.
+        causal_labels_path: Directory with per-scenario JSON causal labels.
+        random_generator: Random number generator (used by ``remove_noncausalequal``).
+        num_workers: Number of parallel worker processes.
+        overwrite: If False, scenarios already present in a strategy's directory are skipped. Defaults to False.
+    """
+    for strategy in CAUSAL_STRATEGIES:
+        perturbed_path = output_data_path / strategy
+        perturbed_path.mkdir(parents=True, exist_ok=True)
+        _LOGGER.info("Generating '%s' perturbations for %d scenarios at %s", strategy, len(filepaths), perturbed_path)
+        chunksize = max(1, len(filepaths) // (num_workers * 8))
+        with multiprocessing.Pool(num_workers) as pool:
+            list(
+                tqdm(
+                    pool.imap_unordered(
+                        partial(
+                            _perturb_scenario,
+                            perturbed_path=perturbed_path,
+                            causal_labels_path=causal_labels_path,
+                            strategy=strategy,
+                            random_generator=random_generator,
+                            overwrite=overwrite,
+                        ),
+                        filepaths,
+                        chunksize=chunksize,
+                    ),
+                    total=len(filepaths),
+                    desc=f"Perturbing ({strategy})",
+                )
+            )
+
+
+def create_causal_agents_benchmark(config: DictConfig) -> BenchmarkSplit:
+    """Reuses the reference benchmark's split and (optionally) prepares the perturbed datasets.
+
+    Loads the split saved by ``config.reference_benchmark`` (by default ``uniform``) from
+    ``config.splits_path/<reference_benchmark>.json`` instead of computing its own, so the perturbed scenes are
+    organized into the same train/validation/testing buckets as their unperturbed counterparts. When
+    config.prepare_perturbations is true, the perturbed dataset for every masking strategy is generated up front and
+    written flat under output_data_path/<strategy>/, mirroring the input. The copy targets (see
+    ``common.plan_copy_targets``) later organize each perturbed dataset into
+    output_data_path/causal_agents/<strategy>/<split>/; the unperturbed data is served directly from the reference
+    benchmark's split directories and is not re-copied.
 
     Args:
         config: Hydra config.
-            Expected keys: input_data_path, output_data_path, causal_labels_path, strategy, split_ratios, num_workers,
-            seed.
+            Expected keys: input_data_path, output_data_path, causal_labels_path, prepare_perturbations,
+            reference_benchmark, splits_path, num_workers, seed, overwrite.
+
+    Returns:
+        The reference BenchmarkSplit (shared across all strategies).
+
+    Raises:
+        FileNotFoundError: If the reference benchmark's split JSON does not exist yet.
     """
-    filepaths = collect_scenario_filepaths(Path(config.input_data_path))
-
-    random_generator: Generator = default_rng(config.seed)
-    scenario_mapping = split_ids_by_ratio([fp.stem for fp in filepaths], tuple(config.split_ratios), random_generator)
-
+    input_data_path = Path(config.input_data_path)
     output_data_path = Path(config.output_data_path)
-    original_path = output_data_path / "original"
-    perturbed_path = output_data_path / config.strategy
-    print(f"Processing Causal Agents benchmark: {config.strategy}")
-    create_split_dirs(original_path)
-    create_split_dirs(perturbed_path)
 
-    with multiprocessing.Pool(config.num_workers) as pool:
-        pool.starmap(
-            partial(
-                _create_scenario,
-                original_path=original_path,
-                perturbed_path=perturbed_path,
-                causal_labels_path=Path(config.causal_labels_path),
-                scenario_mapping=scenario_mapping,
-                strategy=config.strategy,
-                random_generator=random_generator,
-            ),
-            [(file,) for file in tqdm(filepaths, total=len(filepaths))],
+    reference_split_filepath = Path(config.splits_path) / f"{config.reference_benchmark}.json"
+    if not reference_split_filepath.exists():
+        error_message = (
+            f"Reference split '{reference_split_filepath}' not found. Create the '{config.reference_benchmark}' "
+            f"benchmark first, e.g.: uv run -m controlledshifts.create_benchmark benchmark={config.reference_benchmark}"
         )
+        raise FileNotFoundError(error_message)
+    split = load_benchmark_split(reference_split_filepath)
+
+    filepaths = collect_scenario_filepaths(input_data_path)
+    random_generator: Generator = default_rng(config.seed)
+
+    if config.prepare_perturbations:
+        _prepare_perturbations(
+            filepaths,
+            output_data_path,
+            Path(config.causal_labels_path),
+            random_generator,
+            config.num_workers,
+            overwrite=config.overwrite,
+        )
+
+    return split

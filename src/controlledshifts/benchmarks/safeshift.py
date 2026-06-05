@@ -13,10 +13,7 @@ Example usage:
 See configs/benchmark/safeshift.yaml for all available options.
 """
 
-import itertools
-import multiprocessing
 import pickle
-from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -24,38 +21,33 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 from omegaconf import DictConfig
-from tqdm import tqdm
 
 from controlledshifts import utils
-from controlledshifts.benchmarks.common import Benchmark, copy_scenario, create_split_dirs
+from controlledshifts.benchmarks.common import (
+    Benchmark,
+    BenchmarkSplit,
+    collect_scenario_filepaths,
+    split_mapping_to_lists,
+)
 
 
 _LOGGER = utils.get_pylogger(__name__)
 
 
-def _verify_splits(output_path: Path, scores_path: Path, prefix: str) -> None:
-    """Verifies splits have no overlapping scenario IDs and saves a score density plot.
+def _plot_score_density(scores_path: Path, prefix: str) -> None:
+    """Saves a per-split score-density (KDE) plot to ``scores_pdf.png`` from the SafeShift score metadata.
 
     Args:
-        output_path: Root directory containing the split subdirectories.
-        scores_path: Path to the SafeShift score metadata directory.
+        scores_path: Directory containing the ``*_extra_processed_scenarios_<split>_infos.pkl`` metadata files.
         prefix: Filename prefix used to locate the metadata files.
     """
-    splits = ["training", "validation", "testing"]
-    split_data: dict[str, set[str]] = {
-        split: {p.name for p in (output_path / split).rglob("*.pkl") if p.is_file()} for split in splits
-    }
-    for set1, set2 in itertools.combinations(splits, 2):
-        intersection = split_data[set1] & split_data[set2]
-        _LOGGER.info("Intersection between (%s, %s): %d", set1, set2, len(intersection))
-
     colors = {"training": "green", "testing": "red", "validation": "blue"}
-    for split in splits:
+    for split in ("training", "validation", "testing"):
         split_infos = "test" if split == "testing" else "val" if split == "validation" else "training"
         metadata_filepath = scores_path / f"{prefix}extra_processed_scenarios_{split_infos}_infos.pkl"
 
         with metadata_filepath.open("rb") as f:
-            scenario_metadata = pickle.load(f)
+            scenario_metadata = pickle.load(f)  # nosec B301
 
         scores_ac = np.asarray([scenario["traj_scores_asym_combined"].max() for scenario in scenario_metadata])
         scores_fe = np.asarray([scenario["traj_scores_fe"].max() for scenario in scenario_metadata])
@@ -68,30 +60,34 @@ def _verify_splits(output_path: Path, scores_path: Path, prefix: str) -> None:
     plt.xlabel("Value")
     plt.ylabel("Density")
     plt.savefig("scores_pdf.png")
+    _LOGGER.info("Saved score density plot to scores_pdf.png")
 
 
-def create_safeshift_benchmark(config: DictConfig) -> None:
-    """Creates benchmark splits for the SafeShift benchmark.
+def create_safeshift_benchmark(config: DictConfig) -> BenchmarkSplit:
+    """Creates the SafeShift benchmark split.
 
-    Reads per-split metadata from SafeShift pickle files, then copies the corresponding scenario files into
-    training/validation/testing subdirectories under output_data_path.
+    Reads the predetermined per-split assignment from the SafeShift metadata pickle files and builds the train/val/test
+    scenario lists. Scenarios listed in the metadata but absent from the input directory are recorded as invalid. When
+    ``config.plot_scores`` is true, a per-split score-density plot is saved to ``scores_pdf.png``.
 
     Args:
         config: Hydra config.
-            Expected keys: input_data_path, output_data_path, scores_path, prefix, num_workers.
+            Expected keys: input_data_path, scores_path, prefix, plot_scores.
+
+    Returns:
+        The BenchmarkSplit.
     """
     input_data_path = Path(config.input_data_path)
-    output_data_path = Path(config.output_data_path)
     scores_path = Path(config.scores_path)
 
     _LOGGER.info("Creating %s benchmark", Benchmark.SAFESHIFT.value)
-    create_split_dirs(output_data_path)
 
-    scenario_filepaths: dict[str, Path] = {path.stem: path for path in input_data_path.rglob("*.pkl")}
-    _LOGGER.info("Found %d total scenario files in %s", len(scenario_filepaths), input_data_path)
+    available_ids = {fp.stem for fp in collect_scenario_filepaths(input_data_path)}
+    _LOGGER.info("Found %d total scenario files in %s", len(available_ids), input_data_path)
 
-    tasks: list[tuple[str, Path, Path]] = []
-    for split in ["training", "validation", "testing"]:
+    split_by_id: dict[str, str] = {}
+    invalid: list[str] = []
+    for split in ("training", "validation", "testing"):
         split_infos = "test" if split == "testing" else "val" if split == "validation" else "training"
         metadata_filepath = scores_path / f"{config.prefix}processed_scenarios_{split_infos}_infos.pkl"
 
@@ -100,31 +96,24 @@ def create_safeshift_benchmark(config: DictConfig) -> None:
             raise FileNotFoundError(error_message)
 
         with metadata_filepath.open("rb") as f:
-            scenario_metadata: list[dict[str, Any]] = pickle.load(f)
+            scenario_metadata: list[dict[str, Any]] = pickle.load(f)  # nosec B301
         _LOGGER.info("Loaded %d scenarios for split '%s' from %s", len(scenario_metadata), split, metadata_filepath)
 
-        output_split_path = output_data_path / split
         num_not_found = 0
         for scenario in scenario_metadata:
             scenario_id = scenario["scenario_id"]
-            input_filepath = scenario_filepaths.get(scenario_id)
-            if input_filepath is None:
+            if scenario_id not in available_ids:
                 num_not_found += 1
+                invalid.append(scenario_id)
                 continue
-            tasks.append((scenario_id, input_filepath, output_split_path / f"{scenario_id}.pkl"))
+            split_by_id[scenario_id] = split
 
         if num_not_found:
             _LOGGER.warning("Split '%s': %d scenarios not found in input directory", split, num_not_found)
 
-    _LOGGER.info("Starting parallel copy of %d scenarios with %d workers", len(tasks), config.num_workers)
-    with multiprocessing.Pool(config.num_workers) as pool:
-        list(
-            tqdm(
-                pool.starmap(partial(copy_scenario, unlink_source=config.unlink_source), tasks),
-                total=len(tasks),
-                desc="Copying scenarios",
-            )
-        )
+    split = split_mapping_to_lists(split_by_id, invalid=invalid)
 
-    _verify_splits(output_data_path, scores_path, config.prefix)
-    _LOGGER.info("SafeShift benchmark creation complete")
+    if config.get("plot_scores", False):
+        _plot_score_density(scores_path, config.prefix)
+
+    return split

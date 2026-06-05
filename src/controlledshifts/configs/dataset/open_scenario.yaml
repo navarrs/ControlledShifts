@@ -1,4 +1,0 @@
-defaults:
-  - default.yaml
-
-_target_: controlledshifts.datasets.open_sceanrio_dataset.OpenScenarioDataset

@@ -4,13 +4,20 @@ defaults:
 
 benchmark_name: causal_agents
 
-# Perturbed copies are written to output_data_path/<strategy>/ and unperturbed copies to output_data_path/original/,
-# so point at the shared parent dir. With strategy=remove_causal the perturbed output lands at
-# /data/driving/waymo/processed/remove_causal (reused by the non_causal_agents benchmark via its perturbed_data_path).
+# Benchmark whose saved split (${splits_path}/<reference_benchmark>.json) this benchmark reuses, so perturbed scenes
+# land in the same train/validation/testing buckets as their unperturbed counterparts. That benchmark must be created
+# first; its split directories also serve the unperturbed "original" data, which is not re-copied here.
+reference_benchmark: uniform
+
+# Root for the flat perturbed datasets and the split-organized copy. The preparation step writes each strategy's
+# perturbed dataset flat to output_data_path/<strategy>/ (e.g. /data/driving/waymo/processed/remove_noncausal, reused
+# by the causal_agents_hard benchmark). When copy_splits is enabled, each perturbed dataset is organized into
+# output_data_path/causal_agents/<strategy>/{training,validation,testing}/.
 output_data_path: /data/driving/waymo/processed
 
 # Path to the directory containing per-scenario JSON causal labels.
 causal_labels_path: /data/driving/waymo/causal_agents/processed_labels/
 
-# Masking strategy. One of: remove_causal, remove_noncausal, remove_noncausalequal, remove_static.
-strategy: remove_causal
+# If true, generate the flat perturbed dataset for every masking strategy (remove_causal, remove_noncausal,
+# remove_noncausalequal, remove_static) up front under output_data_path/<strategy>/.
+prepare_perturbations: true

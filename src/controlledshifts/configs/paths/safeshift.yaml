@@ -1,16 +1,38 @@
 defaults:
   - default.yaml
 
-tag: 'safeshift-benchmark'
+# TODO: Revise this config.
 
-# NOTE: for training and validation, this uses the SafeShift In-Distribution (ID) subset obtained through the
-# 'asymmetric-combined' scoring strategy
-train_data_path: [ "${paths.base_path}/processed/safeshift/training" ]
-train_data_tag: ["safeshift-training"]
-val_data_path: ["${paths.base_path}/processed/safeshift/validation" ]
-val_data_tag: ["safeshift-id"]
+# Combines the Causal and SafeShift Benchmarks
+tag: 'safeshift'
 
-# NOTE: for training and validation, this uses the SafeShift Out-Of-Distribution (OOD) subset obtained through the
-# 'asymmetric-combined' scoring strategy
-test_data_path: ["${paths.base_path}/processed/safeshift/testing"]
-test_data_tag: ["safeshift-ood"]
+# NOTE: for training and validation, this is using the original (unmodified) scenarios from the CausalAgents benchmark.
+train_data_path: [
+  "${paths.base_path}/processed/mini_causal/training"
+] # list of paths to the training data
+train_data_tag: [
+  "mini-causal-training"
+]
+
+val_data_path: [
+  "${paths.base_path}/processed/mini_causal/validation"
+] # list of paths to the validation data
+val_data_tag: [
+  "mini-causal-validation"
+]
+
+# NOTE: for testing, we combine the CausalAgents and SafeShift benchmarks.
+test_data_path: [
+  "${paths.base_path}/processed/mini_causal/testing",
+  "${paths.base_path}/processed/causal_agents/remove_noncausal/validation",
+  "${paths.base_path}/processed/causal_agents/remove_noncausal/testing",
+  "${paths.base_path}/processed/safeshift_causal/validation",
+  "${paths.base_path}/processed/safeshift_causal/testing"
+]
+test_data_tag: [
+  "mini-causal-testing",
+  "remove-noncausal-validation",      # Perturbed Scenes by removing agents that are NOT labeled as causal to the ego.
+  "remove-noncausal-testing",
+  "safeshift-id",                     # In-Distribution Scenes determined by the SafeShift scoring strategies.
+  "safeshift-ood"                     # Out-of-Distribution Scenes determined by the SafeShift scoring strategies.
+]

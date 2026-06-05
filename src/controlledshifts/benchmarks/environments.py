@@ -585,49 +585,6 @@ def visualize_descriptor_scatter(  # noqa: PLR0913
     _LOGGER.info("Saved scatter plot to %s", scatter_path)
 
 
-def _split_and_copy_scenarios(  # pyright: ignore[reportUnusedFunction]
-    benchmark_df: pd.DataFrame,
-    descriptor_filepath: Path,
-    output_path: Path,
-    num_workers: int,
-) -> None:
-    """Copies scenarios to train/val/test output directories according to the split assignments in benchmark_df.
-
-    Source paths are resolved from the descriptor cache (filepath → scenario_id mapping). Scenarios not present in
-    the cache are silently skipped.
-
-    Args:
-        benchmark_df: DataFrame with columns ``scenario_id`` and ``output_set``.
-        descriptor_filepath: Path to the descriptor cache pickle file used to resolve source file paths.
-        output_path: Root output directory; split subdirectories are created here.
-        num_workers: Number of parallel worker processes for copying (0 = single process).
-    """
-    descriptor_cache = _load_descriptor_cache(descriptor_filepath)
-    id_to_filepath: dict[str, Path] = {v[0]: Path(k) for k, v in descriptor_cache.items()}
-    input_scenario_mapping = {sid: id_to_filepath[sid] for sid in benchmark_df["scenario_id"] if sid in id_to_filepath}
-
-    common.create_split_dirs(output_path)
-
-    output_scenario_mapping: dict[str, Path] = {}
-    for split in ["training", "validation", "testing"]:
-        split_ids = benchmark_df[benchmark_df["output_set"] == split]["scenario_id"].tolist()
-        output_scenario_mapping.update(common.get_scenario_mapping(split_ids, output_path, split))
-
-    tasks: list[tuple[str, Path, Path]] = [
-        (sid, input_scenario_mapping[sid], output_scenario_mapping[sid])
-        for sid in output_scenario_mapping
-        if sid in input_scenario_mapping
-    ]
-
-    if num_workers == 0:
-        list(tqdm((common.copy_scenario(*task) for task in tasks), total=len(tasks), desc="Copying scenarios"))
-    else:
-        with multiprocessing.Pool(num_workers) as pool:
-            list(tqdm(pool.starmap(common.copy_scenario, tasks), total=len(tasks), desc="Copying scenarios"))
-
-    common.verify_splits(output_path)
-
-
 def _fit_clustering_model(
     scaled_data: NDArray[np.float64],
     config: DictConfig,
@@ -702,7 +659,7 @@ def _assign_clusters(
     return valid_ids[np.argmin(dists, axis=1)].astype(np.int32)
 
 
-def create_environments_benchmark(config: DictConfig) -> None:  # noqa: PLR0912, PLR0915
+def create_environments_benchmark(config: DictConfig) -> common.BenchmarkSplit:  # noqa: PLR0912, PLR0915
     """Clusters scenarios by road topology using NetLSD graph descriptors and a configurable clustering algorithm.
 
     The pipeline runs in two phases:
@@ -724,6 +681,9 @@ def create_environments_benchmark(config: DictConfig) -> None:  # noqa: PLR0912,
             Expected keys: input_data_path, output_data_path, cache_path, clustering_algorithm, n_clusters,
             n_examples, sample_percentage, num_scenarios, num_workers, parallel, ego_centered, num_map_elements, seed,
             overwrite, map_range, reduction, simplify, split_ratios, hardness_metric.
+
+    Returns:
+        The cluster-hardness BenchmarkSplit (from ``benchmark_df["output_set"]``).
 
     Raises:
         ValueError: If no valid scenario descriptors could be computed.
@@ -925,5 +885,8 @@ def create_environments_benchmark(config: DictConfig) -> None:  # noqa: PLR0912,
             seed=config.seed,
         )
 
-    if config.prepare_splits:
-        _split_and_copy_scenarios(benchmark_df, descriptor_filepath, output_path, num_workers)
+    placed_ids = set(benchmark_df["scenario_id"].tolist())
+    invalid = [fp.stem for fp in common.collect_scenario_filepaths(input_data_path) if fp.stem not in placed_ids]
+    return common.split_mapping_to_lists(
+        dict(zip(benchmark_df["scenario_id"], benchmark_df["output_set"], strict=False)), invalid=invalid
+    )

@@ -1,0 +1,28 @@
+defaults:
+  - default.yaml
+
+tag: 'uniform'
+
+
+train_data_path: [
+  "${paths.base_path}/processed/uniform/training"
+] # list of paths to the training data
+train_data_tag: [
+  "uniform-training"
+]
+
+val_data_path: [
+  "${paths.base_path}/processed/uniform/validation"
+] # list of paths to the validation data
+val_data_tag: [
+  "uniform-validation"
+]
+
+test_data_path: [
+  "${paths.base_path}/processed/uniform/validation",
+  "${paths.base_path}/processed/uniform/testing",
+]
+test_data_tag: [
+  "uniform-validation",
+  "uniform-testing"
+]

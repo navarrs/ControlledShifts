@@ -3,16 +3,25 @@ defaults:
 
 tag: 'causal-agents-all'
 
-# NOTE: for training and validation, this uses the re-split original (unmodified) scenarios.
-train_data_path: [ "${paths.base_path}/processed/causal_agents/original/training" ] # list of paths to the training data
-train_data_tag: ["causal-agents-original-training"]
-val_data_path: ["${paths.base_path}/processed/causal_agents/original/validation" ] # list of paths to the validation data
-val_data_tag: ["causal-agents-original-validation"]
+# NOTE: training and validation use the unmodified scenes, served from the reused uniform split directories.
+train_data_path: [
+  "${paths.base_path}/processed/uniform/training"
+] # list of paths to the training data
+train_data_tag: [
+  "uniform-training"
+]
 
-# NOTE: for testing, this uses the re-split original scenes and their perturbed counterparts for every strategy.
+val_data_path: [
+  "${paths.base_path}/processed/uniform/validation"
+] # list of paths to the validation data
+val_data_tag: [
+  "uniform-validation"
+]
+
+# NOTE: testing uses the unmodified scenes (from uniform) and their perturbed counterparts for every strategy.
 test_data_path: [
-  "${paths.base_path}/processed/causal_agents/original/validation",
-  "${paths.base_path}/processed/causal_agents/original/testing",
+  "${paths.base_path}/processed/uniform/validation",
+  "${paths.base_path}/processed/uniform/testing",
   "${paths.base_path}/processed/causal_agents/remove_causal/validation",
   "${paths.base_path}/processed/causal_agents/remove_causal/testing",
   "${paths.base_path}/processed/causal_agents/remove_noncausal/validation",
@@ -23,8 +32,8 @@ test_data_path: [
   "${paths.base_path}/processed/causal_agents/remove_static/testing",
 ]
 test_data_tag: [
-  "causal-agents-original-validation",
-  "causal-agents-original-testing",
+  "uniform-validation",
+  "uniform-testing",
   "remove-causal-validation",         # Perturbation: removes agents that are causal to the ego.
   "remove-causal-testing",
   "remove-noncausal-validation",      # Perturbation: removes agents that are NOT causal to the ego.

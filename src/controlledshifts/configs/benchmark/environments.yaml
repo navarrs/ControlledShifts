@@ -31,8 +31,8 @@ ego_centered: true
 # Maximum number of map elements to retain when ego_centered is true.
 num_map_elements: 384
 
-# If true, recompute all descriptors and overwrite the cache.
-overwrite: false
+# NOTE: descriptor-cache and output recomputation is controlled by the shared `overwrite` flag in
+# create_benchmark.yaml (also gates split regeneration and re-copying).
 
 # If true, simplify the map graph before computing NetLSD descriptors.
 simplify: false
@@ -45,9 +45,6 @@ visualize_descriptor_scatter: false
 
 # Dimensionality reduction for the scatter plot: 'pca' or 'tsne'.
 reduction: tsne
-
-# If true, prepare train/val/test splits using the inherited split_ratios.
-prepare_splits: false
 
 # Metric used to rank cluster hardness when selecting the test set.
 # 'silhouette': lowest mean silhouette clusters are hardest (most ambiguous).

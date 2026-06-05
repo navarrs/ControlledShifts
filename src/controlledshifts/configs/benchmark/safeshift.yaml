@@ -1,4 +1,6 @@
 # @package _global_
+defaults:
+  - default.yaml
 
 benchmark_name: safeshift
 
@@ -7,6 +9,9 @@ scores_path: /data/driving/waymo/mtr_process_splits
 
 # Filename prefix used to locate the per-split metadata files.
 prefix: score_asym_combined_80_
+
+# If true, save a per-split score-density (KDE) plot to scores_pdf.png from the *_extra_processed_*_infos.pkl metadata.
+plot_scores: false
 
 # Delete source files after copying (SafeShift input data is typically not needed after benchmark creation).
 unlink_source: true
