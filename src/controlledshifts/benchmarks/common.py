@@ -2,12 +2,13 @@
 
 import itertools
 import shutil
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+from numpy.random import Generator
 
 from controlledshifts import utils
 
@@ -67,6 +68,88 @@ def get_noncausal_mask(scenario: dict[str, Any], causal_labels: dict[str, Any]) 
     ego_id = object_ids[scenario["sdc_track_index"]]
     causal_ids = np.array(causal_labels["causal_ids"] + [ego_id], dtype=np.int64)
     return ~np.isin(object_ids, causal_ids)
+
+
+def _build_split_mapping(training: list[str], validation: list[str], testing: list[str]) -> dict[str, str]:
+    """Builds a scenario_id -> split-name mapping and logs the resulting split sizes."""
+    _LOGGER.info(
+        "Split sizes -> training: %d, validation: %d, testing: %d", len(training), len(validation), len(testing)
+    )
+    split_mapping = dict.fromkeys(training, "training")
+    split_mapping.update(dict.fromkeys(validation, "validation"))
+    split_mapping.update(dict.fromkeys(testing, "testing"))
+    return split_mapping
+
+
+def split_ids_by_ratio(
+    scenario_ids: Sequence[str], split_ratios: tuple[float, float, float], random_generator: Generator
+) -> dict[str, str]:
+    """Randomly assigns scenario IDs to training/validation/testing by (train, val, test) fractions of the total.
+
+    The ids are sorted before shuffling so the assignment is reproducible regardless of input ordering.
+
+    Args:
+        scenario_ids: Scenario IDs to split.
+        split_ratios: (train, val, test) fractions of the full dataset. Should sum to 1.0.
+        random_generator: Random number generator used to shuffle the ids.
+
+    Returns:
+        Mapping from scenario_id to split name ("training", "validation", or "testing").
+    """
+    ids = sorted(scenario_ids)
+    random_generator.shuffle(ids)
+    total = len(ids)
+    num_test = int(total * split_ratios[2])
+    num_val = int(total * split_ratios[1])
+    testing = ids[:num_test]
+    validation = ids[num_test : num_test + num_val]
+    training = ids[num_test + num_val :]
+    return _build_split_mapping(training, validation, testing)
+
+
+def split_ids_by_score(
+    scenario_ids: Sequence[str],
+    scores: np.ndarray,
+    split_ratios: tuple[float, float, float],
+    random_generator: Generator,
+    *,
+    hardest_highest: bool = True,
+) -> dict[str, str]:
+    """Assigns scenarios to splits by a difficulty score, sending the hardest scenarios to the test set.
+
+    The hardest ``int(total * split_ratios[2])`` scenarios by ``scores`` form the test set; the remainder is shuffled
+    and the first ``int(total * split_ratios[1])`` become validation, the rest training. Ids are sorted before ranking
+    so the assignment is reproducible regardless of input ordering.
+
+    Args:
+        scenario_ids: Scenario IDs to split.
+        scores: Per-scenario difficulty scores aligned with ``scenario_ids``.
+        split_ratios: (train, val, test) fractions of the full dataset. Should sum to 1.0.
+        random_generator: Random number generator used to shuffle the train/val remainder.
+        hardest_highest: If True, the highest scores are hardest (go to testing); if False, the lowest are hardest.
+
+    Returns:
+        Mapping from scenario_id to split name ("training", "validation", or "testing").
+    """
+    order = np.argsort(scenario_ids, kind="stable")
+    ids = np.asarray(scenario_ids)[order]
+    ranked = np.asarray(scores)[order]
+
+    rank_order = np.argsort(ranked, kind="stable")
+    if hardest_highest:
+        rank_order = rank_order[::-1]
+    ids_by_hardness = ids[rank_order].tolist()
+
+    total = len(ids_by_hardness)
+    num_test = int(total * split_ratios[2])
+    num_val = int(total * split_ratios[1])
+
+    testing = ids_by_hardness[:num_test]
+    remainder = ids_by_hardness[num_test:]
+    random_generator.shuffle(remainder)
+    validation = remainder[:num_val]
+    training = remainder[num_val:]
+    return _build_split_mapping(training, validation, testing)
 
 
 def collect_scenario_filepaths(data_path: Path) -> list[Path]:

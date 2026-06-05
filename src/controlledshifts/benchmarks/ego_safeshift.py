@@ -1,7 +1,7 @@
 r"""Benchmark creation for the Ego-SafeShift benchmark.
 
-Filters scenarios by safety score percentile and copies them into training/validation/testing splits. Scenarios below
-the cutoff percentile form the train/val pool; scenarios above form the test set.
+Ranks scenarios by safety score and copies them into training/validation/testing splits following split_ratios. The
+hardest (highest-scoring) scenarios form the test set; the remainder is split into train/val.
 
 Example usage:
 
@@ -17,7 +17,6 @@ import multiprocessing
 from functools import partial
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 from numpy.random import Generator, default_rng
 from omegaconf import DictConfig
@@ -28,20 +27,21 @@ from controlledshifts.benchmarks.common import (
     copy_scenario,
     create_split_dirs,
     get_scenario_mapping,
+    split_ids_by_score,
 )
 
 
 def create_ego_safeshift_benchmark(config: DictConfig) -> None:
     """Creates benchmark scenarios for the Ego-SafeShift benchmark.
 
-    Splits the dataset by safety score percentile: scenarios below cutoff_percentile go into the training/validation
-    pool (split 80/20 by default); scenarios above go into the test set. Files are copied from causal_data_path into the
+    Splits the dataset by safety score: the hardest (highest-scoring) scenarios form the test set and the remainder is
+    split into training/validation, following split_ratios. Files are copied from the input directory into the
     appropriate split subdirectory.
 
     Args:
         config: Hydra config.
             Expected keys: input_data_path, output_data_path, scenario_score_mapping_filepath, score_type,
-            cutoff_percentile, validation_percentage, num_workers, seed.
+            split_ratios, num_workers, seed.
     """
     output_data_path = Path(config.output_data_path)
     random_generator: Generator = default_rng(config.seed)
@@ -53,26 +53,20 @@ def create_ego_safeshift_benchmark(config: DictConfig) -> None:
     create_split_dirs(output_data_path)
 
     scenario_scores_df = pd.read_csv(Path(config.scenario_score_mapping_filepath))
-    cutoff_score = np.percentile(scenario_scores_df[config.score_type], config.cutoff_percentile)
+    split_by_id = split_ids_by_score(
+        scenario_scores_df["scenario_ids"].tolist(),
+        scenario_scores_df[config.score_type].to_numpy(),
+        tuple(config.split_ratios),
+        random_generator,
+        hardest_highest=True,
+    )
 
     output_scenario_mapping: dict[str, Path] = {}
-
-    train_val_scenarios = scenario_scores_df[scenario_scores_df[config.score_type] < cutoff_score][
-        "scenario_ids"
-    ].tolist()
-    random_generator.shuffle(train_val_scenarios)
-    num_validation_scenarios = int(len(train_val_scenarios) * (config.validation_percentage / 100.0))
-
-    validation_scenarios = train_val_scenarios[:num_validation_scenarios]
-    output_scenario_mapping.update(get_scenario_mapping(validation_scenarios, output_data_path, "validation"))
-
-    training_scenarios = train_val_scenarios[num_validation_scenarios:]
-    output_scenario_mapping.update(get_scenario_mapping(training_scenarios, output_data_path, "training"))
-
-    testing_scenarios = scenario_scores_df[scenario_scores_df[config.score_type] >= cutoff_score][
-        "scenario_ids"
-    ].tolist()
-    output_scenario_mapping.update(get_scenario_mapping(testing_scenarios, output_data_path, "testing"))
+    for split in ("training", "validation", "testing"):
+        split_scenarios = [
+            scenario_id for scenario_id, scenario_split in split_by_id.items() if scenario_split == split
+        ]
+        output_scenario_mapping.update(get_scenario_mapping(split_scenarios, output_data_path, split))
 
     tasks = [
         (scenario_id, input_scenario_mapping[scenario_id], output_scenario_mapping[scenario_id])

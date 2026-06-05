@@ -1,13 +1,16 @@
 r"""Benchmark creation for the Causal Agents benchmark.
 
-Creates modified scenario pkl files where specific object categories (causal, non-causal, static) are masked out,
-producing a resplit dataset under output_data_path/<strategy>/{training,validation,testing}/.
+Randomly re-splits the input scenarios into training/validation/testing (by ``split_ratios``) and materializes each
+scenario twice under its assigned split: an unperturbed copy under ``output_data_path/original/`` and a copy with a
+specific object category (causal, non-causal, static) masked out under ``output_data_path/<strategy>/``. Keeping a
+1-1 ``original``/perturbed correspondence per split lets the original and perturbed versions of the same held-out
+scenarios be compared.
 
 Example usage:
 
     uv run -m controlledshifts.create_benchmark benchmark=causal_agents \\
         input_data_path=/datasets/waymo/processed/mini_causal \\
-        output_data_path=/datasets/waymo/processed \\
+        output_data_path=/datasets/waymo/processed/causal_agents \\
         causal_labels_path=/datasets/waymo/causal_agents/processed_labels \\
         strategy=remove_causal
 
@@ -26,7 +29,13 @@ from numpy.random import Generator, default_rng
 from omegaconf import DictConfig
 from tqdm import tqdm
 
-from controlledshifts.benchmarks.common import collect_scenario_filepaths, create_split_dirs, get_noncausal_mask
+from controlledshifts.benchmarks.common import (
+    collect_scenario_filepaths,
+    copy_scenario,
+    create_split_dirs,
+    get_noncausal_mask,
+    split_ids_by_ratio,
+)
 from controlledshifts.utils.constants import MIN_VALID_POINTS
 
 
@@ -207,17 +216,19 @@ def _remove_static(scenario: dict[str, Any], output_filepath: Path, threshold_di
 
 def _create_scenario(  # noqa: PLR0913
     input_filepath: Path,
-    output_path: Path,
+    original_path: Path,
+    perturbed_path: Path,
     causal_labels_path: Path,
     scenario_mapping: dict[str, str],
     strategy: str,
     random_generator: Generator,
 ) -> None:
-    """Creates a benchmark scenario info file from a processed Waymo scenario.
+    """Materializes the unperturbed and perturbed copies of a scenario into its assigned split.
 
     Args:
         input_filepath: Path to the input file.
-        output_path: Path to the output directory.
+        original_path: Root directory for the re-split unperturbed copies.
+        perturbed_path: Root directory for the re-split perturbed copies.
         causal_labels_path: Path to the causal labels.
         scenario_mapping: Maps scenario_id to its split name (e.g. 'training').
         strategy: Benchmark strategy name.
@@ -239,7 +250,12 @@ def _create_scenario(  # noqa: PLR0913
         causal_labels = json.load(f)
 
     split = scenario_mapping[scenario_id]
-    output_filepath = output_path / split / f"{scenario_id}.pkl"
+
+    # Materialize the unperturbed copy under the re-split original tree (taken from the file, so it is unaffected by the
+    # in-memory mutation the masking strategies apply below).
+    copy_scenario(scenario_id, input_filepath, original_path / split / f"{scenario_id}.pkl")
+
+    output_filepath = perturbed_path / split / f"{scenario_id}.pkl"
 
     match strategy:
         case "remove_causal":
@@ -259,26 +275,35 @@ def _create_scenario(  # noqa: PLR0913
 def create_causal_agents_benchmark(config: DictConfig) -> None:
     """Creates benchmark scenarios for Waymo dataset following the CausalAgents strategy.
 
-    Reads scenario pkl files from config.input_data_path, applies the chosen masking strategy, and writes modified
-    scenarios to config.output_data_path/<strategy>/{training,validation,testing}/.
+    Reads scenario pkl files from config.input_data_path (which may be flat / unorganized), randomly re-splits the
+    scenarios into training/validation/testing by config.split_ratios, and materializes each scenario twice under its
+    assigned split: an unperturbed copy under output_data_path/original/ and a perturbed copy under
+    output_data_path/<strategy>/. The split is deterministic for a fixed seed, so repeated runs with different
+    strategies stay aligned.
 
     Args:
         config: Hydra config.
-            Expected keys: input_data_path, output_data_path, causal_labels_path, strategy, num_workers, seed.
+            Expected keys: input_data_path, output_data_path, causal_labels_path, strategy, split_ratios, num_workers,
+            seed.
     """
     filepaths = collect_scenario_filepaths(Path(config.input_data_path))
-    scenario_mapping = {fp.stem: fp.parent.parent.stem for fp in filepaths}
-
-    proc_data_path = Path(config.output_data_path) / config.strategy
-    print(f"Processing Causal Agents benchmark: {config.strategy}")
-    create_split_dirs(proc_data_path)
 
     random_generator: Generator = default_rng(config.seed)
+    scenario_mapping = split_ids_by_ratio([fp.stem for fp in filepaths], tuple(config.split_ratios), random_generator)
+
+    output_data_path = Path(config.output_data_path)
+    original_path = output_data_path / "original"
+    perturbed_path = output_data_path / config.strategy
+    print(f"Processing Causal Agents benchmark: {config.strategy}")
+    create_split_dirs(original_path)
+    create_split_dirs(perturbed_path)
+
     with multiprocessing.Pool(config.num_workers) as pool:
         pool.starmap(
             partial(
                 _create_scenario,
-                output_path=proc_data_path,
+                original_path=original_path,
+                perturbed_path=perturbed_path,
                 causal_labels_path=Path(config.causal_labels_path),
                 scenario_mapping=scenario_mapping,
                 strategy=config.strategy,

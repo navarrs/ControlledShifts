@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 LOWEST_PERCENTAGE = 0.0
 HIGHEST_PERCENTAGE = 1.0
-SPLIT_PERCENTAGES = {"training": 0.70, "validation": 0.10, "testing": 0.20}
+SPLIT_PERCENTAGES = {"training": 0.70, "validation": 0.15, "testing": 0.15}
 
 
 def copy(source_path: Path, destination_path: Path, filename: str) -> None:

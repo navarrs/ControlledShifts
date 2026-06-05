@@ -2,8 +2,8 @@ r"""Benchmark creation for the Non-Causal Agents benchmark.
 
 A harder variant of the Causal Agents benchmark that focuses on a single perturbation (removing non-causal agents) and
 re-organizes scenarios into train/validation/testing splits by difficulty. Difficulty is the number of non-causal agents
-in a scenario: scenarios are sorted ascending by that count and the hardest ones (at or above ``cutoff_percentile``)
-form the test set, mirroring how ego_safeshift/safeshift move the hardest scenarios to test.
+in a scenario: the scenarios with the most non-causal agents form the test set (following ``split_ratios``), mirroring
+how ego_safeshift/safeshift move the hardest scenarios to test.
 
 Each scenario is materialized twice under the same split: an unperturbed ``original`` copy and a ``perturbed`` copy with
 non-causal agents removed. This keeps a 1-1 correspondence so the original and perturbed versions of the same held-out
@@ -45,6 +45,7 @@ from controlledshifts.benchmarks.common import (
     copy_scenario,
     create_split_dirs,
     get_noncausal_mask,
+    split_ids_by_score,
     verify_splits,
 )
 
@@ -115,61 +116,18 @@ def _materialize_scenario(
     remove_noncausal(scenario, causal_labels, perturbed_output)
 
 
-def _assign_splits(
-    counts: list[tuple[str, int]], cutoff_percentile: float, validation_percentage: float, random_generator: Generator
-) -> dict[str, str]:
-    """Assigns scenarios to train/validation/testing splits by non-causal count.
-
-    Scenarios at or above the ``cutoff_percentile`` of non-causal counts form the test set; the remainder is the
-    train/val pool, shuffled with ``validation_percentage`` held out for validation.
-
-    Args:
-        counts: List of (scenario_id, non-causal count) tuples.
-        cutoff_percentile: Percentile of non-causal counts at/above which scenarios go to the test set.
-        validation_percentage: Percentage of the train/val pool held out for validation.
-        random_generator: Random number generator used to shuffle the train/val pool.
-
-    Returns:
-        Mapping from scenario_id to split name ("training", "validation", or "testing").
-    """
-    scenario_ids = np.array([scenario_id for scenario_id, _ in counts])
-    count_values = np.array([count for _, count in counts])
-    cutoff = np.percentile(count_values, cutoff_percentile)
-
-    testing_scenarios = scenario_ids[count_values >= cutoff].tolist()
-
-    train_val_scenarios = scenario_ids[count_values < cutoff].tolist()
-    random_generator.shuffle(train_val_scenarios)
-    num_validation_scenarios = int(len(train_val_scenarios) * (validation_percentage / 100.0))
-    validation_scenarios = train_val_scenarios[:num_validation_scenarios]
-    training_scenarios = train_val_scenarios[num_validation_scenarios:]
-
-    _LOGGER.info(
-        "Non-causal count cutoff (p%.1f): %.2f. Splits -> training: %d, validation: %d, testing: %d",
-        cutoff_percentile,
-        cutoff,
-        len(training_scenarios),
-        len(validation_scenarios),
-        len(testing_scenarios),
-    )
-
-    split_by_id = dict.fromkeys(training_scenarios, "training")
-    split_by_id.update(dict.fromkeys(validation_scenarios, "validation"))
-    split_by_id.update(dict.fromkeys(testing_scenarios, "testing"))
-    return split_by_id
-
-
 def create_non_causal_agents_benchmark(config: DictConfig) -> None:
     """Creates benchmark splits for the Non-Causal Agents benchmark.
 
     Computes the non-causal agent count for each scenario, re-splits scenarios into train/validation/testing by that
-    count, then materializes an ``original`` and a ``perturbed`` (remove_noncausal) copy of each scenario under its
-    assigned split. Perturbed copies are reused from ``perturbed_data_path`` when present and generated otherwise.
+    count (the scenarios with the most non-causal agents form the test set, following split_ratios), then materializes
+    an ``original`` and a ``perturbed`` (remove_noncausal) copy of each scenario under its assigned split. Perturbed
+    copies are reused from ``perturbed_data_path`` when present and generated otherwise.
 
     Args:
         config: Hydra config.
             Expected keys: input_data_path, output_data_path, causal_labels_path, perturbed_data_path,
-            cutoff_percentile, validation_percentage, num_workers, seed.
+            split_ratios, num_workers, seed.
     """
     output_data_path = Path(config.output_data_path)
     causal_labels_path = Path(config.causal_labels_path)
@@ -201,7 +159,13 @@ def create_non_causal_agents_benchmark(config: DictConfig) -> None:
         )
     counts = [result for result in count_results if result is not None]
 
-    split_by_id = _assign_splits(counts, config.cutoff_percentile, config.validation_percentage, random_generator)
+    split_by_id = split_ids_by_score(
+        [scenario_id for scenario_id, _ in counts],
+        np.array([count for _, count in counts]),
+        tuple(config.split_ratios),
+        random_generator,
+        hardest_highest=True,
+    )
 
     tasks = [
         (scenario_id, original_mapping[scenario_id], perturbed_mapping.get(scenario_id), split)

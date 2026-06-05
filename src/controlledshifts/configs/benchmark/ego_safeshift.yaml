@@ -5,11 +5,8 @@ benchmark_name: ego_safeshift
 # Path to the CSV file with columns 'scenario_ids' and score_type.
 scenario_score_mapping_filepath: ???
 
-# Column in the CSV to use for filtering.
+# Column in the CSV to use for ranking scenarios (higher score = harder = test set).
 score_type: gt_critical_continuous_safeshift
 
-# Percentile threshold separating the train/val pool from the test set.
-cutoff_percentile: 80.0
-
-# Percentage of the train/val pool to hold out for validation.
-validation_percentage: 10.0
+# (train, val, test) fractions of the full dataset. The hardest scenarios form the test set. Should sum to 1.0.
+split_ratios: [0.70, 0.15, 0.15]

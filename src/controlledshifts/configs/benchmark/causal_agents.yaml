@@ -7,3 +7,6 @@ causal_labels_path: /data/driving/waymo/causal_agents/processed_labels/
 
 # Masking strategy. One of: remove_causal, remove_noncausal, remove_noncausalequal, remove_static.
 strategy: remove_causal
+
+# (train, val, test) fractions of the full dataset for the random re-split. Should sum to 1.0.
+split_ratios: [0.70, 0.15, 0.15]

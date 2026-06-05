@@ -10,8 +10,6 @@ causal_labels_path: /data/driving/waymo/causal_agents/processed_labels/
 # on the fly. If the directory does not exist, all perturbed copies are generated.
 perturbed_data_path: /data/driving/waymo/processed/remove_noncausal/
 
-# Percentile threshold over non-causal counts: scenarios at or above this percentile form the test set.
-cutoff_percentile: 80.0
-
-# Percentage of the train/val pool held out for validation.
-validation_percentage: 10.0
+# (train, val, test) fractions of the full dataset. Scenarios with the most non-causal agents form the test set.
+# Should sum to 1.0.
+split_ratios: [0.70, 0.15, 0.15]

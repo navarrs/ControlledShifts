@@ -11,7 +11,7 @@ uv run -m controlledshifts.train model=[model_name] paths=waymo
 
 ## Causal Agents
 
-Evaluates robustness to causal agent perturbations. Scenarios are derived from the mini-causal dataset by masking specific agent categories (causal, non-causal, or static).
+Evaluates robustness to causal agent perturbations. The (possibly unorganized/flat) input scenarios are randomly re-split into training/validation/testing following `split_ratios`, then each scenario is materialized twice under its assigned split: an unperturbed `original` copy and a perturbed copy with a specific agent category (causal, non-causal, or static) masked out. Outputs are written to `output_data_path/original/{training,validation,testing}` and `output_data_path/<strategy>/{training,validation,testing}`, keeping a 1-1 correspondence so the same held-out scenes can be compared with and without the perturbation.
 
 **Creating the benchmark:**
 ```bash
@@ -25,6 +25,7 @@ uv run -m controlledshifts.create_benchmark benchmark=causal_agents \
 Key options (see `configs/benchmark/causal_agents.yaml`):
 - `causal_labels_path`: directory containing per-scenario JSON causal labels.
 - `strategy`: one of `remove_causal`, `remove_noncausal`, `remove_noncausalequal`, `remove_static`.
+- `split_ratios`: `(train, val, test)` fractions of the full dataset for the random re-split. Default: `[0.70, 0.15, 0.15]`. The split is deterministic for a fixed `seed`, so running each strategy in turn produces aligned splits.
 
 **Training and evaluation:**
 
@@ -47,7 +48,7 @@ Test subsets for `causal_agents_all`:
 
 ## Non-Causal Agents
 
-A harder variant of Causal Agents that focuses on a single perturbation — removing non-causal agents — and re-organizes scenarios by difficulty instead of reusing the original mini-causal splits. Difficulty is the number of non-causal agents in a scenario: scenarios are sorted ascending by that count and the hardest ones (at or above `cutoff_percentile`) form the test set. Each scenario is materialized twice under the same split: an unperturbed `original` copy and a `perturbed` copy with non-causal agents removed, so the original and perturbed versions of the same held-out scenes can be compared. Existing `remove_noncausal` perturbed files are reused when found and generated on the fly otherwise.
+A harder variant of Causal Agents that focuses on a single perturbation — removing non-causal agents — and re-organizes scenarios by difficulty instead of reusing the original mini-causal splits. Difficulty is the number of non-causal agents in a scenario: the scenarios with the most non-causal agents form the test set (following `split_ratios`). Each scenario is materialized twice under the same split: an unperturbed `original` copy and a `perturbed` copy with non-causal agents removed, so the original and perturbed versions of the same held-out scenes can be compared. Existing `remove_noncausal` perturbed files are reused when found and generated on the fly otherwise.
 
 **Creating the benchmark:**
 ```bash
@@ -61,8 +62,7 @@ uv run -m controlledshifts.create_benchmark benchmark=non_causal_agents \
 Key options (see `configs/benchmark/non_causal_agents.yaml`):
 - `causal_labels_path`: directory containing per-scenario JSON causal labels.
 - `perturbed_data_path`: existing `remove_noncausal` output to reuse; missing scenarios are generated on the fly.
-- `cutoff_percentile`: percentile of non-causal counts at/above which scenarios go to the test set. Default: `80.0`.
-- `validation_percentage`: percentage of the train/val pool to hold out for validation. Default: `10.0`.
+- `split_ratios`: `(train, val, test)` fractions of the full dataset; scenarios with the most non-causal agents form the test set. Default: `[0.70, 0.15, 0.15]`.
 
 **Training and evaluation:**
 
@@ -102,7 +102,7 @@ uv run -m controlledshifts.train model=[model_name] paths=safeshift_causal
 
 ## Ego-SafeShift
 
-Evaluates generalization to ego-safety-critical scenarios. Splits are derived from the causal dataset by filtering scenarios using ego safety scores from the ground-truth scoring strategy. Scenarios below the cutoff percentile form the ID train/val pool; scenarios above form the OOD test set.
+Evaluates generalization to ego-safety-critical scenarios. Splits are derived from the causal dataset by ranking scenarios using ego safety scores from the ground-truth scoring strategy. The highest-scoring (hardest) scenarios form the OOD test set; the remainder forms the ID train/val pool, following `split_ratios`.
 
 **Creating the benchmark:**
 ```bash
@@ -114,9 +114,8 @@ uv run -m controlledshifts.create_benchmark benchmark=ego_safeshift \
 
 Key options (see `configs/benchmark/ego_safeshift.yaml`):
 - `scenario_score_mapping_filepath`: CSV file with columns `scenario_ids` and a score column.
-- `score_type`: column to use for filtering. Default: `gt_critical_continuous_safeshift`.
-- `cutoff_percentile`: percentile threshold separating ID from OOD. Default: `80.0`.
-- `validation_percentage`: percentage of the ID pool to hold out for validation. Default: `10.0`.
+- `score_type`: column to rank scenarios by (higher = harder = test). Default: `gt_critical_continuous_safeshift`.
+- `split_ratios`: `(train, val, test)` fractions of the full dataset; the hardest scenarios form the test set. Default: `[0.70, 0.15, 0.15]`.
 
 **NOTE:** The ego scores were computed using the [ScenarioCharacterization](https://github.com/navarrs/ScenarioCharacterization/) package. Please refer to the repository for instructions on how to obtain the scores. Here,
 we faciliate `scenario_to_scores_mapping.csv` which maps each scenario to their ego-score.

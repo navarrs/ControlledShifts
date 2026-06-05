@@ -14,8 +14,8 @@ val_data_tag: ["mini-causal-validation"]
 # NOTE: for testing, we combine the CausalAgents and SafeShift benchmarks.
 test_data_path: [
   "${paths.base_path}/processed/mini_causal/testing",
-  "${paths.base_path}/processed/remove_noncausal/validation",
-  "${paths.base_path}/processed/remove_noncausal/testing",
+  "${paths.base_path}/processed/causal_agents/remove_noncausal/validation",
+  "${paths.base_path}/processed/causal_agents/remove_noncausal/testing",
   "${paths.base_path}/processed/safeshift_causal/validation",
   "${paths.base_path}/processed/safeshift_causal/testing"
 ]
