@@ -1,0 +1,10 @@
+benchmark_name: null
+
+# Default path to the input data
+input_data_path: /data/driving/waymo/processed/mini
+
+# Path to the output data
+output_data_path: /data/driving/waymo/processed/${benchmark_name}
+
+# (train, val, test) fractions of the full dataset for the random re-split. Should sum to 1.0.
+split_ratios: [0.70, 0.15, 0.15]

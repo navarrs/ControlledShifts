@@ -3,28 +3,37 @@ defaults:
 
 tag: 'causal-agents-all'
 
-# NOTE: for training and validation, this is using the original (unmodified) scenarios
-train_data_path: [ "${paths.base_path}/processed/mini_causal/training" ] # list of paths to the training data
-train_data_tag: ["mini-causal-training"]
-val_data_path: ["${paths.base_path}/processed/mini_causal/validation" ] # list of paths to the validation data
-val_data_tag: ["mini-causal-validation"]
+# NOTE: training and validation use the unmodified scenes, served from the reused uniform split directories.
+train_data_path: [
+  "${paths.base_path}/processed/uniform/training"
+] # list of paths to the training data
+train_data_tag: [
+  "uniform-training"
+]
 
-# NOTE: for testing, this is using the benchmark sets which are perturbed versions of the original scenes.
+val_data_path: [
+  "${paths.base_path}/processed/uniform/validation"
+] # list of paths to the validation data
+val_data_tag: [
+  "uniform-validation"
+]
+
+# NOTE: testing uses the unmodified scenes (from uniform) and their perturbed counterparts for every strategy.
 test_data_path: [
-  "${paths.base_path}/processed/mini_causal/validation",
-  "${paths.base_path}/processed/mini_causal/testing",
-  "${paths.base_path}/processed/remove_causal/validation",
-  "${paths.base_path}/processed/remove_causal/testing",
-  "${paths.base_path}/processed/remove_noncausal/validation",
-  "${paths.base_path}/processed/remove_noncausal/testing",
-  "${paths.base_path}/processed/remove_noncausalequal/validation",
-  "${paths.base_path}/processed/remove_noncausalequal/testing",
-  "${paths.base_path}/processed/remove_static/validation",
-  "${paths.base_path}/processed/remove_static/testing",
+  "${paths.base_path}/processed/uniform/validation",
+  "${paths.base_path}/processed/uniform/testing",
+  "${paths.base_path}/processed/causal_agents/remove_causal/validation",
+  "${paths.base_path}/processed/causal_agents/remove_causal/testing",
+  "${paths.base_path}/processed/causal_agents/remove_noncausal/validation",
+  "${paths.base_path}/processed/causal_agents/remove_noncausal/testing",
+  "${paths.base_path}/processed/causal_agents/remove_noncausalequal/validation",
+  "${paths.base_path}/processed/causal_agents/remove_noncausalequal/testing",
+  "${paths.base_path}/processed/causal_agents/remove_static/validation",
+  "${paths.base_path}/processed/causal_agents/remove_static/testing",
 ]
 test_data_tag: [
-  "mini-causal-validation",
-  "mini-causal-testing",
+  "uniform-validation",
+  "uniform-testing",
   "remove-causal-validation",         # Perturbation: removes agents that are causal to the ego.
   "remove-causal-testing",
   "remove-noncausal-validation",      # Perturbation: removes agents that are NOT causal to the ego.
