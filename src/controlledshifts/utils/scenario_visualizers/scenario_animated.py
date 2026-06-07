@@ -1,10 +1,11 @@
 import matplotlib.pyplot as plt
+import numpy as np
 from characterization.schemas import Scenario, ScenarioScores
 from characterization.utils.io_utils import get_logger
 from omegaconf import DictConfig
 
 from controlledshifts.schemas import AgentCentricScenario, ModelOutput
-from controlledshifts.utils.scenario_visualizers.base_visualizer import BaseVisualizer
+from controlledshifts.utils.scenario_visualizers.base_visualizer import PANE_TITLES, BaseVisualizer
 
 
 logger = get_logger(__name__)
@@ -18,12 +19,13 @@ class ScenarioAnimatedVisualizer(BaseVisualizer):
         self,
         scenario: Scenario | AgentCentricScenario,
         scores: ScenarioScores | None = None,
-        model_output: ModelOutput | None = None,  # noqa: ARG002
+        model_output: ModelOutput | None = None,
         output_dir: str = "temp",
     ) -> None:
         """Visualizes a single scenario and saves the output to a file.
 
-        ScenarioAnimatedVisualizer visualizes the scenario as an per-timestep animation.
+        ScenarioAnimatedVisualizer renders one window per pane in ``panes_to_plot`` as a per-timestep animation,
+        dispatching each pane through ``plot_pane``.
 
         Args:
             scenario (Scenario | AgentCentricScenario): encapsulates the scenario to visualize.
@@ -41,20 +43,26 @@ class ScenarioAnimatedVisualizer(BaseVisualizer):
         output_filepath = f"{output_dir}/{scenario_id}{suffix}.gif"
         logger.info("Visualizing scenario to %s", output_filepath)
 
+        num_windows = len(self.panes_to_plot)
         total_timesteps = scenario.metadata.track_length
         for timestep in range(2, total_timesteps):
-            _, ax = plt.subplots(1, 1, figsize=(5, 5))
+            _, axs = plt.subplots(1, num_windows, figsize=(5 * num_windows, 5 * 1))
 
             # Plot static and dynamic map information in the scenario
-            self.plot_map_data(ax, scenario)
+            self.plot_map_data(axs, scenario, num_windows)
 
-            self.plot_sequences(ax, scenario, scores, show_relevant=True, end_timestep=timestep)
+            # Plot each requested pane on its own window up to the current timestep
+            axs_list = np.atleast_1d(axs)
+            for ax, pane in zip(axs_list, self.panes_to_plot, strict=True):
+                self.plot_pane(ax, pane, scenario, scores, model_output, end_timestep=timestep)
+                ax.set_title(PANE_TITLES[pane])
 
             # Prepare and save plot
-            self.set_axes(ax, scenario)
-            ax.set_title(f"Scenario: {scenario_id}")
+            self.set_axes(axs, scenario, num_windows)
+            plt.suptitle(f"Scenario: {scenario_id}")
             plt.subplots_adjust(wspace=0.05)
-
             plt.savefig(f"{output_dir}/temp_{timestep}.png", dpi=300, bbox_inches="tight")
+            for ax in axs_list:
+                ax.cla()
             plt.close()
         BaseVisualizer.to_gif(output_dir, output_filepath)

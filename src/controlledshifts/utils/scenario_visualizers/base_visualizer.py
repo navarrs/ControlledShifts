@@ -13,10 +13,19 @@ from omegaconf import DictConfig
 from PIL import Image
 
 from controlledshifts.schemas import AgentCentricScenario, ModelOutput
-from controlledshifts.utils.constants import MIN_VALID_POINTS
+from controlledshifts.utils.constants import INVALID_AGENT_ID, MIN_VALID_POINTS, CausalOutputType, SupportedPanes
 
 
 logger = get_logger(__name__)
+
+# Title displayed above each pane in a scenario visualization.
+PANE_TITLES: dict[SupportedPanes, str] = {
+    SupportedPanes.ALL_AGENTS: "All Agents Trajectories",
+    SupportedPanes.HIGHLIGHT_RELEVANT: "Highlighted Relevant and SDC Agent Trajectories",
+    SupportedPanes.CAUSAL_AGENTS_GT: "GT Causal",
+    SupportedPanes.CAUSAL_AGENTS_PRED: "Pred Causal",
+    SupportedPanes.TRAJECTORY_PREDICTION: "Trajectory Prediction",
+}
 
 
 class BaseVisualizer(ABC):
@@ -64,6 +73,12 @@ class BaseVisualizer(ABC):
         if self.agent_colors is None:
             error_message = "agent_colors must be provided in the configuration."
             raise AssertionError(error_message)
+
+        panes_to_plot = config.get("panes_to_plot", None)
+        if panes_to_plot is None:
+            error_message = "panes_to_plot must be provided in the configuration."
+            raise AssertionError(error_message)
+        self.panes_to_plot = [SupportedPanes[pane] for pane in panes_to_plot]
 
         self.buffer_distance = config.get("distance_to_ego_zoom_in", 5.0)  # in meters
         self.distance_to_ego_zoom_in = config.get("distance_to_ego_zoom_in", 50.0)  # in meters
@@ -169,6 +184,140 @@ class BaseVisualizer(ABC):
             ax.plot(pos[:, 0], pos[:, 1], color=color, linewidth=2, alpha=score)
             # Plot the agent
             self.plot_agent(ax, pos[-1, 0], pos[-1, 1], heading, length, width, score, color, plot_rectangle=True)
+
+    def plot_pane(  # noqa: PLR0913
+        self,
+        ax: Axes,
+        pane: SupportedPanes,
+        scenario: Scenario,
+        scores: ScenarioScores | None = None,
+        model_output: ModelOutput | None = None,
+        *,
+        start_timestep: int = 0,
+        end_timestep: int = -1,
+    ) -> None:
+        """Plots a single pane of a scenario visualization based on the requested pane type.
+
+        Args:
+            ax (matplotlib.axes.Axes): Axes to plot on.
+            pane (SupportedPanes): the pane to plot.
+            scenario (Scenario): encapsulates the scenario to visualize.
+            scores (ScenarioScores | None): encapsulates the scenario and agent scores.
+            model_output (ModelOutput | None): encapsulates model outputs. Required for causal panes.
+            start_timestep (int): starting timestep to plot the sequences.
+            end_timestep (int): ending timestep to plot the sequences.
+
+        Raises:
+            ValueError: if a causal pane is requested without model output, or if the pane is not supported.
+        """
+        match pane:
+            case SupportedPanes.ALL_AGENTS:
+                self.plot_sequences(ax, scenario, scores, start_timestep=start_timestep, end_timestep=end_timestep)
+            case SupportedPanes.HIGHLIGHT_RELEVANT:
+                self.plot_sequences(
+                    ax, scenario, scores, show_relevant=True, start_timestep=start_timestep, end_timestep=end_timestep
+                )
+            case SupportedPanes.CAUSAL_AGENTS_GT | SupportedPanes.CAUSAL_AGENTS_PRED:
+                if model_output is None:
+                    error_message = "Model output is required for causal scenario visualization."
+                    raise ValueError(error_message)
+                show_causal = (
+                    CausalOutputType.GROUND_TRUTH
+                    if pane == SupportedPanes.CAUSAL_AGENTS_GT
+                    else CausalOutputType.PREDICTION
+                )
+                self.plot_causal(
+                    ax, scenario, model_output, show_causal, start_timestep=start_timestep, end_timestep=end_timestep
+                )
+            case _:
+                error_message = f"Pane {pane} is not supported by this visualizer."
+                raise ValueError(error_message)
+
+    def plot_causal(  # noqa: PLR0913
+        self,
+        ax: Axes,
+        scenario: Scenario,
+        model_output: ModelOutput,
+        show_causal: CausalOutputType,
+        start_timestep: int = 0,
+        end_timestep: int = -1,
+    ) -> None:
+        """Plots agent trajectories for a scenario, marking causal agents with score-based transparency.
+
+        Args:
+            ax (matplotlib.axes.Axes): Axes to plot on.
+            scenario (Scenario): Scenario data with agent positions, types, and relevance.
+            model_output (ModelOutput): encapsulates model outputs.
+            show_causal (CausalOutputType): Source in (GROUND_TRUTH, PREDICTION) to show agent causality.
+            start_timestep (int): starting timestep to plot the sequences.
+            end_timestep (int): ending timestep to plot the sequences.
+
+        Raises:
+            ValueError: if the model output does not contain a causal output.
+        """
+        causal_output = model_output.causal_output
+        if causal_output is None:
+            error_message = "Causal output is required for causal scenario visualization."
+            raise ValueError(error_message)
+
+        agent_data = scenario.agent_data
+        agent_ids = agent_data.agent_ids
+        agent_types = np.asarray([atype.name for atype in agent_data.agent_types])
+        ego_index = scenario.metadata.ego_vehicle_index
+
+        # Non-causal agents are rendered fully transparent; causal agents get a score-based alpha.
+        agent_scores = np.zeros(agent_data.num_agents, float)
+
+        # Mark causal agents as 'TYPE_RELEVANT'
+        modeled_agent_ids = model_output.agent_ids.value.detach().cpu().numpy()
+        mask = modeled_agent_ids != INVALID_AGENT_ID
+        modeled_agent_ids = modeled_agent_ids[mask]
+        match show_causal:
+            case CausalOutputType.GROUND_TRUTH:
+                causal = causal_output.causal_gt.value.detach().cpu().numpy()[mask]
+                relevant_indeces = np.where(causal > 0.0)[0]
+                relevant_agent_ids = modeled_agent_ids[relevant_indeces]
+                idxs = np.isin(agent_ids, relevant_agent_ids)
+                agent_types[idxs] = "TYPE_RELEVANT"
+                agent_scores[idxs] = 1.0
+            case CausalOutputType.PREDICTION:
+                causal = causal_output.causal_pred.value.detach().cpu().numpy()[mask]
+                causal_probs = causal_output.causal_pred_probs.value.detach().cpu().numpy()[mask]
+                for n, (pred, prob) in enumerate(zip(causal.astype(int), causal_probs, strict=False)):
+                    agent_id = modeled_agent_ids[n]
+                    idx = np.isin(agent_ids, agent_id)
+                    if pred == 1:
+                        agent_types[idx] = "TYPE_RELEVANT"
+                    agent_scores[idx] = prob[pred]
+        agent_types[ego_index] = "TYPE_SDC"  # Mark ego agent for visualization
+
+        agent_trajectories = AgentTrajectoryMasker(agent_data.agent_trajectories)
+        zipped = zip(
+            agent_trajectories.agent_xy_pos,
+            agent_trajectories.agent_lengths,
+            agent_trajectories.agent_widths,
+            agent_trajectories.agent_headings,
+            agent_trajectories.agent_valid.squeeze(-1).astype(bool),
+            agent_types,
+            agent_scores,
+            strict=False,
+        )
+        for apos, alen, awid, ahead, amask, atype, score in zipped:
+            mask = amask[start_timestep:end_timestep]
+            if not mask.any() or mask.sum() < MIN_VALID_POINTS:
+                continue
+
+            pos = apos[start_timestep:end_timestep][mask]
+            heading = ahead[end_timestep]
+            length = alen[end_timestep]
+            width = awid[end_timestep]
+            color = self.agent_colors[atype]
+            zorder = 1000 if atype == "TYPE_SDC" else 100
+            ax.plot(pos[:, 0], pos[:, 1], color=color, linewidth=2, alpha=score, zorder=zorder)
+            # Plot the agent
+            self.plot_agent(
+                ax, pos[-1, 0], pos[-1, 1], heading, length, width, score, color, plot_rectangle=True, zorder=zorder
+            )
 
     def plot_agent(  # noqa: PLR0913
         self,

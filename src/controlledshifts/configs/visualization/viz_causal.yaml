@@ -3,4 +3,9 @@ defaults:
 
 tag: scenario-causal
 visualizer:
-  _target_: controlledshifts.utils.scenario_visualizers.scenario_causal.ScenarioCausalVisualizer
+  _target_: controlledshifts.utils.scenario_visualizers.scenario.ScenarioVisualizer
+  config:
+    panes_to_plot:
+      - ALL_AGENTS
+      - CAUSAL_AGENTS_GT
+      - CAUSAL_AGENTS_PRED
