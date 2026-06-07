@@ -3,4 +3,9 @@ defaults:
 
 tag: scenario-causal-animated
 visualizer:
-  _target_: controlledshifts.utils.scenario_visualizers.scenario_causal_animated.ScenarioCausalAnimatedVisualizer
+  _target_: controlledshifts.utils.scenario_visualizers.scenario_animated.ScenarioAnimatedVisualizer
+  config:
+    panes_to_plot:
+      - HIGHLIGHT_RELEVANT
+      - CAUSAL_AGENTS_GT
+      - CAUSAL_AGENTS_PRED

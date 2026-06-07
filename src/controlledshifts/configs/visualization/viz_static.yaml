@@ -6,6 +6,10 @@ visualizer:
     scenario_type: gt
     is_ego_centric: false
 
+    panes_to_plot:
+      - ALL_AGENTS
+      - HIGHLIGHT_RELEVANT
+
     static_map_keys:
       - lane
       - crosswalk

@@ -4,3 +4,6 @@ defaults:
 tag: scenario-animated
 visualizer:
   _target_: controlledshifts.utils.scenario_visualizers.scenario_animated.ScenarioAnimatedVisualizer
+  config:
+    panes_to_plot:
+      - HIGHLIGHT_RELEVANT
