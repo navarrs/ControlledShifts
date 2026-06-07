@@ -7,6 +7,7 @@ The file `configs/scenario_visualization.yaml` specifies the configuration param
 Run a scenario visualizer as:
 ```bash
 uv run -m controlledshifts.run_scenario_visualization \
+<<<<<<< HEAD
     visualization=[viz_config] \
     split_filepath=[path/to/benchmark_split.json] \
     scenarios_root=[dir/with/training,validation,testing/subdirs] \
@@ -32,6 +33,18 @@ Outputs are written under:
 output_dir/<render>/<split_type>/<split>/<pane_type>
 ```
 where `render` is `static`/`animated` (derived from the visualizer), `split_type` is the benchmark name, `split` is `train`/`val`/`test`, and `pane_type` is `scenario`/`scenario_scored`/`causal_scenario`/`trajectory_prediction` (or the `model_experiment` tag for generic model outputs).
+=======
+    experiment_name=[experiment_name] \
+    analysis=[visualizer_type] \
+    num_batches=[num_batches] \
+    num_scenarios=[num_scenarios]
+```
+where:
+* `experiment_name`: is the name of the experiment to analyze. Note that the experiment is assumed to be located at `${batch_cache_path}/${experiment_name}`.
+* `analysis`: is either of `default` (the full scenario), `animated` (animated version of `default`), `causal` (scenario with causal labels and predictions), `causal_animated` (animated version of `causal`) or `trajpred` (scenario with trajectory predictions). Each visualization config declares a `panes_to_plot` list (values from `SupportedPanes`, e.g. `ALL_AGENTS`, `HIGHLIGHT_RELEVANT`, `CAUSAL_AGENTS_GT`, `CAUSAL_AGENTS_PRED`) that controls which panes are rendered, one window per pane.
+* `num_batches`: is the number of cached batches the scenario visualizer script will load.
+* `num_scenarios`: is the number of scenarios that will be visualized. The number of scenarios is sampled from the loaded batches if there are more scenarios than those specified.
+>>>>>>> cd09afa (WIP: refactoring visualization)
 
 **Example**: Result using the causal visualizer:
 

@@ -16,14 +16,14 @@ Example usage:
 
     # Ego-SafeShift benchmark
     uv run -m controlledshifts.create_benchmark benchmark=ego_safeshift \\
-        scenario_score_mapping_filepath=meta/scenario_to_scores_mapping.csv
+        scenario_score_mapping_filepath=meta/ego-safeshift/scores_8/scenario_to_scores_mapping.csv
 
     # Environments benchmark
     uv run -m controlledshifts.create_benchmark benchmark=environments
 
     # Save the splits and copy the data into training/validation/testing subdirs
     uv run -m controlledshifts.create_benchmark benchmark=ego_safeshift copy_splits=true \\
-        scenario_score_mapping_filepath=meta/scenario_to_scores_mapping.csv
+        scenario_score_mapping_filepath=meta/ego-safeshift/scores_8/scenario_to_scores_mapping.csv
 
 See `configs/create_benchmark.yaml` and the per-benchmark configs under `configs/benchmark/` for all options.
 """

@@ -5,7 +5,7 @@ defaults:
 benchmark_name: safeshift
 
 # Path to the SafeShift score metadata directory (contains *_infos.pkl files).
-scores_path: /data/driving/waymo/mtr_process_splits
+scores_path: /data/driving/waymo/meta/safeshift/mtr_process_splits
 
 # Filename prefix used to locate the per-split metadata files.
 prefix: score_asym_combined_80_

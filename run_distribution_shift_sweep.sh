@@ -47,7 +47,6 @@ DEFAULT_MODELS=(
     scenetransformer
     autobot
     mtr
-    naive
     cvm
     naive
 )

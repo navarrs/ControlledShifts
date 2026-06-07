@@ -24,4 +24,4 @@ ckpt_path: ${paths.experiment_cache_path}/${paths.experiment_dir}/ckpts
 batch_cache_path: ${paths.experiment_cache_path}/${paths.experiment_dir}/batch_cache
 analysis_path: ${paths.experiment_cache_path}/${paths.experiment_dir}/analysis
 viz_path: ${paths.experiment_cache_path}/${paths.experiment_dir}/viz
-causal_labels_path: ${paths.base_path}/causal_agents/processed_labels/
+causal_labels_path: ${paths.base_path}/meta/causal_agents/processed_labels/

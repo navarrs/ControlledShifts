@@ -8,7 +8,7 @@ Example usage:
     uv run -m controlledshifts.create_benchmark benchmark=ego_safeshift \\
         input_data_path=/datasets/waymo/processed/mini_causal \\
         output_data_path=/datasets/waymo/processed/causal_ego_safeshift \\
-        scenario_score_mapping_filepath=meta/scenario_to_scores_mapping.csv
+        scenario_score_mapping_filepath=meta/ego-safeshift/scores_8/scenario_to_scores_mapping.csv
 
 See configs/benchmark/ego_safeshift.yaml for all available options.
 """
@@ -46,8 +46,9 @@ def create_ego_safeshift_benchmark(config: DictConfig) -> BenchmarkSplit:
     available_ids = {fp.stem for fp in collect_scenario_filepaths(input_data_path)}
 
     scenario_scores_df = pd.read_csv(Path(config.scenario_score_mapping_filepath))
+    scenario_ids = [Path(scenario_id).stem for scenario_id in scenario_scores_df["scenario_ids"].tolist()]
     split_by_id = split_ids_by_score(
-        scenario_scores_df["scenario_ids"].tolist(),
+        scenario_ids,
         scenario_scores_df[config.score_type].to_numpy(),
         tuple(config.split_ratios),
         random_generator,
