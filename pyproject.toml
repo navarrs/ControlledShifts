@@ -42,7 +42,6 @@ dependencies = [
   "tensorboard>=2.19.0",
   "tensorflow>=2.19.0",
   "torch>=2.7.0,<2.10",
-  "torchvision>=0.24.1",
   "tqdm>=4.67.1",
   "typing-extensions>=4.14.0",
   "umap-learn>=0.5.7",
