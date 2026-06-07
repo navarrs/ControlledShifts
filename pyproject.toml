@@ -147,7 +147,6 @@ exclude = [
     "site-packages",
     "venv",
     # Files ported from other repos, minimally changed.
-    "src/controlledshifts/utils/scenario_visualizers/unitraj_viz_utils.py",
     "src/controlledshifts/utils/scenario_visualizers/scenario_trajpred.py",
     "src/controlledshifts/datasets/base_dataset.py",
     "src/controlledshifts/models/components",
@@ -190,7 +189,6 @@ exclude = [
   "src/controlledshifts/datasets/base_dataset.py",
   "src/controlledshifts/models/components",
   "src/controlledshifts/utils/scenario_visualizers/scenario_trajpred.py",
-  "src/controlledshifts/utils/scenario_visualizers/unitraj_viz_utils.py",
   "src/scripts/causal_labels_pb2.py",
   "src/scripts/waymo_data_processing.py",
   "tests/",

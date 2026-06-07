@@ -56,3 +56,11 @@ class AgentBehaviorType(Enum):
 class CausalOutputType(Enum):
     GROUND_TRUTH = 0
     PREDICTION = 1
+
+
+class SupportedPanes(Enum):
+    ALL_AGENTS = "all_agents"
+    HIGHLIGHT_RELEVANT = "highlight_relevant"
+    CAUSAL_AGENTS_GT = "causal_agents_gt"
+    CAUSAL_AGENTS_PRED = "causal_agents_pred"
+    TRAJECTORY_PREDICTION = "trajectory_prediction"
