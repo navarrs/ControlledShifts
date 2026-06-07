@@ -6,7 +6,6 @@ from matplotlib import cm
 from omegaconf import DictConfig
 
 from controlledshifts.schemas import AgentCentricScenario, ModelOutput
-from controlledshifts.utils.scenario_visualizers import unitraj_viz_utils as unitraj
 from controlledshifts.utils.scenario_visualizers.base_visualizer import BaseVisualizer
 
 
@@ -16,6 +15,45 @@ logger = get_logger(__name__)
 class ScenarioTrajpredVisualizer(BaseVisualizer):
     def __init__(self, config: DictConfig) -> None:
         super().__init__(config)
+
+    @staticmethod
+    def _decode_map(map_polylines: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        map_xy = map_polylines[..., :2]
+        map_type = map_polylines[..., 0, 9:29]
+        map_type = np.argmax(map_type, axis=-1)
+        return map_xy, map_type
+
+    @staticmethod
+    def _interpolate_color_ego(t: int, total_t: int) -> tuple[float, float, float]:
+        # Start is red, end is blue
+        return (1 - t / total_t, 0, t / total_t)
+
+    @staticmethod
+    def _interpolate_color(t: int, total_t: int) -> tuple[float, float, float]:
+        # Start is green, end is blue
+        return (0, 1 - t / total_t, t / total_t)
+
+    @staticmethod
+    def _draw_line_with_mask(
+        point1: np.ndarray,
+        point2: np.ndarray,
+        color: str | tuple[float, ...] | np.ndarray,
+        line_width: float = 4,
+    ) -> None:
+        plt.plot([point1[0], point2[0]], [point1[1], point2[1]], linewidth=line_width, color=color)
+
+    @staticmethod
+    def _draw_trajectory(trajectory: np.ndarray, line_width: float, ego: bool = False) -> None:
+        total_t = len(trajectory)
+        for t in range(total_t - 1):
+            if ego:
+                color = ScenarioTrajpredVisualizer._interpolate_color_ego(t, total_t)
+            else:
+                color = ScenarioTrajpredVisualizer._interpolate_color(t, total_t)
+            if trajectory[t, 0] and trajectory[t + 1, 0]:
+                ScenarioTrajpredVisualizer._draw_line_with_mask(
+                    trajectory[t], trajectory[t + 1], color=color, line_width=line_width
+                )
 
     def visualize_scenario(
         self,
@@ -53,7 +91,7 @@ class ScenarioTrajpredVisualizer(BaseVisualizer):
         _, ax = plt.subplots(1, 1, figsize=(5, 5))
 
         # draw map
-        map_xy, map_type = unitraj.decode_map(scenario.map_polylines)
+        map_xy, map_type = self._decode_map(scenario.map_polylines)
         map_mask = scenario.map_polylines_mask
 
         # Plot the map with mask check
@@ -65,15 +103,15 @@ class ScenarioTrajpredVisualizer(BaseVisualizer):
                 continue
             for i in range(len(lane) - 1):
                 if map_mask[idx, i] and map_mask[idx, i + 1]:
-                    unitraj.draw_line_with_mask(lane[i], lane[i + 1], color="grey", line_width=1.5)
+                    self._draw_line_with_mask(lane[i], lane[i + 1], color="grey", line_width=1.5)
 
         # draw past trajectory
         for traj in scenario.obj_trajs:
-            unitraj.draw_trajectory(traj, line_width=2)
+            self._draw_trajectory(traj, line_width=2)
 
         # draw future trajectory
         for traj in scenario.obj_trajs_future_state:
-            unitraj.draw_trajectory(traj, line_width=2)
+            self._draw_trajectory(traj, line_width=2)
 
         # predicted future trajectory is (n,future_len,2) with n possible future trajectories, visualize all of the
         pred_future_traj = model_output.trajectory_decoder_output.decoded_trajectories.value.detach().cpu().numpy()
@@ -82,7 +120,7 @@ class ScenarioTrajpredVisualizer(BaseVisualizer):
             # calculate color based on probability
             color = cm.hot(pred_future_prob[idx])
             for i in range(len(traj) - 1):
-                unitraj.draw_line_with_mask(traj[i], traj[i + 1], color=color, line_width=2)
+                self._draw_line_with_mask(traj[i], traj[i + 1], color=color, line_width=2)
 
         ax.set_xticks([])
         ax.set_yticks([])

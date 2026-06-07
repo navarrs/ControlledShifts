@@ -6,3 +6,5 @@ visualizer:
   _target_: controlledshifts.utils.scenario_visualizers.scenario_trajpred.ScenarioTrajpredVisualizer
   config:
     is_ego_centric: true
+    panes_to_plot:
+      - TRAJECTORY_PREDICTION
