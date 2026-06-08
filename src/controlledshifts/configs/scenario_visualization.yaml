@@ -1,0 +1,29 @@
+# @package _global_
+# NOTE: the experiment-centric `paths` group is intentionally NOT composed here. It interpolates ${exp_name} (which
+# depends on the model group), and print_config_tree(resolve=True) would fail to resolve it. Scenario visualization is
+# decoupled from the experiment/viz_path machinery: the only path it needs is batch_cache_path (model-based types),
+# exposed directly below.
+defaults:
+  - scenario: waymo
+  - visualization: viz_static     # selects the visualizer + panes + viz_type; use viz_scored/viz_trajpred/etc.
+  - dataset: waymo_analysis       # for the `scored` type, add CLI override: dataset.config.autolabel_agents=true
+  - _self_
+
+task_name: scenario_visualization
+
+# Input: a benchmark split JSON (produced by create_benchmark.py) and which of its splits to render.
+split_filepath: ???                                      # path to the benchmark split JSON
+splits_to_visualize: [training, validation, testing]     # subset of the JSON keys to visualize
+
+# Directory holding the scenario pickles, organized into training/ validation/ testing/ subdirs of <id>.pkl.
+scenarios_root: ???
+
+# Output root. Visualizations are written to: output_dir/<render>/<split_type>/<split>/<pane_type>
+output_dir: outputs/scenario_viz
+
+# Model-output parameters (only used by the trajpred and model_output visualization types).
+batch_cache_path: null            # directory of cached model-output batches; REQUIRED for trajpred/model_output
+model_experiment: null            # used as the pane_type folder for model_output viz (e.g. "wayformer")
+num_batches: null
+num_scenarios: null
+seed: 42

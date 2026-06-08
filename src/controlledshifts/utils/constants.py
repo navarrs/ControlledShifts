@@ -1,4 +1,4 @@
-from enum import Enum
+from enum import Enum, StrEnum
 
 
 MILLION = 1e6
@@ -14,10 +14,24 @@ DEFAULT_COLLISION_THRESHOLDS: tuple[float, ...] = (0.1, 0.25, 0.5, 1.0)
 KALMAN_DIFFICULTY = {"easy": [0, 30], "medium": [30, 60], "hard": [60, 9999999]}
 
 
-class ModelStatus(Enum):
+class ModelStatus(StrEnum):
     TRAIN = "train"
     VALIDATION = "val"
     TEST = "test"
+
+
+class VizType(Enum):
+    """Scenario visualization types, each loading/computing only what it needs.
+
+    REGULAR visualizes scenarios as-is. SCORED additionally computes scenario features and scores. TRAJPRED transforms
+    the scenario into agent-centric format and overlays model trajectory predictions. MODEL_OUTPUT visualizes other
+    cached model outputs (e.g. causal predictions).
+    """
+
+    REGULAR = "regular"
+    SCORED = "scored"
+    TRAJPRED = "trajpred"
+    MODEL_OUTPUT = "model_output"
 
 
 class SampleSelection(Enum):

@@ -1,0 +1,8 @@
+defaults:
+ - default.yaml
+
+# Static scenario layout, but tagged `scored` so the scoring prep (features -> scores) runs and the scene score is
+# rendered. Requires the CLI override `dataset.config.autolabel_agents=true` so the feature/score processors exist.
+viz_type: scored
+visualizer:
+  _target_: controlledshifts.utils.scenario_visualizers.scenario.ScenarioVisualizer
