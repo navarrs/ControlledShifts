@@ -250,7 +250,6 @@ def main(config: DictConfig) -> None:
             )
 
     log.info("Total time: %.2f seconds", time() - start)
-    log.info("Process completed!")
 
 
 if __name__ == "__main__":

@@ -131,7 +131,7 @@ class BaseModel(LightningModule, ABC):
             cache_filepath = Path(self.batch_cache_path, f"train_batch_{batch_idx}.pkl")
             save_cache(model_output, cache_filepath)
         elif status != ModelStatus.TRAIN and self.cache_batch and batch_idx % self.cache_every_batch_idx == 0:
-            cache_filepath = Path(self.batch_cache_path, f"{status.value}_batch_{batch_idx}.pkl")
+            cache_filepath = Path(self.batch_cache_path, f"{status}_batch_{batch_idx}.pkl")
             save_cache(model_output, cache_filepath)
         return loss
 
@@ -617,10 +617,10 @@ class BaseModel(LightningModule, ABC):
 
         # Log information
         total_loss = loss.cpu().detach().item()
-        self.log(f"losses/{status.value}", total_loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log(f"losses/{status}", total_loss, on_step=False, on_epoch=True, prog_bar=True)
         for k, v in metric_dict.items():
             batch_size = size_dict[k]
-            self.log(status.value + "/" + k, v, on_step=False, on_epoch=True, sync_dist=True, batch_size=batch_size)
+            self.log(f"{status}/{k}", v, on_step=False, on_epoch=True, sync_dist=True, batch_size=batch_size)
 
         # TODO: Add support for visualization of scenarios.
         # if self.local_rank == 0 and status == 'val' and batch_idx == 0:

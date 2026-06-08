@@ -182,6 +182,6 @@ class MTR(BaseModel):
             cache_filepath = Path(self.batch_cache_path, f"train_batch_{batch_idx}.pkl")
             save_cache(model_output, cache_filepath)
         elif status != ModelStatus.TRAIN and self.cache_batch and batch_idx % self.cache_every_batch_idx == 0:
-            cache_filepath = Path(self.batch_cache_path, f"{status.value}_batch_{batch_idx}.pkl")
+            cache_filepath = Path(self.batch_cache_path, f"{status}_batch_{batch_idx}.pkl")
             save_cache(model_output, cache_filepath)
         return loss

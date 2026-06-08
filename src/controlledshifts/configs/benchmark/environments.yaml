@@ -52,7 +52,7 @@ reduction: tsne
 hardness_metric: silhouette
 
 # Path to the NetLSD descriptor cache (distinct from the inherited input_data_path / output_data_path).
-cache_path: /data/driving/waymo/environment
+cache_path: /data/driving/waymo/meta/environments
 
 # If true, render per-cluster graph visualizations using visualize_scenario_graph.
 visualize_cluster_graphs: false

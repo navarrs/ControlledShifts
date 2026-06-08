@@ -23,13 +23,13 @@ val_data_tag: [
 # NOTE: for testing, we evaluate the original and the perturbed (remove_noncausal) versions of the same held-out scenes.
 test_data_path: [
   "${paths.base_path}/processed/causal_agents_hard/original/validation",
-  "${paths.base_path}/processed/causal_agents_hard/original/testing",
-  "${paths.base_path}/processed/causal_agents_hard/remove_noncausal/validation",
+  # "${paths.base_path}/processed/causal_agents_hard/original/testing",
+  # "${paths.base_path}/processed/causal_agents_hard/remove_noncausal/validation",
   "${paths.base_path}/processed/causal_agents_hard/remove_noncausal/testing",
 ]
 test_data_tag: [
   "causal-agents-hard-original-validation",
-  "causal-agents-hard-original-testing",
-  "remove-noncausal-hard-validation",      # Perturbation: removes agents that are NOT causal to the ego.
+  # "causal-agents-hard-original-testing",
+  # "remove-noncausal-hard-validation",
   "remove-noncausal-hard-testing",
 ]
