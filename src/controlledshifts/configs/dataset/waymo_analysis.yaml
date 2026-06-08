@@ -4,6 +4,8 @@ defaults:
 _target_: controlledshifts.datasets.waymo_dataset.WaymoDataset
 config:
   load_data: false
+  autolabel_agents: false
+
   # Override all interpolated fields from default.yaml so this config is usable outside the full training config tree.
   past_len: 11
   future_len: 80
@@ -28,5 +30,4 @@ config:
   vector_break_dist_thresh: null
   center_offset_of_map: null
   causal_labels_path: null
-  autolabel_agents: false
   only_train_on_ego: true
