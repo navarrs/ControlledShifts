@@ -1,7 +1,8 @@
 defaults:
- - viz_static.yaml
+ - default.yaml
 
-tag: scenario-causal
+viz_type: model_output
+pane_type: causal_scenario  # override: causal predictions are model output but get their own folder
 visualizer:
   _target_: controlledshifts.utils.scenario_visualizers.scenario.ScenarioVisualizer
   config:

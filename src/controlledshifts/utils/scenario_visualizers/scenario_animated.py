@@ -15,6 +15,10 @@ class ScenarioAnimatedVisualizer(BaseVisualizer):
     def __init__(self, config: DictConfig) -> None:
         super().__init__(config)
 
+    @property
+    def is_animated(self) -> bool:
+        return True
+
     def visualize_scenario(
         self,
         scenario: Scenario | AgentCentricScenario,

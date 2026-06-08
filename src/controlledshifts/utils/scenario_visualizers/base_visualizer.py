@@ -88,6 +88,11 @@ class BaseVisualizer(ABC):
         # By default, we visualize scenarios in global frame.
         return self.config.get("is_ego_centric", False)
 
+    @property
+    def is_animated(self) -> bool:
+        # By default, visualizers render a single static figure. Animated subclasses override this.
+        return False
+
     @staticmethod
     def get_scenario_score(scores: ScenarioScores | None) -> float | None:
         """Gets the scene score from the ScenarioScores.
@@ -176,9 +181,10 @@ class BaseVisualizer(ABC):
             if not mask.any() or mask.sum() < MIN_VALID_POINTS:
                 continue
             pos = apos[start_timestep:end_timestep][mask]
-            heading = ahead[end_timestep]
-            length = alen[end_timestep]
-            width = awid[end_timestep]
+            # plot_agent expects scalars; the per-agent/per-timestep values carry a trailing channel dim, so squeeze it.
+            heading = ahead[end_timestep].item()
+            length = alen[end_timestep].item()
+            width = awid[end_timestep].item()
             color = self.agent_colors[atype]
             # Plot the trajectory
             ax.plot(pos[:, 0], pos[:, 1], color=color, linewidth=2, alpha=score)
@@ -308,9 +314,10 @@ class BaseVisualizer(ABC):
                 continue
 
             pos = apos[start_timestep:end_timestep][mask]
-            heading = ahead[end_timestep]
-            length = alen[end_timestep]
-            width = awid[end_timestep]
+            # plot_agent expects scalars; the per-agent/per-timestep values carry a trailing channel dim, so squeeze it.
+            heading = ahead[end_timestep].item()
+            length = alen[end_timestep].item()
+            width = awid[end_timestep].item()
             color = self.agent_colors[atype]
             zorder = 1000 if atype == "TYPE_SDC" else 100
             ax.plot(pos[:, 0], pos[:, 1], color=color, linewidth=2, alpha=score, zorder=zorder)

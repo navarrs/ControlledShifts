@@ -38,12 +38,15 @@ class BenchmarkSplit(NamedTuple):
 
     The train/validation/testing lists are mutually exclusive. ``invalid`` holds scenarios that were considered but
     could not be placed (e.g. missing from the input directory, missing causal labels, or left empty after masking).
+    ``benchmark_name`` records which benchmark produced the split; it is empty for freshly computed splits and
+    populated by ``load_benchmark_split`` when reading a saved JSON.
     """
 
     training: list[str]
     validation: list[str]
     testing: list[str]
     invalid: list[str] = []  # noqa: RUF012
+    benchmark_name: str = ""
 
 
 class CopyTarget(NamedTuple):
@@ -314,6 +317,7 @@ def load_benchmark_split(filepath: Path) -> BenchmarkSplit:
         validation=payload["validation"],
         testing=payload["testing"],
         invalid=payload.get("invalid", []),
+        benchmark_name=payload.get("benchmark_name", ""),
     )
 
 

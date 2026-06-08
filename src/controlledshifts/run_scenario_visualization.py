@@ -1,0 +1,257 @@
+"""Scenario Visualization Script.
+
+Renders scenarios listed in a benchmark split JSON (produced by ``create_benchmark.py``). The visualization type is
+self-described by the chosen visualization config (``visualization=viz_static|viz_animated|viz_scored|viz_causal|
+viz_trajpred|...``); each type loads/computes only what it needs:
+
+    * regular       - just draw the scenarios (static or animated).
+    * scored        - compute scenario features -> scores and render the scene score.
+    * trajpred      - transform to agent-centric format and overlay model trajectory predictions.
+    * model_output  - render other cached model outputs (e.g. causal predictions).
+
+Outputs are written to ``output_dir/<render>/<split_type>/<split>/<pane_type>``.
+
+Example usage:
+
+    # Plain static visualization of the testing split of a benchmark.
+    uv run -m controlledshifts.run_scenario_visualization \
+        visualization=viz_static \
+        split_filepath=/data/driving/waymo/splits/uniform.json \
+        scenarios_root=/data/driving/waymo/processed/uniform \
+        splits_to_visualize=[testing] num_scenarios=3
+
+    # Scored visualization (requires the autolabel processors).
+    uv run -m controlledshifts.run_scenario_visualization \
+        visualization=viz_scored dataset.config.autolabel_agents=true \
+        split_filepath=... scenarios_root=...
+
+See ``docs/ANALYSIS.md`` for more details.
+"""
+
+import random
+from collections.abc import Callable
+from pathlib import Path
+from time import time
+from typing import NamedTuple
+
+import hydra
+import pyrootutils
+from characterization.schemas import Scenario, ScenarioScores
+from omegaconf import DictConfig
+
+from controlledshifts import benchmarks, utils
+from controlledshifts.datasets.base_dataset import BaseDataset
+from controlledshifts.schemas import AgentCentricScenario, ModelOutput
+from controlledshifts.utils.constants import ModelStatus, VizType
+from controlledshifts.utils.scenario_visualizers.base_visualizer import BaseVisualizer
+
+
+log = utils.get_pylogger(__name__)
+
+pyrootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
+
+# Maps a benchmark split JSON key to the ``ModelStatus`` tags used in the output path and as the batch-file tag.
+SPLIT_TAGS: dict[str, str] = {
+    "training": ModelStatus.TRAIN,
+    "validation": ModelStatus.VALIDATION,
+    "testing": ModelStatus.TEST,
+}
+
+# Default output pane folder for each visualization type (model_output uses the model_experiment tag instead).
+DEFAULT_PANE_TYPES: dict[VizType, str] = {
+    VizType.REGULAR: "scenario",
+    VizType.SCORED: "scenario_scored",
+    VizType.TRAJPRED: "trajectory_prediction",
+}
+
+
+class PreparedScenario(NamedTuple):
+    """A scenario and the optional artifacts to pass to ``visualize_scenario`` for a given visualization type."""
+
+    scenario: Scenario | AgentCentricScenario
+    scores: ScenarioScores | None = None
+    model_output: ModelOutput | None = None
+
+
+def _compute_scores(dataset: BaseDataset, scenario: Scenario) -> tuple[Scenario, ScenarioScores]:
+    """Computes scenario map metadata, features, and scores; requires an autolabel-enabled dataset."""
+    if dataset.scenario_features_processor is None or dataset.scenario_scores_processor is None:
+        error_message = (
+            "Scoring requires the dataset's feature/score processors. Re-run with the override "
+            "`dataset.config.autolabel_agents=true`."
+        )
+        raise ValueError(error_message)
+    scenario = dataset.compute_scenario_map_metadata(scenario)
+    features = dataset.scenario_features_processor.compute(scenario)
+    scores = dataset.scenario_scores_processor.compute(scenario, features)
+    return scenario, scores
+
+
+def _to_agent_centric(
+    dataset: BaseDataset, scenario: Scenario, scores: ScenarioScores | None
+) -> AgentCentricScenario | None:
+    """Transforms a scenario into agent-centric format, returning None when the transform yields no agents."""
+    processed = dataset.process_agent_centric_scenario(scenario, scenario_scores=scores)
+    if not processed:
+        return None
+    return AgentCentricScenario(**processed[0])
+
+
+def prepare_regular(
+    dataset: BaseDataset, visualizer: BaseVisualizer, scenario: Scenario, model_output: ModelOutput | None
+) -> PreparedScenario | None:
+    """Regular visualization: draw the scenario as-is."""
+    del dataset, visualizer, model_output
+    return PreparedScenario(scenario)
+
+
+def prepare_scored(
+    dataset: BaseDataset, visualizer: BaseVisualizer, scenario: Scenario, model_output: ModelOutput | None
+) -> PreparedScenario | None:
+    """Scored visualization: compute features -> scores and render the scene score."""
+    del visualizer, model_output
+    scenario, scores = _compute_scores(dataset, scenario)
+    return PreparedScenario(scenario, scores=scores)
+
+
+def prepare_trajpred(
+    dataset: BaseDataset, visualizer: BaseVisualizer, scenario: Scenario, model_output: ModelOutput | None
+) -> PreparedScenario | None:
+    """Trajectory-prediction visualization: transform to agent-centric and overlay model predictions."""
+    del visualizer
+    agent_centric = _to_agent_centric(dataset, scenario, scores=None)
+    if agent_centric is None:
+        return None
+    return PreparedScenario(agent_centric, model_output=model_output)
+
+
+def prepare_model_output(
+    dataset: BaseDataset, visualizer: BaseVisualizer, scenario: Scenario, model_output: ModelOutput | None
+) -> PreparedScenario | None:
+    """Model-output visualization: render cached model outputs, transforming to agent-centric when required."""
+    if visualizer.is_ego_centric:
+        agent_centric = _to_agent_centric(dataset, scenario, scores=None)
+        if agent_centric is None:
+            return None
+        return PreparedScenario(agent_centric, model_output=model_output)
+    return PreparedScenario(scenario, model_output=model_output)
+
+
+PrepareFn = Callable[[BaseDataset, BaseVisualizer, Scenario, ModelOutput | None], PreparedScenario | None]
+
+SCENARIO_PREPARER: dict[VizType, PrepareFn] = {
+    VizType.REGULAR: prepare_regular,
+    VizType.SCORED: prepare_scored,
+    VizType.TRAJPRED: prepare_trajpred,
+    VizType.MODEL_OUTPUT: prepare_model_output,
+}
+
+
+def pane_type_for(viz_type: VizType, config: DictConfig) -> str:
+    """Resolves the output pane folder: an explicit config override, else derived from the visualization type."""
+    override = config.visualization.get("pane_type", None)
+    if override:
+        return override
+
+    if viz_type == VizType.MODEL_OUTPUT:
+        model_experiment = config.get("model_experiment", None)
+        if not model_experiment:
+            error_message = (
+                "model_experiment must be set for model_output visualizations without an explicit pane_type."
+            )
+            raise ValueError(error_message)
+        return model_experiment
+
+    return DEFAULT_PANE_TYPES[viz_type]
+
+
+def build_output_dir(output_dir: Path, render: str, split_type: str, split: str, pane_type: str) -> Path:
+    """Builds and creates ``output_dir/<render>/<split_type>/<split>/<pane_type>``."""
+    resolved = output_dir / render / split_type / split / pane_type
+    resolved.mkdir(parents=True, exist_ok=True)
+    return resolved
+
+
+@hydra.main(version_base="1.3", config_path="configs", config_name="scenario_visualization.yaml")
+def main(config: DictConfig) -> None:
+    """Hydra entry point for rendering the scenarios of a benchmark split."""
+    utils.print_config_tree(config, resolve=True, save_to_file=False)
+    start = time()
+
+    visualizer = hydra.utils.instantiate(config.visualization.visualizer)
+    dataset = hydra.utils.instantiate(config.dataset)
+
+    scenarios_root = Path(config.scenarios_root)
+    output_root = Path(config.output_dir)
+
+    # The chosen visualization config self-describes the run: its viz_type drives the per-scenario data prep, and the
+    # split JSON's benchmark_name becomes the split_type folder in the output path (falling back to the file stem).
+    viz_type = VizType(config.visualization.viz_type)
+    split = benchmarks.load_benchmark_split(Path(config.split_filepath))
+    split_type = split.benchmark_name or Path(config.split_filepath).stem
+
+    # Resolve everything that is constant across all scenarios once: the render style (derived from the visualizer),
+    # the output pane folder, the per-type prep function, and whether this type needs cached model outputs.
+    render = "animated" if visualizer.is_animated else "static"
+    pane_type = pane_type_for(viz_type, config)
+    prepare = SCENARIO_PREPARER[viz_type]
+    needs_model = viz_type in {VizType.TRAJPRED, VizType.MODEL_OUTPUT}
+    if needs_model and config.batch_cache_path is None:
+        error_message = f"viz_type '{viz_type.value}' needs model outputs; set batch_cache_path to the cached batches."
+        raise ValueError(error_message)
+
+    # Render each requested split (train/val/test) into its own subfolder.
+    for split_key in config.splits_to_visualize:
+        if split_key not in SPLIT_TAGS:
+            log.warning("Unknown split '%s'; expected one of %s. Skipping.", split_key, list(SPLIT_TAGS))
+            continue
+        split_tag = SPLIT_TAGS[split_key]
+        scenario_ids = list(getattr(split, split_key))
+
+        # Model-based types load cached outputs for this split and only visualize scenarios that have one;
+        # load_batches already samples down to num_scenarios. For the other types, sample the split's ids here.
+        batches: dict[str, ModelOutput] | None = None
+        if needs_model:
+            batches = utils.load_batches(
+                config.batch_cache_path, config.num_batches, config.num_scenarios, config.seed, split_tag
+            )
+            scenario_ids = [scenario_id for scenario_id in scenario_ids if scenario_id in batches]
+        elif config.num_scenarios is not None and len(scenario_ids) > config.num_scenarios:
+            random.seed(config.seed)
+            scenario_ids = random.sample(scenario_ids, config.num_scenarios)
+
+        # Map each scenario id to its pickle on disk and build the destination folder for this split.
+        id_to_path = benchmarks.get_scenario_mapping(scenario_ids, scenarios_root, split_key)
+        output_dir = build_output_dir(output_root, render, split_type, split_tag, pane_type)
+        log.info("Visualizing %d scenarios for split '%s' -> %s", len(scenario_ids), split_key, output_dir)
+
+        for scenario_id in scenario_ids:
+            # Skip ids listed in the split whose pickle is missing on disk rather than aborting the whole run.
+            scenario_path = id_to_path[scenario_id]
+            if not scenario_path.exists():
+                log.warning("Scenario %s not found at %s, skipping.", scenario_id, scenario_path)
+                continue
+
+            # Load the scenario, grab its model output (if any), then run the per-type prep (scoring, agent-centric
+            # transform, etc.). prepare() returns None when the scenario can't be visualized for this type.
+            scenario = dataset.load_as_open_scenario(scenario_path)
+            model_output = batches.get(scenario_id) if batches is not None else None
+
+            prepared = prepare(dataset, visualizer, scenario, model_output)
+            if prepared is None:
+                log.warning("Could not prepare scenario %s for %s, skipping.", scenario_id, viz_type.value)
+                continue
+
+            visualizer.visualize_scenario(
+                prepared.scenario,
+                scores=prepared.scores,
+                model_output=prepared.model_output,
+                output_dir=str(output_dir),
+            )
+
+    log.info("Total time: %.2f seconds", time() - start)
+    log.info("Process completed!")
+
+
+if __name__ == "__main__":
+    main()  # pyright: ignore[reportCallIssue]
