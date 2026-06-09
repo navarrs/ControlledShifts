@@ -25,13 +25,15 @@ class VizType(Enum):
 
     REGULAR visualizes scenarios as-is. SCORED additionally computes scenario features and scores. TRAJPRED transforms
     the scenario into agent-centric format and overlays model trajectory predictions. MODEL_OUTPUT visualizes other
-    cached model outputs (e.g. causal predictions).
+    cached model outputs (e.g. causal predictions). CAUSAL_GT renders the ground-truth causal agents loaded from the
+    causal-label JSON files, requiring no cached model outputs.
     """
 
     REGULAR = "regular"
     SCORED = "scored"
     TRAJPRED = "trajpred"
     MODEL_OUTPUT = "model_output"
+    CAUSAL_GT = "causal_gt"
 
 
 class SampleSelection(Enum):

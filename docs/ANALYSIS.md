@@ -18,6 +18,7 @@ where:
   * `viz_static` (`regular`) / `viz_animated` (`regular`, animated): draw the scenarios as-is.
   * `viz_scored` (`scored`): compute scenario features → scores and render the scene score. **Requires** `dataset.config.autolabel_agents=true` so the feature/score processors are built.
   * `viz_causal` / `viz_causal_animated` (`model_output`): render ground-truth and predicted causal agents (needs cached model outputs).
+  * `viz_causal_gt` (`causal_gt`): render only the ground-truth causal agents, loaded from the causal-label JSON files (`dataset.config.causal_labels_path`). Needs no cached model outputs or predictions.
   * `viz_trajpred` (`trajpred`): transform to agent-centric format and overlay model trajectory predictions (needs cached model outputs).
 
   Each visualization config declares a `panes_to_plot` list (values from `SupportedPanes`, e.g. `ALL_AGENTS`, `HIGHLIGHT_RELEVANT`, `CAUSAL_AGENTS_GT`, `CAUSAL_AGENTS_PRED`, `TRAJECTORY_PREDICTION`) that controls which panes are rendered, one window per pane.

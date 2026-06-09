@@ -9,6 +9,7 @@ from characterization.utils.io_utils import get_logger
 from matplotlib.axes import Axes
 from matplotlib.patches import Rectangle
 from natsort import natsorted
+from numpy.typing import NDArray
 from omegaconf import DictConfig
 from PIL import Image
 
@@ -82,6 +83,9 @@ class BaseVisualizer(ABC):
 
         self.buffer_distance = config.get("distance_to_ego_zoom_in", 5.0)  # in meters
         self.distance_to_ego_zoom_in = config.get("distance_to_ego_zoom_in", 50.0)  # in meters
+
+        # Opacity for non-causal agents in the ground-truth causal pane (causal agents and ego are drawn fully opaque).
+        self.non_causal_alpha = config.get("non_causal_alpha", 0.2)
 
     @property
     def is_ego_centric(self) -> bool:
@@ -199,6 +203,7 @@ class BaseVisualizer(ABC):
         scores: ScenarioScores | None = None,
         model_output: ModelOutput | None = None,
         *,
+        causal_gt_ids: NDArray[np.int_] | None = None,
         start_timestep: int = 0,
         end_timestep: int = -1,
     ) -> None:
@@ -209,12 +214,15 @@ class BaseVisualizer(ABC):
             pane (SupportedPanes): the pane to plot.
             scenario (Scenario): encapsulates the scenario to visualize.
             scores (ScenarioScores | None): encapsulates the scenario and agent scores.
-            model_output (ModelOutput | None): encapsulates model outputs. Required for causal panes.
+            model_output (ModelOutput | None): encapsulates model outputs. Required for the predicted causal pane and
+                for the GT causal pane when ``causal_gt_ids`` is not provided.
+            causal_gt_ids (NDArray[np.int_] | None): ground-truth causal agent ids loaded from the causal-label files.
+                When provided, the GT causal pane is rendered from these instead of from model outputs.
             start_timestep (int): starting timestep to plot the sequences.
             end_timestep (int): ending timestep to plot the sequences.
 
         Raises:
-            ValueError: if a causal pane is requested without model output, or if the pane is not supported.
+            ValueError: if a causal pane is requested without a usable source, or if the pane is not supported.
         """
         match pane:
             case SupportedPanes.ALL_AGENTS:
@@ -223,17 +231,34 @@ class BaseVisualizer(ABC):
                 self.plot_sequences(
                     ax, scenario, scores, show_relevant=True, start_timestep=start_timestep, end_timestep=end_timestep
                 )
-            case SupportedPanes.CAUSAL_AGENTS_GT | SupportedPanes.CAUSAL_AGENTS_PRED:
+            case SupportedPanes.CAUSAL_AGENTS_GT:
+                if causal_gt_ids is not None:
+                    self.plot_causal_gt(
+                        ax, scenario, causal_gt_ids, start_timestep=start_timestep, end_timestep=end_timestep
+                    )
+                elif model_output is not None:
+                    self.plot_causal(
+                        ax,
+                        scenario,
+                        model_output,
+                        CausalOutputType.GROUND_TRUTH,
+                        start_timestep=start_timestep,
+                        end_timestep=end_timestep,
+                    )
+                else:
+                    error_message = "Causal ground-truth ids or model output are required for the GT causal pane."
+                    raise ValueError(error_message)
+            case SupportedPanes.CAUSAL_AGENTS_PRED:
                 if model_output is None:
                     error_message = "Model output is required for causal scenario visualization."
                     raise ValueError(error_message)
-                show_causal = (
-                    CausalOutputType.GROUND_TRUTH
-                    if pane == SupportedPanes.CAUSAL_AGENTS_GT
-                    else CausalOutputType.PREDICTION
-                )
                 self.plot_causal(
-                    ax, scenario, model_output, show_causal, start_timestep=start_timestep, end_timestep=end_timestep
+                    ax,
+                    scenario,
+                    model_output,
+                    CausalOutputType.PREDICTION,
+                    start_timestep=start_timestep,
+                    end_timestep=end_timestep,
                 )
             case _:
                 error_message = f"Pane {pane} is not supported by this visualizer."
@@ -297,7 +322,72 @@ class BaseVisualizer(ABC):
                     agent_scores[idx] = prob[pred]
         agent_types[ego_index] = "TYPE_SDC"  # Mark ego agent for visualization
 
-        agent_trajectories = AgentTrajectoryMasker(agent_data.agent_trajectories)
+        self._draw_causal_agents(
+            ax, scenario, agent_types, agent_scores, start_timestep=start_timestep, end_timestep=end_timestep
+        )
+
+    def plot_causal_gt(
+        self,
+        ax: Axes,
+        scenario: Scenario,
+        causal_agent_ids: NDArray[np.int_],
+        start_timestep: int = 0,
+        end_timestep: int = -1,
+    ) -> None:
+        """Plots ground-truth causal agents loaded from the causal-label files (no model output required).
+
+        Agents whose ids are in ``causal_agent_ids`` are highlighted as causal (full opacity, ``TYPE_RELEVANT`` color);
+        the rest stay in their normal per-type color but dimmed to ``non_causal_alpha`` so they provide scene context.
+        This mirrors the GROUND_TRUTH branch of ``plot_causal`` but sources the labels from disk.
+
+        Args:
+            ax (matplotlib.axes.Axes): Axes to plot on.
+            scenario (Scenario): Scenario data with agent positions, types, and ids.
+            causal_agent_ids (NDArray[np.int_]): the ids of the ground-truth causal agents (including the ego agent).
+            start_timestep (int): starting timestep to plot the sequences.
+            end_timestep (int): ending timestep to plot the sequences.
+        """
+        agent_data = scenario.agent_data
+        agent_ids = agent_data.agent_ids
+        agent_types = np.asarray([atype.name for atype in agent_data.agent_types])
+        ego_index = scenario.metadata.ego_vehicle_index
+
+        # Non-causal agents keep their type color at a dim alpha; causal agents are highlighted at full opacity.
+        agent_scores = np.full(agent_data.num_agents, self.non_causal_alpha, float)
+        causal_idxs = np.isin(agent_ids, causal_agent_ids)
+        agent_types[causal_idxs] = "TYPE_RELEVANT"
+        agent_scores[causal_idxs] = 1.0
+        agent_types[ego_index] = "TYPE_SDC"  # Mark ego agent for visualization
+        agent_scores[ego_index] = 1.0  # Always render the ego at full opacity
+
+        self._draw_causal_agents(
+            ax, scenario, agent_types, agent_scores, start_timestep=start_timestep, end_timestep=end_timestep
+        )
+
+    def _draw_causal_agents(  # noqa: PLR0913
+        self,
+        ax: Axes,
+        scenario: Scenario,
+        agent_types: np.ndarray,
+        agent_scores: np.ndarray,
+        *,
+        start_timestep: int = 0,
+        end_timestep: int = -1,
+    ) -> None:
+        """Draws agent trajectories using precomputed per-agent types and score-based alphas.
+
+        Non-causal agents typically carry a score of 0.0 (fully transparent); causal agents and the ego get a positive
+        score. Shared by the model-output (``plot_causal``) and ground-truth (``plot_causal_gt``) causal panes.
+
+        Args:
+            ax (matplotlib.axes.Axes): Axes to plot on.
+            scenario (Scenario): encapsulates the scenario to visualize.
+            agent_types (np.ndarray): per-agent type names used to look up colors (e.g. "TYPE_RELEVANT", "TYPE_SDC").
+            agent_scores (np.ndarray): per-agent alpha values; 0.0 hides an agent, positive values highlight it.
+            start_timestep (int): starting timestep to plot the sequences.
+            end_timestep (int): ending timestep to plot the sequences.
+        """
+        agent_trajectories = AgentTrajectoryMasker(scenario.agent_data.agent_trajectories)
         zipped = zip(
             agent_trajectories.agent_xy_pos,
             agent_trajectories.agent_lengths,
@@ -610,6 +700,7 @@ class BaseVisualizer(ABC):
         scores: ScenarioScores | None = None,
         model_output: ModelOutput | None = None,
         output_dir: str = "temp",
+        causal_gt_ids: NDArray[np.int_] | None = None,
     ) -> None:
         """Visualizes a single scenario and saves the output to a file.
 
@@ -622,4 +713,6 @@ class BaseVisualizer(ABC):
             scores (ScenarioScores | None): encapsulates the scenario and agent scores.
             model_output (ModelOutput | None): encapsulates model outputs.
             output_dir: (str): the directory where to save the scenario visualization.
+            causal_gt_ids (NDArray[np.int_] | None): ground-truth causal agent ids for the GT causal pane, loaded from
+                the causal-label files; used when no model output is available.
         """

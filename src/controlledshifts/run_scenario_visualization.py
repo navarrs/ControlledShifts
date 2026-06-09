@@ -35,8 +35,10 @@ from time import time
 from typing import NamedTuple
 
 import hydra
+import numpy as np
 import pyrootutils
 from characterization.schemas import Scenario, ScenarioScores
+from numpy.typing import NDArray
 from omegaconf import DictConfig
 
 from controlledshifts import benchmarks, utils
@@ -62,6 +64,7 @@ DEFAULT_PANE_TYPES: dict[VizType, str] = {
     VizType.REGULAR: "scenario",
     VizType.SCORED: "scenario_scored",
     VizType.TRAJPRED: "trajectory_prediction",
+    VizType.CAUSAL_GT: "causal_scenario_gt",
 }
 
 
@@ -71,6 +74,7 @@ class PreparedScenario(NamedTuple):
     scenario: Scenario | AgentCentricScenario
     scores: ScenarioScores | None = None
     model_output: ModelOutput | None = None
+    causal_gt_ids: NDArray[np.int_] | None = None
 
 
 def _compute_scores(dataset: BaseDataset, scenario: Scenario) -> tuple[Scenario, ScenarioScores]:
@@ -137,6 +141,29 @@ def prepare_model_output(
     return PreparedScenario(scenario, model_output=model_output)
 
 
+def prepare_causal_gt(
+    dataset: BaseDataset, visualizer: BaseVisualizer, scenario: Scenario, model_output: ModelOutput | None
+) -> PreparedScenario | None:
+    """Causal ground-truth visualization: load causal agent ids from the causal-label files (no model output)."""
+    del visualizer, model_output
+    causal_labels_path = dataset.config.get("causal_labels_path", None)
+    if causal_labels_path is None:
+        error_message = (
+            "viz_type 'causal_gt' needs causal labels; set `dataset.config.causal_labels_path` to the labels directory."
+        )
+        raise ValueError(error_message)
+
+    causal_ids = utils.load_causal_agent_ids(causal_labels_path, scenario.metadata.scenario_id)
+    if causal_ids is None:
+        return None
+
+    # The ego agent is always treated as causal (mirrors `causal_idxs[track_index_to_predict] = True` in the dataset).
+    ego_index = scenario.metadata.ego_vehicle_index
+    ego_id = np.asarray(scenario.agent_data.agent_ids)[ego_index]
+    causal_ids = np.unique(np.append(causal_ids, ego_id))
+    return PreparedScenario(scenario, causal_gt_ids=causal_ids)
+
+
 PrepareFn = Callable[[BaseDataset, BaseVisualizer, Scenario, ModelOutput | None], PreparedScenario | None]
 
 SCENARIO_PREPARER: dict[VizType, PrepareFn] = {
@@ -144,6 +171,7 @@ SCENARIO_PREPARER: dict[VizType, PrepareFn] = {
     VizType.SCORED: prepare_scored,
     VizType.TRAJPRED: prepare_trajpred,
     VizType.MODEL_OUTPUT: prepare_model_output,
+    VizType.CAUSAL_GT: prepare_causal_gt,
 }
 
 
@@ -247,6 +275,7 @@ def main(config: DictConfig) -> None:
                 scores=prepared.scores,
                 model_output=prepared.model_output,
                 output_dir=str(output_dir),
+                causal_gt_ids=prepared.causal_gt_ids,
             )
 
     log.info("Total time: %.2f seconds", time() - start)

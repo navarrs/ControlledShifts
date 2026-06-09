@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from characterization.schemas import Scenario, ScenarioScores
 from characterization.utils.io_utils import get_logger
+from numpy.typing import NDArray
 from omegaconf import DictConfig
 
 from controlledshifts.schemas import AgentCentricScenario, ModelOutput
@@ -21,6 +22,7 @@ class ScenarioVisualizer(BaseVisualizer):
         scores: ScenarioScores | None = None,
         model_output: ModelOutput | None = None,
         output_dir: str = "temp",
+        causal_gt_ids: NDArray[np.int_] | None = None,
     ) -> None:
         """Visualizes a single scenario and saves the output to a file.
 
@@ -32,6 +34,7 @@ class ScenarioVisualizer(BaseVisualizer):
             scores (ScenarioScores | None): encapsulates the scenario and agent scores.
             model_output (ModelOutput | None): encapsulates model outputs.
             output_dir: (str): the directory where to save the scenario visualization.
+            causal_gt_ids (NDArray[np.int_] | None): ground-truth causal agent ids for the GT causal pane.
         """
         if not isinstance(scenario, Scenario):
             error_message = "Scenario visualization only supported in global frame."
@@ -52,7 +55,7 @@ class ScenarioVisualizer(BaseVisualizer):
         # Plot each requested pane on its own window
         axs_list = np.atleast_1d(axs)
         for ax, pane in zip(axs_list, self.panes_to_plot, strict=True):
-            self.plot_pane(ax, pane, scenario, scores, model_output)
+            self.plot_pane(ax, pane, scenario, scores, model_output, causal_gt_ids=causal_gt_ids)
             ax.set_title(PANE_TITLES[pane])
 
         # Prepare and save plot

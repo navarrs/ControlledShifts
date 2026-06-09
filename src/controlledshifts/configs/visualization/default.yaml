@@ -9,6 +9,9 @@ visualizer:
     scenario_type: gt
     is_ego_centric: false
 
+    # Opacity for non-causal agents in the ground-truth causal pane (viz_causal_gt); causal agents and ego stay opaque.
+    non_causal_alpha: 0.2
+
     panes_to_plot:
       - ALL_AGENTS
       - HIGHLIGHT_RELEVANT

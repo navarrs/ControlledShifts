@@ -1,5 +1,5 @@
 from controlledshifts.utils import constants
-from controlledshifts.utils.data_utils import load_batches, minmax_scaler, save_cache
+from controlledshifts.utils.data_utils import load_batches, load_causal_agent_ids, minmax_scaler, save_cache
 from controlledshifts.utils.instantiators import instantiate_callbacks, instantiate_loggers
 from controlledshifts.utils.intention_points_utils import compute_and_cache_intention_points
 from controlledshifts.utils.model_analysis_utils import (
@@ -28,6 +28,7 @@ __all__ = [
     "instantiate_callbacks",
     "instantiate_loggers",
     "load_batches",
+    "load_causal_agent_ids",
     "log_hyperparameters",
     "minmax_scaler",
     "plot_heatmap",
