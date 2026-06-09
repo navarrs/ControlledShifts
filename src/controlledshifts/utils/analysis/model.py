@@ -1,4 +1,4 @@
-"""Utility functions for model analysis.
+"""Utility functions for model / scenario-embedding analysis.
 
 See `docs/ANALYSIS.md` for usage details.
 """
@@ -6,7 +6,6 @@ See `docs/ANALYSIS.md` for usage details.
 import pickle
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 from omegaconf import DictConfig
@@ -74,43 +73,3 @@ def compute_dimensionality_reduction(
 
     print("\tDone")
     return result  # pyright: ignore[reportReturnType]
-
-
-def plot_heatmap(  # noqa: PLR0913
-    heatmap: npt.NDArray[np.float64],
-    title: str,
-    x_label: str,
-    y_label: str,
-    cbar_label: str,
-    output_filepath: Path,
-    colormap: str = "viridis",
-) -> None:
-    """Visualizes a heatmap matrix.
-
-    Args:
-        heatmap (npt.NDArray[np.float64]): a heatmap matrix to plot.
-        title (str): the title of the heatmap.
-        x_label (str): the label of the x-axis.
-        y_label (str): the label of the y-axis.
-        cbar_label (str): the label of the heatmap's colorbar.
-        colormap (str): the colormap to use for the heatmap.
-        output_filepath (Path): filepath to save the visualization.
-    """
-    plt.figure(figsize=(35, 30))
-
-    plt.imshow(heatmap, cmap=colormap, aspect="auto")
-    cbar = plt.colorbar()
-    cbar.ax.tick_params(labelsize=40)
-    cbar.set_label(cbar_label, size=40)
-
-    plt.title(title, fontsize=50)
-    plt.xlabel(x_label, fontsize=40)
-    plt.ylabel(y_label, fontsize=40)
-    plt.xticks(range(heatmap.shape[0]))
-    plt.yticks(range(heatmap.shape[1]))
-    plt.grid(visible=False)
-
-    plt.tight_layout()
-    plt.savefig(output_filepath)
-    plt.close()
-    print(f"Heatmap saved to {output_filepath}")
