@@ -25,7 +25,7 @@ pyrootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
 
 @hydra.main(version_base="1.3", config_path="configs", config_name="analysis.yaml")
-def main(config: DictConfig) -> float | None:  # noqa: PLR0915
+def main(config: DictConfig) -> float | None:
     """Hydra's entrypoint for running scenario analysis training."""
     random.seed(config.seed)
 
@@ -77,30 +77,6 @@ def main(config: DictConfig) -> float | None:  # noqa: PLR0915
         env_config.sample_selection_splits_to_compare = config.environments_sample_selection_splits_to_compare
         summary = utils.plot_sample_selection_sweep_heatmap(env_config, log, output_path)
         log.info("Environments heatmap summary: %d metrics", len(summary))
-
-    if config.run_environments_benchmark_analysis:
-        environments_benchmark_config = copy.deepcopy(config)
-        environments_benchmark_config.benchmark = config.environments_benchmark
-        environments_benchmark_config.benchmark_filepath = config.environments_benchmark_filepath
-        environments_benchmark_config.benchmark_colormap = config.environments_benchmark_colormap
-        environments_benchmark_config.benchmark_splits_to_compare = config.environments_benchmark_splits_to_compare
-        utils.run_benchmark_analysis(environments_benchmark_config, log, output_path)
-
-    if config.run_causal_benchmark_analysis:
-        causal_benchmark_config = copy.deepcopy(config)
-        causal_benchmark_config.benchmark = config.causal_benchmark
-        causal_benchmark_config.benchmark_filepath = config.causal_benchmark_filepath
-        causal_benchmark_config.benchmark_colormap = config.causal_benchmark_colormap
-        causal_benchmark_config.benchmark_splits_to_compare = config.causal_benchmark_splits_to_compare
-        utils.run_benchmark_analysis(causal_benchmark_config, log, output_path)
-
-    if config.run_environments_benchmark_analysis:
-        environments_benchmark_config = copy.deepcopy(config)
-        environments_benchmark_config.benchmark = config.environments_benchmark
-        environments_benchmark_config.benchmark_filepath = config.environments_benchmark_filepath
-        environments_benchmark_config.benchmark_colormap = config.environments_benchmark_colormap
-        environments_benchmark_config.benchmark_splits_to_compare = config.environments_benchmark_splits_to_compare
-        utils.run_benchmark_analysis(environments_benchmark_config, log, output_path)
 
     log.info("Total time: %s second", time() - start)
     log.info("Process completed!")
