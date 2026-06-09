@@ -1,0 +1,24 @@
+# @package _global_
+seed: 42 # Seed for random generators
+show_run_id: false # Append the run ID to model names in tables/plots
+
+models_to_compare: [
+  'naive',
+  'autobot',
+  'scenetransformer',
+  'wayformer',
+  'mtr',
+]
+
+trajectory_forecasting_metrics: [
+  'brierFDE',
+  'minFDE6',
+  'minADE6',
+  'missRate',
+  'collisionRate0.25',
+]
+
+other_metrics: [
+  # 'Runtime',
+  # 'Epochs'
+]

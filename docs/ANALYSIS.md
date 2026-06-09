@@ -71,6 +71,35 @@ An example of an expected input to this script is `assets/group.csv`, and an exa
 <img src="../assets/group_metric.png">
 
 
+## Distribution Shift Analysis
+
+The file `configs/analysis/distribution_shift.yaml` configures the in-distribution (ID) vs out-of-distribution (OOD)
+benchmark analysis. Unlike the older per-benchmark CSVs, all results now live in a single combined file
+(`benchmarks_filepath`, e.g. `meta/runs/distribution_shift_results.csv`), where each column is named
+`<phase>/waymo-<split>/<metric>`. Each benchmark entry simply names the exact `seen` (ID) and `unseen` (OOD) column
+prefixes to compare:
+
+```yaml
+benchmarks:
+  - uniform:
+      name: Uniform
+      seen: "test/waymo-uniform-validation"
+      unseen: "test/waymo-uniform-testing"
+  # ...
+```
+
+For each model in `models_to_compare`, the seen and unseen metric values are looked up independently and joined by
+model name, so a benchmark's seen and unseen splits may come from different training runs (or even different datasets).
+
+Run the analysis as:
+```bash
+uv run -m controlledshifts.run_distribution_shift_analysis
+```
+
+It writes per-benchmark comparison plots under `<output_path>/<benchmark>/` and one combined LaTeX table spanning all
+benchmarks to `<output_path>/results.tex`.
+
+
 # Sample Selection
 
 Cache training set embeddings:
