@@ -1,6 +1,5 @@
 # @package _global_
 seed: 42 # Seed for random generators
-show_run_id: false
 models_to_compare: [
   'autobot',
   'scenetransformer',
@@ -96,42 +95,6 @@ environments_sample_selection_files: [
   "./meta/sample_selection_results/environments/wayformer/kmeans.csv",
 ]
 environments_sample_selection_splits_to_compare: [
-  'test/waymo-environments-id',
-  'test/waymo-environments-ood',
-]
-
-# Benchmark analysis settings
-benchmark: null
-benchmark_filepath: null
-benchmark_colormap: null
-benchmark_splits_to_compare: []
-
-# Ego-safeshift analysis
-run_ego_safeshift_analysis: false
-ego_safeshift_benchmark: 'ego-safeshift-causal-benchmark'
-ego_safeshift_filepath: "./meta/distribution_shift_results/ego_safeshift_benchmark.csv"
-ego_safeshift_colormap: colorblind
-ego_safeshift_splits_to_compare: [
-  'test/waymo-causal-ego-safeshift-id',
-  'test/waymo-causal-ego-safeshift-ood',
-]
-
-# Causal benchmark analysis
-run_causal_benchmark_analysis: false
-causal_benchmark: 'causal-benchmark-labeled'
-causal_benchmark_filepath: "./meta/distribution_shift_results/causal_benchmark.csv"
-causal_benchmark_colormap: colorblind
-causal_benchmark_splits_to_compare: [
-  'test/waymo-mini-causal-testing',
-  'test/waymo-remove-noncausal-testing',
-]
-
-# Environment benchmark analysis
-run_environments_benchmark_analysis: false
-environments_benchmark: 'environments-benchmark'
-environments_benchmark_filepath: "./meta/distribution_shift_results/environments_benchmark.csv"
-environments_benchmark_colormap: colorblind
-environments_benchmark_splits_to_compare: [
   'test/waymo-environments-id',
   'test/waymo-environments-ood',
 ]
