@@ -3,6 +3,7 @@ import numpy as np
 from characterization.schemas import Scenario, ScenarioScores
 from characterization.utils.io_utils import get_logger
 from matplotlib import cm
+from numpy.typing import NDArray
 from omegaconf import DictConfig
 
 from controlledshifts.schemas import AgentCentricScenario, ModelOutput
@@ -61,6 +62,7 @@ class ScenarioTrajpredVisualizer(BaseVisualizer):
         scores: ScenarioScores | None = None,
         model_output: ModelOutput | None = None,
         output_dir: str = "temp",
+        causal_gt_ids: NDArray[np.int_] | None = None,
     ) -> None:
         """Visualizes a single scenario and saves the output to a file.
 
@@ -73,7 +75,9 @@ class ScenarioTrajpredVisualizer(BaseVisualizer):
             scores (ScenarioScores | None): encapsulates the scenario and agent scores.
             model_output (ModelOutput | None): encapsulates model outputs.
             output_dir: (str): the directory where to save the scenario visualization.
+            causal_gt_ids (NDArray[np.int_] | None): unused; trajpred does not render causal panes.
         """
+        del causal_gt_ids
         if not isinstance(scenario, AgentCentricScenario):
             error_message = "Scenario needs to be of AgentCentricScenario"
             raise TypeError(error_message)

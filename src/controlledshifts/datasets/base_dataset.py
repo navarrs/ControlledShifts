@@ -1132,24 +1132,18 @@ class BaseDataset(Dataset, ABC):
         # Add causal label information
         for out in output:
             scenario_id = out["scenario_id"]
-            causal_labels_filepath = Path(f"{self.config.causal_labels_path}/{scenario_id}.json")
             agent_ids = out["obj_ids"].squeeze(-1).squeeze(-1)
             causal_idxs = np.zeros_like(agent_ids)
             # Validity mask: True where a proper ground-truth causal label is available.
             causal_mask = np.ones_like(agent_ids, dtype=bool)
-            if causal_labels_filepath.exists():
-                with causal_labels_filepath.open("r") as f:
-                    causal_labels = json.load(f)
-
-                # Create the causal labels
-                causal_ids = np.array(causal_labels["causal_ids"], dtype=int)
+            causal_ids = data_utils.load_causal_agent_ids(self.config.causal_labels_path, scenario_id)
+            if causal_ids is not None:
                 # If there are no causal IDs in the scene, let's assume for now that all agents are causal
                 if causal_ids.shape[0] != 0:
                     causal_idxs = np.isin(agent_ids, causal_ids)
                     causal_idxs[out["track_index_to_predict"]] = True
                 # out['causal_ids_votes'] = np.array(causal_labels['labeler_votes'], dtype=int)
             else:
-                print(f"Warning: causal labels file not found for scenario {scenario_id}")
                 # No ground-truth labels available: mark all agents as invalid for training.
                 causal_mask[:] = False
 

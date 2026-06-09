@@ -165,6 +165,28 @@ def get_trajectory_type(output: list[dict[str, Any]]) -> None:
         data_sample["trajectory_type"] = trajectory_type
 
 
+def load_causal_agent_ids(causal_labels_path: str | Path, scenario_id: str) -> NDArray[np.int_] | None:
+    """Loads the ground-truth causal agent ids for a scenario from its causal-label JSON file.
+
+    Reads ``<causal_labels_path>/<scenario_id>.json`` and returns its ``causal_ids`` array. Returns None when the file
+    is missing (logged as a warning) so callers can decide whether to skip the scenario.
+
+    Args:
+        causal_labels_path (str | Path): directory containing the per-scenario causal-label JSON files.
+        scenario_id (str): the scenario identifier used to locate the label file.
+
+    Returns:
+        NDArray[np.int_] | None: the causal agent ids, or None when no label file exists for the scenario.
+    """
+    causal_labels_filepath = Path(causal_labels_path) / f"{scenario_id}.json"
+    if not causal_labels_filepath.exists():
+        _LOGGER.warning("Causal labels file not found for scenario %s at %s", scenario_id, causal_labels_filepath)
+        return None
+    with causal_labels_filepath.open("r") as f:
+        causal_labels = json.load(f)
+    return np.array(causal_labels["causal_ids"], dtype=int)
+
+
 def set_random_seed(seed: int) -> None:
     """Seeds Python, NumPy, and PyTorch RNGs and enables deterministic cuDNN behavior.
 
