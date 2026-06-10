@@ -23,6 +23,24 @@ MODEL_NAME_MAP = {
     "naive": "Naive",
 }
 
+# Fixed per-model plot colors (Okabe-Ito, colorblind-safe), keyed by display name. Naive is always black so it reads
+# as the reference baseline across every plot. Models without an entry fall back to the configured palette.
+MODEL_COLOR_MAP = {
+    "Naive": "#000000",
+    "AutoBot": "#FF7F50",
+    "SceneTransformer": "#CD5C5C",
+    "Wayformer": "#1E90FF",
+    "MTR": "#9370DB",
+}
+
+METRIC_NAME_MAP = {
+    "brierFDE": "BrierFDE",
+    "minFDE6": "MinFDE",
+    "minADE6": "MinADE",
+    "missRate": "MissRate",
+    "collisionRate0.25": "CollisionRate",
+}
+
 MODEL_SIZE_MAP = {
     "Naive": "624k",
     "AutoBot": "1.5M",

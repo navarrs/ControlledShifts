@@ -295,7 +295,7 @@ def _plot_grouped_bar_chart(
                 print(f"{metric_name:30s}: {best_model:30s} ({best_value:.4f})")
 
 
-def _build_benchmark_df(
+def build_benchmark_df(
     metrics_df: pd.DataFrame,
     splits: tuple[str, str],
     metrics: list[str],
@@ -358,7 +358,7 @@ def _plot_benchmark(
     """Generates the per-benchmark ID-vs-OOD comparison plots for a single benchmark.
 
     Args:
-        benchmark_df (pd.DataFrame): Per-model frame from :func:`_build_benchmark_df`.
+        benchmark_df (pd.DataFrame): Per-model frame from :func:`build_benchmark_df`.
         splits (tuple[str, str]): ``(seen_split, unseen_split)`` column prefixes for the ID/OOD splits.
         metrics (list[str]): Metric names to plot.
         colormap (str): Name of the seaborn/matplotlib palette to use.
@@ -412,7 +412,7 @@ def _build_benchmark_rows(  # noqa: PLR0912, PLR0915
     block is self-scaled.
 
     Args:
-        benchmark_df (pd.DataFrame): Per-model frame from :func:`_build_benchmark_df`.
+        benchmark_df (pd.DataFrame): Per-model frame from :func:`build_benchmark_df`.
         benchmark_name (str): Display name of the benchmark for the leading multirow cell.
         id_split (str): Column prefix of the In-Distribution split.
         ood_split (str): Column prefix of the Out-of-Distribution split.
@@ -602,7 +602,7 @@ def run_distribution_shift_analysis(config: DictConfig, log: Logger, output_path
         log.info("Analyzing benchmark '%s' (%s): seen=%s, unseen=%s", key, spec.name, spec.seen, spec.unseen)
 
         splits = (spec.seen, spec.unseen)
-        benchmark_df = _build_benchmark_df(
+        benchmark_df = build_benchmark_df(
             metrics_df, splits, metrics, models_to_compare, show_run_id=config.show_run_id
         )
         if benchmark_df.empty:

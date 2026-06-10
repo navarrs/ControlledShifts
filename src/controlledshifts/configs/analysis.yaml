@@ -1,0 +1,6 @@
+# @package _global_
+defaults:
+  - analysis: distribution_shift  # override via analysis=sensitivity_score
+  - _self_
+
+task_name: run_analysis

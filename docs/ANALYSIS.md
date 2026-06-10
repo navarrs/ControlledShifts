@@ -93,11 +93,56 @@ model name, so a benchmark's seen and unseen splits may come from different trai
 
 Run the analysis as:
 ```bash
-uv run -m controlledshifts.run_distribution_shift_analysis
+uv run -m controlledshifts.run_analysis analysis=distribution_shift
 ```
 
 It writes per-benchmark comparison plots under `<output_path>/<benchmark>/` and one combined LaTeX table spanning all
 benchmarks to `<output_path>/results.tex`.
+
+
+## Robustness Score Analysis
+
+The file `configs/analysis/sensitivity_score.yaml` reduces the same combined results file into comparable *robustness
+scores* per model per metric, measured against a reference. Two reference modes are produced:
+
+- `naive_relative` — each model vs the **Naive** baseline **within the same benchmark**.
+- `uniform_relative` — each model vs **its own** performance in the **Uniform** benchmark (e.g. AutoBot on
+  EgoSafeShift vs AutoBot on Uniform). The Uniform benchmark is excluded from this mode's aggregation.
+
+All metrics are lower-is-better (errors). Working in natural-log space, a model's total out-of-distribution advantage
+over the reference decomposes **exactly and additively** into two reference-relative robustness terms:
+
+```
+log(ref_unseen / model_unseen) = log(ref_seen / model_seen) + log((ref_unseen/ref_seen) / (model_unseen/model_seen))
+   robustness_score (overall)  =     seen_robustness_score   +              shift_robustness_score
+```
+
+- `seen_robustness_score = log(ref_seen / model_seen)` — **ID-level robustness**: how much better the model already is
+  on the seen split (its starting point).
+- `shift_robustness_score = log((ref_unseen/ref_seen) / (model_unseen/model_seen))` — **shift robustness**: how much
+  *less* the model degrades seen→unseen than the reference. Sign-preserving, so a model that improves under shift is
+  rewarded.
+- `robustness_score = seen_robustness_score + shift_robustness_score = log(ref_unseen / model_unseen)` — **overall OOD
+  robustness** vs the reference.
+
+All three share the same log units, are symmetric and unbounded both ways (a 2× improvement and a 2× degradation are
+`±log 2`), and are `0` for the reference compared against itself (so the Naive row is a visible baseline in
+`naive_relative`). In both reference modes the convention is the same: **higher == more robust than the reference**,
+`0` == on par, negative == worse. There are no epsilon/clip knobs and no regression — the terms are exact log ratios.
+
+Each term is aggregated across benchmarks (NaN-safe `mean`/`median`, set by `score.aggregate`); the `Combined` column
+always holds the per-model mean across metrics.
+
+Run the analysis as:
+```bash
+uv run -m controlledshifts.run_analysis analysis=sensitivity_score
+```
+
+For each reference mode it writes, under `<output_path>/<mode>/`, a radar plot, CSV table and LaTeX table for each term
+(`seen_robustness_*`, `shift_robustness_*`, `robustness_*`) plus a `robustness_decomposition.png` scatter — one panel
+per metric placing each model at `(seen_robustness_score, shift_robustness_score)`, with the reference at the origin and
+anti-diagonals marking constant overall robustness. Upper-right points are both better in-distribution and more
+shift-robust than the reference.
 
 
 # Sample Selection

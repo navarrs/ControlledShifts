@@ -1,0 +1,40 @@
+# @package _global_
+defaults:
+  - default.yaml
+
+analysis_name: sensitivity_score
+
+# Combined results file holding every benchmark's metrics (same source as the distribution-shift analysis).
+benchmarks_filepath: ./meta/runs/distribution_shift_results.csv
+output_path: ./outputs/score_analysis
+score_colormap: Dark2 # Qualitative palette with well-separated hues for the radar's per-model lines.
+
+# Duplicated from distribution_shift.yaml (kept in sync intentionally; small, rarely changes).
+benchmarks:
+  - uniform:
+      name: Uniform
+      seen: "test/waymo-uniform-validation"
+      unseen: "test/waymo-uniform-testing"
+#   - causal_agents:
+#       name: CausalAgents
+#       seen: "test/waymo-uniform-testing"
+#       unseen: "test/waymo-remove-noncausal-testing"
+  - causal_agents_hard:
+      name: CausalAgentsHard
+      seen: "test/waymo-causal-agents-hard-original-validation"
+      unseen: "test/waymo-remove-noncausal-hard-testing"
+  - ego_safeshift:
+      name: EgoSafeShift
+      seen: "test/waymo-causal-ego-safeshift-id"
+      unseen: "test/waymo-causal-ego-safeshift-ood"
+  - environments:
+      name: Environments
+      seen: "test/waymo-environments-id"
+      unseen: "test/waymo-environments-ood"
+
+score:
+  # Which robustness scores to produce. naive_relative compares each model to the Naive baseline
+  # within a benchmark; uniform_relative compares each model to its own Uniform-benchmark performance.
+  reference_modes: [naive_relative, uniform_relative]
+  uniform_key: uniform # Benchmark key used as the uniform_relative reference.
+  aggregate: mean # Aggregation across benchmarks (mean|median); the Combined column always means across metrics.

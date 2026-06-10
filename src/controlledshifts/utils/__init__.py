@@ -5,6 +5,7 @@ from controlledshifts.utils.analysis import (
     plot_sample_selection_sweep_heatmap,
     plot_sample_selection_sweep_lineplot,
     run_distribution_shift_analysis,
+    run_score_analysis,
 )
 from controlledshifts.utils.data_utils import load_batches, load_causal_agent_ids, minmax_scaler, save_cache
 from controlledshifts.utils.instantiators import instantiate_callbacks, instantiate_loggers
@@ -34,6 +35,7 @@ __all__ = [
     "plot_sample_selection_sweep_lineplot",
     "print_config_tree",
     "run_distribution_shift_analysis",
+    "run_score_analysis",
     "save_cache",
     "task_wrapper",
 ]
