@@ -5,6 +5,7 @@ from controlledshifts.utils.analysis.sample_selection import (
     plot_sample_selection_sweep_heatmap,
     plot_sample_selection_sweep_lineplot,
 )
+from controlledshifts.utils.analysis.score import run_score_analysis
 
 
 __all__ = [
@@ -13,4 +14,5 @@ __all__ = [
     "plot_sample_selection_sweep_heatmap",
     "plot_sample_selection_sweep_lineplot",
     "run_distribution_shift_analysis",
+    "run_score_analysis",
 ]

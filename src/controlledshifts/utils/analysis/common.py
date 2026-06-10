@@ -23,6 +23,14 @@ MODEL_NAME_MAP = {
     "naive": "Naive",
 }
 
+METRIC_NAME_MAP = {
+    "brierFDE": "BrierFDE",
+    "minFDE6": "MinFDE",
+    "minADE6": "MinADE",
+    "missRate": "MissRate",
+    "collisionRate0.25": "CollisionRate",
+}
+
 MODEL_SIZE_MAP = {
     "Naive": "624k",
     "AutoBot": "1.5M",

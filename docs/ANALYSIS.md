@@ -93,11 +93,47 @@ model name, so a benchmark's seen and unseen splits may come from different trai
 
 Run the analysis as:
 ```bash
-uv run -m controlledshifts.run_distribution_shift_analysis
+uv run -m controlledshifts.run_analysis analysis=distribution_shift
 ```
 
 It writes per-benchmark comparison plots under `<output_path>/<benchmark>/` and one combined LaTeX table spanning all
 benchmarks to `<output_path>/results.tex`.
+
+
+## Sensitivity Score Analysis
+
+The file `configs/analysis/sensitivity_score.yaml` reduces the same combined results file into a single comparable *sensitivity
+score* per model per metric, measured against a reference. Two reference modes are produced:
+
+- `naive_relative` — each model vs the **Naive** baseline **within the same benchmark**.
+- `uniform_relative` — each model vs **its own** performance in the **Uniform** benchmark (e.g. AutoBot on
+  EgoSafeShift vs AutoBot on Uniform). The Uniform benchmark is excluded from this mode's aggregation.
+
+For each benchmark, model and metric the score is `performance * gap_ratio`, then averaged across benchmarks (and across
+metrics for the `Combined` column). All metrics are lower-is-better, and in both reference modes the convention is the
+same: **higher == better** (less sensitive to shift than the reference), `0` == on par with the reference, negative ==
+worse.
+
+- `performance = 1 - model_seen / ref_seen` uses the **seen (ID)** values — clean in-distribution quality vs the
+  reference. Positive means better than the reference; the reference vs itself is 0 (so the Naive row is a visible
+  baseline in `naive_relative`). This term carries the sign of the score.
+- `gap_ratio` is a **non-negative robustness multiplier** comparing how much the metric worsens seen→unseen
+  (`relative_gap_pct(unseen, seen)`) against the reference's degradation. Because the raw ratio is unstable near zero,
+  it is configurable via the `score` block:
+  - `gap_mode: ratio` (default) — `|ref_gap| / |model_gap|` floored by `gap_epsilon` (percentage points) and clipped to
+    `[0, gap_clip]`; `> 1` when the model degrades less than the reference, `< 1` when it degrades more.
+  - `gap_mode: bounded` — the parameter-light form `|ref_gap| / (|ref_gap| + |model_gap|)` in `(0, 1)`.
+
+  Keeping this term non-negative ensures `performance * gap_ratio` never flips sign, so higher is consistently better.
+
+Run the analysis as:
+```bash
+uv run -m controlledshifts.run_analysis analysis=sensitivity_score
+```
+
+For each reference mode it writes a radar/spider plot (`sensitivity_radar.png`), a CSV table
+(`sensitivity_scores.csv`) and a LaTeX table (`sensitivity_scores.tex`) under `<output_path>/<mode>/`. Higher scores
+mean the model is less sensitive to distribution shift than the reference.
 
 
 # Sample Selection

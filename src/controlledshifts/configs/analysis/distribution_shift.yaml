@@ -2,6 +2,8 @@
 defaults:
   - default.yaml
 
+analysis_name: distribution_shift
+
 # Single combined results file holding every benchmark's metrics. Each benchmark below
 # selects its seen (ID) / unseen (OOD) splits by their exact column prefix in this file.
 benchmarks_filepath: ./meta/runs/distribution_shift_results.csv

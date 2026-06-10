@@ -1,0 +1,65 @@
+"""Unified Analysis Script.
+
+Runs one of the analyses over a single combined results file, selected via the ``analysis`` config
+group:
+
+    # In-distribution vs out-of-distribution benchmark comparison (per-benchmark plots + LaTeX table).
+    uv run -m controlledshifts.run_analysis analysis=distribution_shift
+
+    # Per-model, per-metric distribution-shift sensitivity scores (radar plot + CSV + LaTeX table).
+    uv run -m controlledshifts.run_analysis analysis=sensitivity_score
+
+See `docs/ANALYSIS.md` and the per-analysis configs under `configs/analysis/` for more argument details.
+"""
+
+import random
+from collections.abc import Callable
+from logging import Logger
+from pathlib import Path
+from time import time
+
+import hydra
+import pyrootutils
+from omegaconf import DictConfig
+
+from controlledshifts import utils
+
+
+log = utils.get_pylogger(__name__)
+
+pyrootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
+
+
+# Maps the selected ``analysis`` config-group option (its ``analysis_name``) to its runner.
+_ANALYSES: dict[str, Callable[[DictConfig, Logger, Path], None]] = {
+    "distribution_shift": utils.run_distribution_shift_analysis,
+    "sensitivity_score": utils.run_score_analysis,
+}
+
+
+@hydra.main(version_base="1.3", config_path="configs", config_name="analysis.yaml")
+def main(config: DictConfig) -> None:
+    """Hydra entry point dispatching to the analysis selected by ``analysis=<option>``.
+
+    Raises:
+        ValueError: If the selected analysis has no registered runner.
+    """
+    random.seed(config.seed)
+
+    runner = _ANALYSES.get(config.analysis_name)
+    if runner is None:
+        error_message = f"Unknown analysis '{config.analysis_name}'; options: {sorted(_ANALYSES)}"
+        raise ValueError(error_message)
+
+    start = time()
+    output_path = Path(config.output_path)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    runner(config, log, output_path)
+
+    log.info("Total time: %.2f seconds", time() - start)
+    log.info("Process completed!")
+
+
+if __name__ == "__main__":
+    main()  # pyright: ignore[reportCallIssue]
