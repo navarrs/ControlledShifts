@@ -1,7 +1,6 @@
 """Unified Analysis Script.
 
-Runs one of the analyses over a single combined results file, selected via the ``analysis`` config
-group:
+Runs one of the analyses over a single combined results file, selected via the ``analysis`` config group:
 
     # In-distribution vs out-of-distribution benchmark comparison (per-benchmark plots + LaTeX table).
     uv run -m controlledshifts.run_analysis analysis=distribution_shift

@@ -1,19 +1,32 @@
-"""Distribution-shift sensitivity scoring (per-model, per-metric) and radar visualization.
+"""Distribution-shift robustness scoring (per-model, per-metric) and radar visualization.
 
-Reduces the raw ID/OOD benchmark numbers into a single comparable *sensitivity score* per model per
-metric, measured against a reference:
+Reduces the raw SEEN/UNSEEN benchmark numbers into comparable *robustness scores* per model per metric, measured
+against a reference:
 
 * ``naive_relative`` -- each model vs the Naive baseline within the same benchmark.
 * ``uniform_relative`` -- each model vs its own performance in the Uniform benchmark.
 
-Each score combines a performance term (in-distribution quality vs the reference) with a non-negative
-gap term (how much the metric worsens seen->unseen, relative to the reference). In both reference modes
-the convention is the same: **higher == better** (less sensitive to shift than the reference), zero ==
-on par with the reference, negative == worse. See `docs/ANALYSIS.md`.
+Working in log space (metrics are positive, lower-is-better errors), a model's total out-of-distribution advantage over
+the reference decomposes *exactly and additively* into two reference-relative robustness terms::
+
+    log(ref_unseen / model_unseen) = log(ref_seen / model_seen) + log((ref_unseen/ref_seen) / (model_unseen/model_seen))
+       robustness_score (overall)  =     seen_robustness_score   +              shift_robustness_score
+
+* ``seen_robustness_score = log(ref_seen / model_seen)`` -- ID-level robustness: how much better the model already is on
+  the seen split (its starting point).
+* ``shift_robustness_score = log((ref_unseen/ref_seen) / (model_unseen/model_seen))`` -- shift robustness: how much less
+  the model degrades seen->unseen than the reference (sign-preserving, so improving under shift is rewarded).
+* ``robustness_score = seen_robustness_score + shift_robustness_score = log(ref_unseen / model_unseen)`` -- overall OOD
+  robustness vs the reference.
+
+All three share the same natural-log units, are symmetric and unbounded both ways (a 2x improvement and a 2x degradation
+are ``+-log 2``), are ``0`` for the reference compared against itself, and need no epsilon/clip and no regression. The
+convention is the same in both reference modes: **higher == more robust than the reference**, zero == on par, negative
+== worse. See `docs/ANALYSIS.md`.
 """
 
 import math
-from dataclasses import dataclass
+from collections.abc import Callable
 from logging import Logger
 from pathlib import Path
 
@@ -24,102 +37,87 @@ import seaborn as sns
 from numpy.typing import NDArray
 from omegaconf import DictConfig
 
-from controlledshifts.utils.analysis.common import METRIC_NAME_MAP, MODEL_NAME_MAP, relative_gap_pct
+from controlledshifts.utils.analysis.common import METRIC_NAME_MAP, MODEL_COLOR_MAP, MODEL_NAME_MAP
 from controlledshifts.utils.analysis.distribution_shift import build_benchmark_df
 from controlledshifts.utils.constants import EPSILON
 
 
 COMBINED_COLUMN = "Combined"
 
+# Score-term keys returned by :func:`compute_robustness_scores`, mapped to their output-file stem and display title.
+SEEN_TERM = "seen"
+SHIFT_TERM = "shift"
+OVERALL_TERM = "overall"
+TERM_FILE_STEMS = {SEEN_TERM: "seen_robustness", SHIFT_TERM: "shift_robustness", OVERALL_TERM: "robustness"}
+TERM_TITLES = {
+    SEEN_TERM: "Seen (ID-level) Robustness",
+    SHIFT_TERM: "Shift Robustness",
+    OVERALL_TERM: "Overall OOD Robustness",
+}
+
 # Cosine/sine deadband for deciding radar label alignment (center vs left/right, top/bottom).
 _LABEL_ALIGN_THRESHOLD = 0.1
 
 
-@dataclass(frozen=True)
-class GapConfig:
-    """Configuration for the gap term (a non-negative robustness multiplier).
+def _model_colors(models: pd.Index, colormap: str) -> list[str | tuple[float, float, float]]:
+    """Per-model colors aligned to ``models``, using the fixed :data:`MODEL_COLOR_MAP` where available.
 
-    Attributes:
-        mode: ``"ratio"`` for the floored, clipped ratio ``|ref_gap| / |model_gap|`` (``> 1`` when the
-            model degrades less than the reference, ``< 1`` when it degrades more) or ``"bounded"`` for
-            the ``(0, 1)`` form ``|ref_gap| / (|ref_gap| + |model_gap|)``.
-        epsilon: Percentage-point floor added to both magnitudes. Prevents the near-zero blow-up of
-            the raw ratio; a meaningful floor (e.g. 1.0) is required since gaps are in percent.
-        clip: Upper clip applied to the ``"ratio"`` mode result.
+    Models without a fixed color fall back to the configured ``colormap`` palette (assigned in order among the
+    unmapped models), so the Naive baseline stays black and every model keeps the same color across plots.
     """
-
-    mode: str = "ratio"
-    epsilon: float = 1.0
-    clip: float = 5.0
+    fallback = iter(sns.color_palette(colormap, sum(model not in MODEL_COLOR_MAP for model in models)))
+    return [MODEL_COLOR_MAP[model] if model in MODEL_COLOR_MAP else next(fallback) for model in models]
 
 
-def _performance(model_seen: float, ref_seen: float) -> float:
-    """Performance term ``1 - model_seen / ref_seen`` (lower-is-better metrics, in-distribution).
+def _log_ratio(numerator: float, denominator: float) -> float:
+    """Natural-log ratio ``log(numerator / denominator)`` for positive error metrics.
 
-    Positive when the model's seen-split error is below the reference's, zero when equal (including
-    the reference compared against itself), negative when worse. The denominator is sign-stabilized
-    to avoid division by zero.
+    Returns NaN if either argument is missing or non-positive. Symmetric and additive: a 2x improvement and a 2x
+    degradation map to ``+-log 2``, and log ratios sum, which is what makes the seen/shift/overall robustness terms
+    decompose exactly.
     """
-    if pd.isna(model_seen) or pd.isna(ref_seen):
+    if pd.isna(numerator) or pd.isna(denominator) or numerator <= 0 or denominator <= 0:
         return float("nan")
-    denom = ref_seen + (EPSILON if ref_seen >= 0 else -EPSILON)
-    return 1.0 - model_seen / denom
+    return math.log(numerator / denominator)
 
 
-def _gap_ratio(model_gap: float, ref_gap: float, cfg: GapConfig) -> float:
-    """Non-negative robustness multiplier comparing a model's seen->unseen degradation to the reference's.
+def _seen_robustness(model_seen: float, ref_seen: float) -> float:
+    """ID-level robustness ``log(ref_seen / model_seen)``.
 
-    Always ``>= 0`` so it never flips the sign of ``performance * gap_ratio`` -- this keeps the final
-    score monotone (higher == better, with the sign carried by the performance term). ``bounded`` mode
-    returns a value in ``(0, 1)`` that grows as the model's gap shrinks. ``ratio`` mode returns the
-    floored ``|ref_gap| / |model_gap|`` clipped to ``[0, clip]`` (``> 1`` when the model degrades less
-    than the reference, ``< 1`` when it degrades more).
+    Positive when the model's seen error is below the reference's, zero when equal (including the reference compared
+    against itself), negative when worse.
     """
-    if pd.isna(model_gap) or pd.isna(ref_gap):
+    return _log_ratio(ref_seen, model_seen)
+
+
+def _shift_robustness(model_seen: float, model_unseen: float, ref_seen: float, ref_unseen: float) -> float:
+    """Shift robustness ``log((ref_unseen/ref_seen) / (model_unseen/model_seen))``.
+
+    Compares the model's seen->unseen degradation factor to the reference's. Positive when the model degrades less than
+    the reference (or improves under shift), zero when they degrade equally, negative when the model degrades more.
+    Equivalently ``log(ref_unseen/ref_seen) - log(model_unseen/model_seen)``.
+    """
+    ref_degradation = _log_ratio(ref_unseen, ref_seen)
+    model_degradation = _log_ratio(model_unseen, model_seen)
+    if pd.isna(ref_degradation) or pd.isna(model_degradation):
         return float("nan")
-
-    if cfg.mode == "bounded":
-        return (abs(ref_gap) + cfg.epsilon) / (abs(ref_gap) + abs(model_gap) + cfg.epsilon)
-
-    ratio = (abs(ref_gap) + cfg.epsilon) / (abs(model_gap) + cfg.epsilon)
-    return float(np.clip(ratio, 0.0, cfg.clip))
-
-
-def _compute_model_gaps(benchmark_df: pd.DataFrame, splits: tuple[str, str], metrics: list[str]) -> pd.DataFrame:
-    """Per-model seen->unseen gap (percent) per metric for one benchmark.
-
-    Args:
-        benchmark_df: Per-model frame from :func:`build_benchmark_df`, indexed by ``Model``.
-        splits: ``(seen_split, unseen_split)`` column prefixes.
-        metrics: Metric names.
-
-    Returns:
-        DataFrame indexed by ``Model`` with one column per metric holding the relative gap percent.
-    """
-    seen_split, unseen_split = splits
-    gaps = {
-        metric: relative_gap_pct(benchmark_df[f"{unseen_split}/{metric}"], benchmark_df[f"{seen_split}/{metric}"])
-        for metric in metrics
-    }
-    return pd.DataFrame(gaps, index=benchmark_df.index)
+    return ref_degradation - model_degradation
 
 
 def _select_reference(  # noqa: PLR0913
     reference_mode: str,
     *,
     frames: dict[str, pd.DataFrame],
-    gaps: dict[str, pd.DataFrame],
     splits: dict[str, tuple[str, str]],
     benchmark_key: str,
     model: str,
     metric: str,
     uniform_key: str,
 ) -> tuple[float, float]:
-    """Return ``(ref_seen, ref_gap)`` for one ``(benchmark, model, metric)`` cell.
+    """Return ``(ref_seen, ref_unseen)`` for one ``(benchmark, model, metric)`` cell.
 
-    ``naive_relative`` references the Naive row of the same benchmark; ``uniform_relative`` references
-    the same model's row in the Uniform benchmark. Returns ``(nan, nan)`` when the reference is
-    absent.
+    ``naive_relative`` references the Naive row of the same benchmark; ``uniform_relative`` references the same model's
+    row in the Uniform benchmark. Returns ``(nan, nan)`` when the reference is absent.
     """
     if reference_mode == "uniform_relative":
         ref_key, ref_model = uniform_key, model
@@ -130,85 +128,29 @@ def _select_reference(  # noqa: PLR0913
     if ref_frame is None or ref_model not in ref_frame.index:
         return float("nan"), float("nan")
 
-    seen_split, _ = splits[ref_key]
+    seen_split, unseen_split = splits[ref_key]
     ref_seen = float(ref_frame.loc[ref_model, f"{seen_split}/{metric}"])
-    ref_gap = float(gaps[ref_key].loc[ref_model, metric])
-    return ref_seen, ref_gap
+    ref_unseen = float(ref_frame.loc[ref_model, f"{unseen_split}/{metric}"])
+    return ref_seen, ref_unseen
 
 
-def compute_sensitivity_scores(  # noqa: PLR0913
-    metrics_df: pd.DataFrame,
-    benchmarks: list[tuple[str, str, str, str]],
+def _aggregate_term(
+    accum: dict[str, dict[str, list[float]]],
     metrics: list[str],
-    models_to_compare: list[str],
-    *,
-    reference_mode: str,
-    gap_cfg: GapConfig,
-    aggregate: str = "mean",
-    uniform_key: str = "uniform",
+    ordered_models: list[str],
+    agg_fn: Callable[[list[float]], np.floating],
 ) -> pd.DataFrame:
-    """Compute per-model, per-metric sensitivity scores aggregated across benchmarks.
-
-    For each benchmark, model and metric the score is ``performance * gap_ratio`` where the reference
-    is selected by ``reference_mode``. Scores are aggregated across benchmarks (NaN-safe), and a
-    ``Combined`` column holds the per-model mean across metrics. For ``uniform_relative`` the Uniform
-    benchmark is excluded from aggregation (its self-reference is degenerate).
+    """Aggregate per-benchmark scores into a per-model, per-metric frame (NaN-safe) with a ``Combined`` column.
 
     Args:
-        metrics_df: Combined results frame with a ``Name`` (``<dataset>_<model>``) column.
-        benchmarks: ``(key, name, seen_split, unseen_split)`` tuples in display order.
+        accum: ``accum[model][metric]`` -> list of per-benchmark scores.
         metrics: Metric names, in column order.
-        models_to_compare: Raw model identifiers to include.
-        reference_mode: ``"naive_relative"`` or ``"uniform_relative"``.
-        gap_cfg: Gap-ratio configuration.
-        aggregate: ``"mean"`` or ``"median"`` across benchmarks.
-        uniform_key: Benchmark key used as the ``uniform_relative`` reference.
+        ordered_models: Display model names, in row order.
+        agg_fn: NaN-safe reducer applied across benchmarks (``np.nanmean`` or ``np.nanmedian``).
 
     Returns:
-        DataFrame indexed by ``Model`` with one column per metric plus a ``Combined`` column.
+        DataFrame indexed by ``Model`` with one column per metric plus a ``Combined`` column (per-model mean).
     """
-    frames: dict[str, pd.DataFrame] = {}
-    gaps: dict[str, pd.DataFrame] = {}
-    splits: dict[str, tuple[str, str]] = {}
-    for key, _name, seen, unseen in benchmarks:
-        benchmark_df = build_benchmark_df(metrics_df, (seen, unseen), metrics, models_to_compare, show_run_id=False)
-        if benchmark_df.empty:
-            continue
-        benchmark_df = benchmark_df.set_index("Model")
-        frames[key] = benchmark_df
-        gaps[key] = _compute_model_gaps(benchmark_df, (seen, unseen), metrics)
-        splits[key] = (seen, unseen)
-
-    # accum[model][metric] -> list of per-benchmark scores
-    accum: dict[str, dict[str, list[float]]] = {}
-    for key, _name, seen, _unseen in benchmarks:
-        if key not in frames:
-            continue
-        # Skip the Uniform benchmark entirely under uniform_relative: a model is referenced against its
-        # own Uniform row, so scoring Uniform here would be a degenerate uniform-vs-uniform comparison.
-        if reference_mode == "uniform_relative" and key == uniform_key:
-            continue
-        frame = frames[key]
-        for model in frame.index:
-            for metric in metrics:
-                model_seen = float(frame.loc[model, f"{seen}/{metric}"])
-                model_gap = float(gaps[key].loc[model, metric])
-                ref_seen, ref_gap = _select_reference(
-                    reference_mode,
-                    frames=frames,
-                    gaps=gaps,
-                    splits=splits,
-                    benchmark_key=key,
-                    model=model,
-                    metric=metric,
-                    uniform_key=uniform_key,
-                )
-                score = _performance(model_seen, ref_seen) * _gap_ratio(model_gap, ref_gap, gap_cfg)
-                accum.setdefault(model, {}).setdefault(metric, []).append(score)
-
-    agg_fn = np.nanmedian if aggregate == "median" else np.nanmean
-    ordered_models = [MODEL_NAME_MAP.get(model, model) for model in models_to_compare]
-
     rows: list[dict[str, float | str]] = []
     for model in ordered_models:
         if model not in accum:
@@ -225,6 +167,80 @@ def compute_sensitivity_scores(  # noqa: PLR0913
         rows.append(record)
 
     return pd.DataFrame(rows).set_index("Model")
+
+
+def compute_robustness_scores(  # noqa: PLR0913
+    metrics_df: pd.DataFrame,
+    benchmarks: list[tuple[str, str, str, str]],
+    metrics: list[str],
+    models_to_compare: list[str],
+    *,
+    reference_mode: str,
+    aggregate: str = "mean",
+    uniform_key: str = "uniform",
+) -> dict[str, pd.DataFrame]:
+    """Compute per-model, per-metric robustness scores (seen, shift, overall) aggregated across benchmarks.
+
+    For each benchmark, model and metric three reference-relative log-ratio terms are computed (see the module
+    docstring): ``seen_robustness_score`` (ID-level), ``shift_robustness_score`` (degradation resistance) and their sum
+    ``robustness_score`` (overall). The reference is selected by ``reference_mode``. Scores are aggregated across
+    benchmarks (NaN-safe), and each frame carries a ``Combined`` column holding the per-model mean across metrics. For
+    ``uniform_relative`` the Uniform benchmark is excluded from aggregation (its self-reference is degenerate).
+
+    Args:
+        metrics_df: Combined results frame with a ``Name`` (``<dataset>_<model>``) column.
+        benchmarks: ``(key, name, seen_split, unseen_split)`` tuples in display order.
+        metrics: Metric names, in column order.
+        models_to_compare: Raw model identifiers to include.
+        reference_mode: ``"naive_relative"`` or ``"uniform_relative"``.
+        aggregate: ``"mean"`` or ``"median"`` across benchmarks.
+        uniform_key: Benchmark key used as the ``uniform_relative`` reference.
+
+    Returns:
+        Dict keyed by :data:`SEEN_TERM`, :data:`SHIFT_TERM` and :data:`OVERALL_TERM`; each value is a DataFrame indexed
+        by ``Model`` with one column per metric plus a ``Combined`` column.
+    """
+    frames: dict[str, pd.DataFrame] = {}
+    splits: dict[str, tuple[str, str]] = {}
+    for key, _name, seen, unseen in benchmarks:
+        benchmark_df = build_benchmark_df(metrics_df, (seen, unseen), metrics, models_to_compare, show_run_id=False)
+        if benchmark_df.empty:
+            continue
+        frames[key] = benchmark_df.set_index("Model")
+        splits[key] = (seen, unseen)
+
+    # accum[term][model][metric] -> list of per-benchmark scores
+    accum: dict[str, dict[str, dict[str, list[float]]]] = {term: {} for term in TERM_FILE_STEMS}
+    for key, _name, seen, unseen in benchmarks:
+        if key not in frames:
+            continue
+        # Skip the Uniform benchmark entirely under uniform_relative: a model is referenced against its
+        # own Uniform row, so scoring Uniform here would be a degenerate uniform-vs-uniform comparison.
+        if reference_mode == "uniform_relative" and key == uniform_key:
+            continue
+        frame = frames[key]
+        for model in frame.index:
+            for metric in metrics:
+                model_seen = float(frame.loc[model, f"{seen}/{metric}"])
+                model_unseen = float(frame.loc[model, f"{unseen}/{metric}"])
+                ref_seen, ref_unseen = _select_reference(
+                    reference_mode,
+                    frames=frames,
+                    splits=splits,
+                    benchmark_key=key,
+                    model=model,
+                    metric=metric,
+                    uniform_key=uniform_key,
+                )
+                seen_score = _seen_robustness(model_seen, ref_seen)
+                shift_score = _shift_robustness(model_seen, model_unseen, ref_seen, ref_unseen)
+                overall_score = seen_score + shift_score  # == log(ref_unseen / model_unseen)
+                for term, value in ((SEEN_TERM, seen_score), (SHIFT_TERM, shift_score), (OVERALL_TERM, overall_score)):
+                    accum[term].setdefault(model, {}).setdefault(metric, []).append(value)
+
+    agg_fn = np.nanmedian if aggregate == "median" else np.nanmean
+    ordered_models = [MODEL_NAME_MAP.get(model, model) for model in models_to_compare]
+    return {term: _aggregate_term(accum[term], metrics, ordered_models, agg_fn) for term in TERM_FILE_STEMS}
 
 
 def _metric_label(metric: str) -> str:
@@ -249,9 +265,8 @@ def _nice_step(raw_step: float) -> float:
 def _radial_ticks(values: list[float], *, n_target: int = 5) -> tuple[float, float, float, NDArray]:
     """Return ``(r_lower, r_upper, step, ticks)`` snapped to a nice step around the data (and zero).
 
-    The bounds are multiples of ``step`` so every gridline circle is equally separated and the outermost
-    ring sits exactly on the rim. A full step of headroom is added when the data lands on a boundary so
-    polygons never touch the rim.
+    The bounds are multiples of ``step`` so every gridline circle is equally separated and the outermost ring sits on
+    the rim. A full step of headroom is added when the data lands on a boundary so polygons never touch the rim.
     """
     data_lower = min(0.0, np.nanmin(values)) if values else 0.0
     data_upper = max(0.0, np.nanmax(values)) if values else 1.0
@@ -270,9 +285,8 @@ def _radial_ticks(values: list[float], *, n_target: int = 5) -> tuple[float, flo
 def _plot_score_radar(scores_df: pd.DataFrame, output_path: Path, colormap: str, title: str, filename: str) -> None:
     """Render a radar/spider plot of per-model sensitivity scores across the metric axes.
 
-    One closed polygon (with light fill) per model spans the metric axes; the per-model ``Combined``
-    score is annotated in the legend. A dashed circle marks the ``score = 0`` baseline (as good as
-    the reference).
+    One closed polygon (with light fill) per model spans the metric axes; the per-model ``Combined`` score is annotated
+    in the legend. A dashed circle marks the ``score = 0`` baseline (as good as the reference).
 
     Args:
         scores_df: Frame indexed by ``Model`` with metric columns plus a ``Combined`` column.
@@ -288,7 +302,7 @@ def _plot_score_radar(scores_df: pd.DataFrame, output_path: Path, colormap: str,
     angles = np.linspace(0, 2 * np.pi, len(metrics), endpoint=False).tolist()
     closed_angles = [*angles, angles[0]]
 
-    palette = sns.color_palette(colormap, len(scores_df))
+    palette = _model_colors(scores_df.index, colormap)
     fig = plt.figure(figsize=(11, 9))
     ax = fig.add_subplot(111, polar=True)
     ax.set_theta_offset(np.pi / 2)
@@ -370,12 +384,12 @@ def _plot_score_radar(scores_df: pd.DataFrame, output_path: Path, colormap: str,
     print(f"✓ Plot saved as '{output_file}'")
 
 
-def _write_scores_csv(scores_df: pd.DataFrame, output_path: Path, filename: str) -> Path:
+def _write_scores_csv(scores_df: pd.DataFrame, output_path: Path, filename: str, *, label: str) -> Path:
     """Write the per-model scores to CSV and print a formatted summary."""
     output_path.mkdir(parents=True, exist_ok=True)
     output_file = output_path / f"{filename}.csv"
     scores_df.to_csv(output_file)
-    print("Sensitivity scores (higher = less sensitive to shift than the reference):")
+    print(f"{label} (higher = more robust than the reference):")
     print(scores_df.to_string(float_format="{:.3f}".format))
     print(f"✓ Scores saved as '{output_file}'")
     return output_file
@@ -424,12 +438,98 @@ def _write_scores_tex(scores_df: pd.DataFrame, output_path: Path, filename: str,
     return output_file
 
 
-def run_score_analysis(config: DictConfig, log: Logger, output_path: Path) -> None:
-    """Run sensitivity-score analysis for each configured reference mode.
+def _plot_robustness_decomposition(  # noqa: PLR0913
+    seen_df: pd.DataFrame, shift_df: pd.DataFrame, output_path: Path, colormap: str, title: str, filename: str
+) -> None:
+    """Scatter the seen/shift robustness decomposition: one panel per metric (plus ``Combined``).
 
-    For each ``config.score.reference_modes`` entry, computes per-model per-metric scores from the
-    combined results file and writes a radar plot, a CSV table and a LaTeX table under
-    ``output_path/<mode>/``.
+    Each point is a model at ``(seen_robustness_score, shift_robustness_score)``; the reference sits at the origin. The
+    dashed anti-diagonal is the ``overall = seen + shift = 0`` contour -- points above it have positive overall OOD
+    robustness, and the upper-right quadrant is both better in-distribution and more shift-robust than the reference.
+
+    Args:
+        seen_df: ``seen`` term frame (indexed by ``Model``, metric columns plus ``Combined``).
+        shift_df: ``shift`` term frame, same shape/index as ``seen_df``.
+        output_path: Directory to save the plot.
+        colormap: Seaborn/matplotlib palette name.
+        title: Figure title.
+        filename: Output file stem (``.png`` appended).
+    """
+    panels = list(seen_df.columns)  # metric columns followed by COMBINED_COLUMN
+    if not panels:
+        return
+
+    # A single shared, symmetric bound keeps every panel on the same (shared) scale and comparable.
+    finite = [v for v in (*seen_df.to_numpy().ravel(), *shift_df.to_numpy().ravel()) if not pd.isna(v)]
+    bound = (max((abs(v) for v in finite), default=1.0) or 1.0) * 1.18
+
+    palette = _model_colors(seen_df.index, colormap)
+    n_cols = min(3, len(panels))
+    n_rows = math.ceil(len(panels) / n_cols)
+    fig, axes = plt.subplots(
+        n_rows, n_cols, figsize=(4.2 * n_cols, 4.2 * n_rows), squeeze=False, sharex=True, sharey=True
+    )
+    flat_axes = axes.flatten()
+
+    for index, (panel, ax) in enumerate(zip(panels, flat_axes, strict=False)):
+        # Reference axes through the origin and the overall = 0 contour (seen + shift = 0).
+        ax.axhline(0.0, color="dimgray", linewidth=0.9, zorder=1)
+        ax.axvline(0.0, color="dimgray", linewidth=0.9, zorder=1)
+        ax.plot(
+            [-bound, bound], [bound, -bound], color="darkorange", linestyle="--", linewidth=1.0, alpha=0.7, zorder=1
+        )
+
+        for color, model in zip(palette, seen_df.index, strict=False):
+            x, y = seen_df[panel][model], shift_df[panel][model]
+            if pd.isna(x) or pd.isna(y):
+                continue
+            label = str(model) if index == 0 else None  # collect legend handles once, from the first panel
+            ax.scatter(x, y, color=color, s=80, edgecolor="black", linewidth=0.8, alpha=0.9, zorder=3, label=label)
+
+        ax.set_xlim(-bound, bound)
+        ax.set_ylim(-bound, bound)
+        panel_label = COMBINED_COLUMN if panel == COMBINED_COLUMN else _metric_label(panel)
+        ax.set_title(panel_label, fontsize=12, fontweight="bold")
+        ax.set_aspect("equal", adjustable="box")
+        ax.tick_params(axis="both", labelsize=7, colors="dimgray")
+        ax.grid(visible=True, color="gray", alpha=0.18, linewidth=0.6)
+        sns.despine(ax=ax, trim=False)
+        # With shared axes, only label the outer edges to avoid repetition.
+        if index % n_cols == 0:
+            ax.set_ylabel("Shift Robustness", fontsize=10, fontweight="bold")
+        if index >= len(panels) - n_cols:
+            ax.set_xlabel("Seen Robustness", fontsize=10, fontweight="bold")
+
+    for ax in flat_axes[len(panels) :]:
+        ax.set_visible(False)
+
+    handles, labels = flat_axes[0].get_legend_handles_labels()
+    fig.legend(
+        handles,
+        labels,
+        loc="lower center",
+        ncol=min(len(labels), 5),
+        fontsize=10,
+        frameon=True,
+        framealpha=0.9,
+        bbox_to_anchor=(0.5, -0.02),
+    )
+
+    fig.suptitle(title, fontsize=16, fontweight="bold")
+    fig.tight_layout(rect=(0, 0.04, 1, 1))
+    output_path.mkdir(parents=True, exist_ok=True)
+    output_file = output_path / f"{filename}.png"
+    fig.savefig(output_file, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    print(f"✓ Plot saved as '{output_file}'")
+
+
+def run_score_analysis(config: DictConfig, log: Logger, output_path: Path) -> None:
+    """Run robustness-score analysis for each configured reference mode.
+
+    For each ``config.score.reference_modes`` entry, computes per-model per-metric seen/shift/overall robustness scores
+    from the combined results file and, under ``output_path/<mode>/``, writes a radar plot, CSV table and LaTeX table
+    per term plus a seen-vs-shift decomposition scatter.
 
     Args:
         config: Analysis configuration (``benchmarks_filepath``, ``benchmarks``, ``models_to_compare``,
@@ -472,34 +572,39 @@ def run_score_analysis(config: DictConfig, log: Logger, output_path: Path) -> No
         benchmarks.append((key, spec.name, spec.seen, spec.unseen))
 
     score_cfg = config.score
-    gap_cfg = GapConfig(
-        mode=str(score_cfg.gap_mode),
-        epsilon=float(score_cfg.gap_epsilon),
-        clip=float(score_cfg.gap_clip),
-    )
 
     for reference_mode in score_cfg.reference_modes:
-        log.info("Computing sensitivity scores for reference mode '%s'", reference_mode)
-        scores_df = compute_sensitivity_scores(
+        log.info("Computing robustness scores for reference mode '%s'", reference_mode)
+        scores = compute_robustness_scores(
             metrics_df,
             benchmarks,
             metrics,
             models_to_compare,
             reference_mode=reference_mode,
-            gap_cfg=gap_cfg,
             aggregate=str(score_cfg.aggregate),
             uniform_key=str(score_cfg.uniform_key),
         )
-        if scores_df.empty:
+        if scores[OVERALL_TERM].empty:
             log.warning("No models scored for reference mode '%s'; skipping.", reference_mode)
             continue
 
         mode_output = output_path / reference_mode
-        print(f"\n=== Sensitivity scores: {reference_mode} ({len(scores_df)} models) ===")
-        title = f"Distribution-Shift Sensitivity ({reference_mode})"
-        _plot_score_radar(scores_df, mode_output, colormap, title, "sensitivity_radar")
-        _write_scores_csv(scores_df, mode_output, "sensitivity_scores")
-        _write_scores_tex(scores_df, mode_output, "sensitivity_scores", caption=title)
+        print(f"\n=== Robustness scores: {reference_mode} ({len(scores[OVERALL_TERM])} models) ===")
+        for term, stem in TERM_FILE_STEMS.items():
+            term_df = scores[term]
+            term_title = f"{TERM_TITLES[term]} ({reference_mode})"
+            _plot_score_radar(term_df, mode_output, colormap, term_title, f"{stem}_radar")
+            _write_scores_csv(term_df, mode_output, f"{stem}_scores", label=TERM_TITLES[term])
+            _write_scores_tex(term_df, mode_output, f"{stem}_scores", caption=term_title)
 
-    print("\n✓ Sensitivity score analysis complete!")
-    log.info("Sensitivity score analysis complete!")
+        _plot_robustness_decomposition(
+            scores[SEEN_TERM],
+            scores[SHIFT_TERM],
+            mode_output,
+            colormap,
+            f"Robustness Decomposition ({reference_mode})",
+            "robustness_decomposition",
+        )
+
+    print("\n✓ Robustness score analysis complete!")
+    log.info("Robustness score analysis complete!")

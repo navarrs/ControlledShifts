@@ -7,7 +7,7 @@ analysis_name: sensitivity_score
 # Combined results file holding every benchmark's metrics (same source as the distribution-shift analysis).
 benchmarks_filepath: ./meta/runs/distribution_shift_results.csv
 output_path: ./outputs/score_analysis
-score_colormap: tab10 # Qualitative palette with well-separated hues for the radar's per-model lines.
+score_colormap: Dark2 # Qualitative palette with well-separated hues for the radar's per-model lines.
 
 # Duplicated from distribution_shift.yaml (kept in sync intentionally; small, rarely changes).
 benchmarks:
@@ -33,11 +33,8 @@ benchmarks:
       unseen: "test/waymo-environments-ood"
 
 score:
-  # Which sensitivity scores to produce. naive_relative compares each model to the Naive baseline
+  # Which robustness scores to produce. naive_relative compares each model to the Naive baseline
   # within a benchmark; uniform_relative compares each model to its own Uniform-benchmark performance.
   reference_modes: [naive_relative, uniform_relative]
   uniform_key: uniform # Benchmark key used as the uniform_relative reference.
-  aggregate: mean # Aggregation across benchmarks and metrics (mean|median).
-  gap_mode: ratio # Gap-ratio form (ratio|bounded).
-  gap_epsilon: 1.0 # Percentage-point floor on gaps; prevents the near-zero ratio blow-up.
-  gap_clip: 5.0 # Symmetric clip applied to the ratio mode.
+  aggregate: mean # Aggregation across benchmarks (mean|median); the Combined column always means across metrics.

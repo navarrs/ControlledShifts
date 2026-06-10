@@ -100,40 +100,49 @@ It writes per-benchmark comparison plots under `<output_path>/<benchmark>/` and 
 benchmarks to `<output_path>/results.tex`.
 
 
-## Sensitivity Score Analysis
+## Robustness Score Analysis
 
-The file `configs/analysis/sensitivity_score.yaml` reduces the same combined results file into a single comparable *sensitivity
-score* per model per metric, measured against a reference. Two reference modes are produced:
+The file `configs/analysis/sensitivity_score.yaml` reduces the same combined results file into comparable *robustness
+scores* per model per metric, measured against a reference. Two reference modes are produced:
 
 - `naive_relative` — each model vs the **Naive** baseline **within the same benchmark**.
 - `uniform_relative` — each model vs **its own** performance in the **Uniform** benchmark (e.g. AutoBot on
   EgoSafeShift vs AutoBot on Uniform). The Uniform benchmark is excluded from this mode's aggregation.
 
-For each benchmark, model and metric the score is `performance * gap_ratio`, then averaged across benchmarks (and across
-metrics for the `Combined` column). All metrics are lower-is-better, and in both reference modes the convention is the
-same: **higher == better** (less sensitive to shift than the reference), `0` == on par with the reference, negative ==
-worse.
+All metrics are lower-is-better (errors). Working in natural-log space, a model's total out-of-distribution advantage
+over the reference decomposes **exactly and additively** into two reference-relative robustness terms:
 
-- `performance = 1 - model_seen / ref_seen` uses the **seen (ID)** values — clean in-distribution quality vs the
-  reference. Positive means better than the reference; the reference vs itself is 0 (so the Naive row is a visible
-  baseline in `naive_relative`). This term carries the sign of the score.
-- `gap_ratio` is a **non-negative robustness multiplier** comparing how much the metric worsens seen→unseen
-  (`relative_gap_pct(unseen, seen)`) against the reference's degradation. Because the raw ratio is unstable near zero,
-  it is configurable via the `score` block:
-  - `gap_mode: ratio` (default) — `|ref_gap| / |model_gap|` floored by `gap_epsilon` (percentage points) and clipped to
-    `[0, gap_clip]`; `> 1` when the model degrades less than the reference, `< 1` when it degrades more.
-  - `gap_mode: bounded` — the parameter-light form `|ref_gap| / (|ref_gap| + |model_gap|)` in `(0, 1)`.
+```
+log(ref_unseen / model_unseen) = log(ref_seen / model_seen) + log((ref_unseen/ref_seen) / (model_unseen/model_seen))
+   robustness_score (overall)  =     seen_robustness_score   +              shift_robustness_score
+```
 
-  Keeping this term non-negative ensures `performance * gap_ratio` never flips sign, so higher is consistently better.
+- `seen_robustness_score = log(ref_seen / model_seen)` — **ID-level robustness**: how much better the model already is
+  on the seen split (its starting point).
+- `shift_robustness_score = log((ref_unseen/ref_seen) / (model_unseen/model_seen))` — **shift robustness**: how much
+  *less* the model degrades seen→unseen than the reference. Sign-preserving, so a model that improves under shift is
+  rewarded.
+- `robustness_score = seen_robustness_score + shift_robustness_score = log(ref_unseen / model_unseen)` — **overall OOD
+  robustness** vs the reference.
+
+All three share the same log units, are symmetric and unbounded both ways (a 2× improvement and a 2× degradation are
+`±log 2`), and are `0` for the reference compared against itself (so the Naive row is a visible baseline in
+`naive_relative`). In both reference modes the convention is the same: **higher == more robust than the reference**,
+`0` == on par, negative == worse. There are no epsilon/clip knobs and no regression — the terms are exact log ratios.
+
+Each term is aggregated across benchmarks (NaN-safe `mean`/`median`, set by `score.aggregate`); the `Combined` column
+always holds the per-model mean across metrics.
 
 Run the analysis as:
 ```bash
 uv run -m controlledshifts.run_analysis analysis=sensitivity_score
 ```
 
-For each reference mode it writes a radar/spider plot (`sensitivity_radar.png`), a CSV table
-(`sensitivity_scores.csv`) and a LaTeX table (`sensitivity_scores.tex`) under `<output_path>/<mode>/`. Higher scores
-mean the model is less sensitive to distribution shift than the reference.
+For each reference mode it writes, under `<output_path>/<mode>/`, a radar plot, CSV table and LaTeX table for each term
+(`seen_robustness_*`, `shift_robustness_*`, `robustness_*`) plus a `robustness_decomposition.png` scatter — one panel
+per metric placing each model at `(seen_robustness_score, shift_robustness_score)`, with the reference at the origin and
+anti-diagonals marking constant overall robustness. Upper-right points are both better in-distribution and more
+shift-robust than the reference.
 
 
 # Sample Selection
