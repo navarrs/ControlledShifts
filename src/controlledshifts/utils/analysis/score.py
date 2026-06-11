@@ -6,23 +6,26 @@ against a reference:
 * ``naive_relative`` -- each model vs the Naive baseline within the same benchmark.
 * ``uniform_relative`` -- each model vs its own performance in the Uniform benchmark.
 
-Working in log space (metrics are positive, lower-is-better errors), a model's total out-of-distribution advantage over
-the reference decomposes *exactly and additively* into two reference-relative robustness terms::
-
-    log(ref_unseen / model_unseen) = log(ref_seen / model_seen) + log((ref_unseen/ref_seen) / (model_unseen/model_seen))
-       robustness_score (overall)  =     seen_robustness_score   +              shift_robustness_score
+Working in log space (metrics are positive, lower-is-better errors), each model is characterized by two
+reference-relative robustness axes:
 
 * ``seen_robustness_score = log(ref_seen / model_seen)`` -- ID-level robustness: how much better the model already is on
   the seen split (its starting point).
 * ``shift_robustness_score = log((ref_unseen/ref_seen) / (model_unseen/model_seen))`` -- shift robustness: how much less
   the model degrades seen->unseen than the reference (sign-preserving, so improving under shift is rewarded).
-* ``robustness_score = seen_robustness_score + shift_robustness_score = log(ref_unseen / model_unseen)`` -- overall OOD
-  robustness vs the reference.
 
-All three share the same natural-log units, are symmetric and unbounded both ways (a 2x improvement and a 2x degradation
-are ``+-log 2``), are ``0`` for the reference compared against itself, and need no epsilon/clip and no regression. The
+Both share natural-log units, are symmetric and unbounded both ways (a 2x improvement and a 2x degradation are
+``+-log 2``), are ``0`` for the reference compared against itself, and need no epsilon/clip and no regression. The
 convention is the same in both reference modes: **higher == more robust than the reference**, zero == on par, negative
-== worse. See `docs/ANALYSIS.md`.
+== worse.
+
+To rank models by a single value, the two axes are reduced to a ``combined`` score. Their raw sum is *not* used: it
+telescopes to ``seen + shift = log(ref_unseen / model_unseen)``, so it ranks models purely by OOD error (the reference
+cancels to an additive constant) and adds nothing beyond the OOD numbers. Instead the combined score uses **standardized
+equal-influence**: each axis is z-scored across the model cohort (per metric), the two z-scores are summed, and the
+per-model mean across metrics is the ranking score. This gives both axes -- and every metric -- equal say regardless of
+their natural spread. The trade-off is that the combined score is **cohort-relative**: ``0`` means "cohort average," not
+"on par with the reference," and scores recenter if the set of models changes. See `docs/ANALYSIS.md`.
 """
 
 import math
@@ -44,16 +47,16 @@ from controlledshifts.utils.constants import EPSILON
 
 COMBINED_COLUMN = "Combined"
 
-# Score-term keys returned by :func:`compute_robustness_scores`, mapped to their output-file stem and display title.
+# Score-term keys returned by :func:`compute_robustness_scores`. The two per-metric robustness axes are rendered as
+# radars; the combined score is a cohort-relative ranking rendered as a sorted bar chart.
 SEEN_TERM = "seen"
 SHIFT_TERM = "shift"
-OVERALL_TERM = "overall"
-TERM_FILE_STEMS = {SEEN_TERM: "seen_robustness", SHIFT_TERM: "shift_robustness", OVERALL_TERM: "robustness"}
-TERM_TITLES = {
-    SEEN_TERM: "Seen (ID-level) Robustness",
-    SHIFT_TERM: "Shift Robustness",
-    OVERALL_TERM: "Overall OOD Robustness",
-}
+COMBINED_TERM = "combined"
+# Radar terms only (the per-metric robustness axes), mapped to their output-file stem and display title.
+RADAR_TERM_STEMS = {SEEN_TERM: "seen_robustness", SHIFT_TERM: "shift_robustness"}
+RADAR_TERM_TITLES = {SEEN_TERM: "Seen (ID-level) Robustness", SHIFT_TERM: "Shift Robustness"}
+COMBINED_FILE_STEM = "combined_robustness"
+COMBINED_TITLE = "Combined Robustness Score (standardized z-sum)"
 
 # Cosine/sine deadband for deciding radar label alignment (center vs left/right, top/bottom).
 _LABEL_ALIGN_THRESHOLD = 0.1
@@ -179,13 +182,14 @@ def compute_robustness_scores(  # noqa: PLR0913
     aggregate: str = "mean",
     uniform_key: str = "uniform",
 ) -> dict[str, pd.DataFrame]:
-    """Compute per-model, per-metric robustness scores (seen, shift, overall) aggregated across benchmarks.
+    """Compute per-model, per-metric robustness scores (seen, shift, combined) aggregated across benchmarks.
 
-    For each benchmark, model and metric three reference-relative log-ratio terms are computed (see the module
-    docstring): ``seen_robustness_score`` (ID-level), ``shift_robustness_score`` (degradation resistance) and their sum
-    ``robustness_score`` (overall). The reference is selected by ``reference_mode``. Scores are aggregated across
-    benchmarks (NaN-safe), and each frame carries a ``Combined`` column holding the per-model mean across metrics. For
-    ``uniform_relative`` the Uniform benchmark is excluded from aggregation (its self-reference is degenerate).
+    For each benchmark, model and metric two reference-relative log-ratio axes are computed (see the module docstring):
+    ``seen_robustness_score`` (ID-level) and ``shift_robustness_score`` (degradation resistance). The reference is
+    selected by ``reference_mode``. Both are aggregated across benchmarks (NaN-safe) into per-metric frames with a
+    ``Combined`` column. The ``combined`` frame is then derived by :func:`_standardized_combined` -- a cohort-relative
+    ranking that z-scores each axis and sums them. For ``uniform_relative`` the Uniform benchmark is excluded from
+    aggregation (its self-reference is degenerate).
 
     Args:
         metrics_df: Combined results frame with a ``Name`` (``<dataset>_<model>``) column.
@@ -197,7 +201,7 @@ def compute_robustness_scores(  # noqa: PLR0913
         uniform_key: Benchmark key used as the ``uniform_relative`` reference.
 
     Returns:
-        Dict keyed by :data:`SEEN_TERM`, :data:`SHIFT_TERM` and :data:`OVERALL_TERM`; each value is a DataFrame indexed
+        Dict keyed by :data:`SEEN_TERM`, :data:`SHIFT_TERM` and :data:`COMBINED_TERM`; each value is a DataFrame indexed
         by ``Model`` with one column per metric plus a ``Combined`` column.
     """
     frames: dict[str, pd.DataFrame] = {}
@@ -210,7 +214,7 @@ def compute_robustness_scores(  # noqa: PLR0913
         splits[key] = (seen, unseen)
 
     # accum[term][model][metric] -> list of per-benchmark scores
-    accum: dict[str, dict[str, dict[str, list[float]]]] = {term: {} for term in TERM_FILE_STEMS}
+    accum: dict[str, dict[str, dict[str, list[float]]]] = {SEEN_TERM: {}, SHIFT_TERM: {}}
     for key, _name, seen, unseen in benchmarks:
         if key not in frames:
             continue
@@ -234,13 +238,44 @@ def compute_robustness_scores(  # noqa: PLR0913
                 )
                 seen_score = _seen_robustness(model_seen, ref_seen)
                 shift_score = _shift_robustness(model_seen, model_unseen, ref_seen, ref_unseen)
-                overall_score = seen_score + shift_score  # == log(ref_unseen / model_unseen)
-                for term, value in ((SEEN_TERM, seen_score), (SHIFT_TERM, shift_score), (OVERALL_TERM, overall_score)):
+                for term, value in ((SEEN_TERM, seen_score), (SHIFT_TERM, shift_score)):
                     accum[term].setdefault(model, {}).setdefault(metric, []).append(value)
 
     agg_fn = np.nanmedian if aggregate == "median" else np.nanmean
     ordered_models = [MODEL_NAME_MAP.get(model, model) for model in models_to_compare]
-    return {term: _aggregate_term(accum[term], metrics, ordered_models, agg_fn) for term in TERM_FILE_STEMS}
+    seen_df = _aggregate_term(accum[SEEN_TERM], metrics, ordered_models, agg_fn)
+    shift_df = _aggregate_term(accum[SHIFT_TERM], metrics, ordered_models, agg_fn)
+    return {SEEN_TERM: seen_df, SHIFT_TERM: shift_df, COMBINED_TERM: _standardized_combined(seen_df, shift_df, metrics)}
+
+
+def _standardized_combined(seen_df: pd.DataFrame, shift_df: pd.DataFrame, metrics: list[str]) -> pd.DataFrame:
+    """Cohort-relative ranking score: z-score each axis across models (per metric), sum, then mean across metrics.
+
+    Standardizing per metric gives each axis -- and each metric -- equal influence regardless of its natural spread
+    (see the module docstring). A metric column with ~zero spread across models contributes 0 (no information). The
+    ``Combined`` column is the per-model mean across metrics and is the headline ranking value; ``0`` is the cohort
+    average, not the reference.
+
+    Args:
+        seen_df: Aggregated ``seen`` frame (indexed by ``Model``, metric columns plus ``Combined``).
+        shift_df: Aggregated ``shift`` frame, same shape/index as ``seen_df``.
+        metrics: Metric names (the per-metric columns to standardize).
+
+    Returns:
+        DataFrame indexed by ``Model`` with one z-sum column per metric plus a ``Combined`` ranking column.
+    """
+
+    def _zscore(column: pd.Series) -> pd.Series:
+        std = column.std(ddof=0)
+        if pd.isna(std) or std < EPSILON:
+            return column * 0.0  # constant (or empty) column carries no ranking information
+        return (column - column.mean()) / std
+
+    combined = pd.DataFrame(index=seen_df.index)
+    for metric in metrics:
+        combined[metric] = _zscore(seen_df[metric]) + _zscore(shift_df[metric])
+    combined[COMBINED_COLUMN] = combined[metrics].mean(axis=1, skipna=True)
+    return combined
 
 
 def _metric_label(metric: str) -> str:
@@ -443,9 +478,9 @@ def _plot_robustness_decomposition(  # noqa: PLR0913
 ) -> None:
     """Scatter the seen/shift robustness decomposition: one panel per metric (plus ``Combined``).
 
-    Each point is a model at ``(seen_robustness_score, shift_robustness_score)``; the reference sits at the origin. The
-    dashed anti-diagonal is the ``overall = seen + shift = 0`` contour -- points above it have positive overall OOD
-    robustness, and the upper-right quadrant is both better in-distribution and more shift-robust than the reference.
+    Each point is a model at ``(seen_robustness_score, shift_robustness_score)``; the reference sits at the origin and
+    the gray axes split the plane into quadrants. The upper-right quadrant is both better in-distribution and more
+    shift-robust than the reference.
 
     Args:
         seen_df: ``seen`` term frame (indexed by ``Model``, metric columns plus ``Combined``).
@@ -472,12 +507,9 @@ def _plot_robustness_decomposition(  # noqa: PLR0913
     flat_axes = axes.flatten()
 
     for index, (panel, ax) in enumerate(zip(panels, flat_axes, strict=False)):
-        # Reference axes through the origin and the overall = 0 contour (seen + shift = 0).
+        # Reference axes through the origin (seen = 0 and shift = 0).
         ax.axhline(0.0, color="dimgray", linewidth=0.9, zorder=1)
         ax.axvline(0.0, color="dimgray", linewidth=0.9, zorder=1)
-        ax.plot(
-            [-bound, bound], [bound, -bound], color="darkorange", linestyle="--", linewidth=1.0, alpha=0.7, zorder=1
-        )
 
         for color, model in zip(palette, seen_df.index, strict=False):
             x, y = seen_df[panel][model], shift_df[panel][model]
@@ -524,12 +556,65 @@ def _plot_robustness_decomposition(  # noqa: PLR0913
     print(f"✓ Plot saved as '{output_file}'")
 
 
+def _plot_combined_ranking(
+    combined_df: pd.DataFrame, output_path: Path, colormap: str, title: str, filename: str
+) -> None:
+    """Sorted horizontal bar chart of the combined ranking score (the ``Combined`` column), best at the top.
+
+    A bar chart fits a ranking better than a radar and avoids a "reference (0)" baseline, which is meaningless for the
+    cohort-relative combined score. The dashed line at ``0`` marks the cohort average.
+
+    Args:
+        combined_df: Combined frame (indexed by ``Model``) whose ``Combined`` column is the ranking score.
+        output_path: Directory to save the plot.
+        colormap: Seaborn/matplotlib palette name (fallback for models without a fixed color).
+        title: Figure title.
+        filename: Output file stem (``.png`` appended).
+    """
+    ranking = combined_df[COMBINED_COLUMN].dropna().sort_values(ascending=True)  # ascending -> best ends up on top
+    if ranking.empty:
+        return
+
+    colors = _model_colors(ranking.index, colormap)
+    fig, ax = plt.subplots(figsize=(9, 0.7 * len(ranking) + 2))
+    ax.barh(list(ranking.index), ranking.to_numpy(), color=colors, edgecolor="black", linewidth=0.8, alpha=0.9)
+    ax.axvline(0.0, color="dimgray", linestyle="--", linewidth=1.0)
+    ax.annotate(
+        "cohort average (0)",
+        xy=(0.0, 1.0),
+        xytext=(3, -3),
+        xycoords=("data", "axes fraction"),
+        textcoords="offset points",
+        fontsize=8,
+        color="dimgray",
+        ha="left",
+        va="top",
+    )
+
+    for model, value in ranking.items():
+        ax.text(value, model, f"  {value:+.2f}", va="center", ha="left" if value >= 0 else "right", fontsize=9)
+
+    ax.set_xlabel("Combined robustness score (standardized z-sum)", fontsize=11, fontweight="bold")
+    ax.set_title(title, fontsize=15, fontweight="bold")
+    ax.grid(visible=True, axis="x", alpha=0.25, linewidth=0.6)
+    ax.set_axisbelow(True)
+    sns.despine(ax=ax)
+
+    fig.tight_layout()
+    output_path.mkdir(parents=True, exist_ok=True)
+    output_file = output_path / f"{filename}.png"
+    fig.savefig(output_file, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    print(f"✓ Plot saved as '{output_file}'")
+
+
 def run_score_analysis(config: DictConfig, log: Logger, output_path: Path) -> None:
     """Run robustness-score analysis for each configured reference mode.
 
-    For each ``config.score.reference_modes`` entry, computes per-model per-metric seen/shift/overall robustness scores
-    from the combined results file and, under ``output_path/<mode>/``, writes a radar plot, CSV table and LaTeX table
-    per term plus a seen-vs-shift decomposition scatter.
+    For each ``config.score.reference_modes`` entry, computes per-model per-metric seen/shift robustness scores from
+    the combined results file and, under ``output_path/<mode>/``, writes: a radar plot, CSV table and LaTeX table for
+    each of the two axes; a seen-vs-shift decomposition scatter; and the standardized combined ranking as a sorted bar
+    chart with its CSV and LaTeX table.
 
     Args:
         config: Analysis configuration (``benchmarks_filepath``, ``benchmarks``, ``models_to_compare``,
@@ -584,17 +669,19 @@ def run_score_analysis(config: DictConfig, log: Logger, output_path: Path) -> No
             aggregate=str(score_cfg.aggregate),
             uniform_key=str(score_cfg.uniform_key),
         )
-        if scores[OVERALL_TERM].empty:
+        if scores[COMBINED_TERM].empty:
             log.warning("No models scored for reference mode '%s'; skipping.", reference_mode)
             continue
 
         mode_output = output_path / reference_mode
-        print(f"\n=== Robustness scores: {reference_mode} ({len(scores[OVERALL_TERM])} models) ===")
-        for term, stem in TERM_FILE_STEMS.items():
+        print(f"\n=== Robustness scores: {reference_mode} ({len(scores[COMBINED_TERM])} models) ===")
+
+        # Two robustness axes: radar + CSV + LaTeX each.
+        for term, stem in RADAR_TERM_STEMS.items():
             term_df = scores[term]
-            term_title = f"{TERM_TITLES[term]} ({reference_mode})"
+            term_title = f"{RADAR_TERM_TITLES[term]} ({reference_mode})"
             _plot_score_radar(term_df, mode_output, colormap, term_title, f"{stem}_radar")
-            _write_scores_csv(term_df, mode_output, f"{stem}_scores", label=TERM_TITLES[term])
+            _write_scores_csv(term_df, mode_output, f"{stem}_scores", label=RADAR_TERM_TITLES[term])
             _write_scores_tex(term_df, mode_output, f"{stem}_scores", caption=term_title)
 
         _plot_robustness_decomposition(
@@ -605,6 +692,15 @@ def run_score_analysis(config: DictConfig, log: Logger, output_path: Path) -> No
             f"Robustness Decomposition ({reference_mode})",
             "robustness_decomposition",
         )
+
+        # Combined ranking: sorted (best first) bar chart + CSV + LaTeX.
+        combined_title = f"{COMBINED_TITLE} ({reference_mode})"
+        combined_sorted = scores[COMBINED_TERM].sort_values(COMBINED_COLUMN, ascending=False)
+        _plot_combined_ranking(
+            scores[COMBINED_TERM], mode_output, colormap, combined_title, f"{COMBINED_FILE_STEM}_ranking"
+        )
+        _write_scores_csv(combined_sorted, mode_output, f"{COMBINED_FILE_STEM}_scores", label=COMBINED_TITLE)
+        _write_scores_tex(combined_sorted, mode_output, f"{COMBINED_FILE_STEM}_scores", caption=combined_title)
 
     print("\n✓ Robustness score analysis complete!")
     log.info("Robustness score analysis complete!")
