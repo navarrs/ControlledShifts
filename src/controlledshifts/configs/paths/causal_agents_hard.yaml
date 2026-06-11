@@ -3,33 +3,15 @@ defaults:
 
 tag: 'causal-agents-hard'
 
-# NOTE: scenarios are re-split into training/validation/testing by the number of non-causal agents (hardest scenarios
-# go to testing). Both an unperturbed `original` copy and a `remove_noncausal` perturbed copy are stored per split.
+# Scenarios are re-split into training/validation/testing by the number of non-causal agents (hardest go to testing);
+# the partition lives in splits/causal_agents_hard.json. Training/validation use the unmodified (base) scenes.
+train_sources:
+  - {variant: base, split_json: causal_agents_hard, split: training, tag: causal-agents-hard-original-training}
 
-# NOTE: for training and validation, this uses the reorganized original (unmodified) scenarios.
-train_data_path: [
-  "${paths.base_path}/processed/causal_agents_hard/original/training"
-] # list of paths to the training data
-train_data_tag: [
-  "causal-agents-hard-original-training"
-]
-val_data_path: [
-  "${paths.base_path}/processed/causal_agents_hard/original/validation"
-] # list of paths to the validation data
-val_data_tag: [
-  "causal-agents-hard-original-validation"
-]
+val_sources:
+  - {variant: base, split_json: causal_agents_hard, split: validation, tag: causal-agents-hard-original-validation}
 
-# NOTE: for testing, we evaluate the original and the perturbed (remove_noncausal) versions of the same held-out scenes.
-test_data_path: [
-  "${paths.base_path}/processed/causal_agents_hard/original/validation",
-  # "${paths.base_path}/processed/causal_agents_hard/original/testing",
-  # "${paths.base_path}/processed/causal_agents_hard/remove_noncausal/validation",
-  "${paths.base_path}/processed/causal_agents_hard/remove_noncausal/testing",
-]
-test_data_tag: [
-  "causal-agents-hard-original-validation",
-  # "causal-agents-hard-original-testing",
-  # "remove-noncausal-hard-validation",
-  "remove-noncausal-hard-testing",
-]
+# Testing evaluates the original and perturbed (remove_noncausal) versions of the same held-out scenes.
+test_sources:
+  - {variant: base, split_json: causal_agents_hard, split: validation, tag: causal-agents-hard-original-validation}
+  - {variant: remove_noncausal, split_json: causal_agents_hard, split: testing, tag: remove-noncausal-hard-testing}

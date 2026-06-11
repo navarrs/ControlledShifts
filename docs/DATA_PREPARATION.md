@@ -1,5 +1,55 @@
 # Dataset Preparation
 
+## Run the full pipeline from scratch
+
+The pipeline uses **two Python environments**. Only the raw Waymo proto decode needs Python 3.10; everything else runs
+in the main Python 3.12 environment.
+
+| Environment | Python | Install | Used for |
+|---|---|---|---|
+| **Main** | 3.12 | `uv sync` (or `uv run pip install -e .`) | `create_benchmark`, `build_ac_cache`, `train`, `eval`, visualization |
+| **Decoder** | 3.10 | `uv venv .venv-waymo --python 3.10` then `uv pip install waymo-open-dataset-tf-2-12-0 numpy tqdm` | decoding raw Waymo protos (and the CausalAgents label scripts) |
+
+The decoder must be a **separate, minimal** environment: `waymo-open-dataset-tf-2-12-0` pins **tensorflow 2.12**, which
+conflicts with the project's core **tensorflow 2.19**, so the full project cannot be installed alongside it. The decoder
+(`src/controlledshifts/datasets/waymo/preprocessor.py`) is self-contained (no `controlledshifts` imports), so run it
+**by file path** with the decoder env's `python` — do **not** use `python -m controlledshifts...`, which would require
+installing the conflicting full project into the 3.10 env.
+
+End-to-end steps (the bracket marks which environment each step runs in):
+
+1. **[3.12]** Install the main environment (see *Installation* in the README).
+2. **[3.10]** Create the decoder env, download the raw Waymo data (`gsutil`, no Python needed), then decode each raw
+   split into the flat canonical `base` variant store:
+   ```bash
+   # in the activated Python 3.10 decoder env, from the repo root
+   python src/controlledshifts/datasets/waymo/preprocessor.py --raw_data_path /data/driving/waymo/raw/mini --proc_data_path /data/driving/waymo/variants/base --split training
+   python src/controlledshifts/datasets/waymo/preprocessor.py --raw_data_path /data/driving/waymo/raw/mini --proc_data_path /data/driving/waymo/variants/base --split validation
+   python src/controlledshifts/datasets/waymo/preprocessor.py --raw_data_path /data/driving/waymo/raw/mini --proc_data_path /data/driving/waymo/variants/base --split testing
+   ```
+3. **[3.12]** Compute a benchmark split (just scenario-ID lists; no data is copied):
+   ```bash
+   uv run -m controlledshifts.create_benchmark benchmark=uniform   # -> splits/uniform.json
+   ```
+4. **[3.12, CausalAgents only]** After preparing the causal labels (the label scripts under `src/scripts/` run in the
+   **[3.10]** decoder env — see *Prepare the Causal Agents (WOMD) Dataset* below), generate the perturbed variant stores:
+   ```bash
+   uv run -m controlledshifts.create_benchmark benchmark=causal_agents   # -> variants/remove_*/ (+ reuses splits/uniform.json)
+   ```
+5. **[3.12]** Build the agent-centric cache once per variant per processing profile (the `model` selects the profile —
+   e.g. MTR's `manually_split_lane` yields a distinct cache):
+   ```bash
+   uv run -m controlledshifts.build_ac_cache variant=base model=autobot
+   uv run -m controlledshifts.build_ac_cache variant=remove_noncausal model=autobot   # only variants you will evaluate
+   ```
+6. **[3.12]** Train / evaluate (reads records straight from `ac_cache/<variant>/<profile_hash>/`, selected by the split
+   JSON; no reprocessing or copying):
+   ```bash
+   uv run -m controlledshifts.train model=autobot paths=uniform        # or paths=causal_agents, etc.
+   ```
+
+The dataset-specific sections below give the full download/label details for each benchmark.
+
 ## Prepare the Waymo Open Motion Dataset (WOMD)
 
 1. Create output path
@@ -44,16 +94,20 @@ rm -rf *
 
 5. Prepare the data for training, using **custom processor**:
 
-**NOTE:** this script was borrowed from [here](https://github.com/navarrs/ScenarioCharacterization/blob/main/src/characterization/utils/datasets/waymo_preprocess.py).
-**It requires Python 3.10 to run**.
-You may use `uv venv <name> --python 3.10` to create a secondary environment for running it.
-You will need `uv pip install waymo-open-dataset-tf-2-12-0` after activation to install the dependency needed to deserialize the proto files.
-You may need to use `python <script_path>` to run the script rather than `uv run` which invokes the primary (default) virtual environment intended for the main project.
+**NOTE:** the decoder (`src/controlledshifts/datasets/waymo/preprocessor.py`) **requires Python 3.10** and the separate
+minimal decoder env from *Run the full pipeline from scratch* above (`waymo-open-dataset-tf-2-12-0` pins tensorflow 2.12,
+which conflicts with the project's core tensorflow 2.19). It is self-contained, so run it **by file path** with the
+decoder env's `python` — not `python -m ...`, which would need the conflicting full project installed. It writes the raw
+decoded dicts; the thin repack to the `Scenario` schema happens later in the main Python 3.12 environment.
+
+Scenarios from every raw split are written **flat** into the canonical `base` variant store (one decoded scenario dict
+per `scenario_id`). The raw Waymo origin split of each scenario is recorded in `variants/base/_variant_manifest.json`
+for provenance only; benchmark train/val/test splits are defined separately (see below).
 
 ```bash
-uv run waymo_data_processing.py --raw_data_path /datasets/waymo/raw/mini --proc_data_path /datasets/waymo/processed/mini --split training
-uv run waymo_data_processing.py --raw_data_path /datasets/waymo/raw/mini --proc_data_path /datasets/waymo/processed/mini --split validation
-uv run waymo_data_processing.py --raw_data_path /datasets/waymo/raw/mini --proc_data_path /datasets/waymo/processed/mini --split testing
+python src/controlledshifts/datasets/waymo/preprocessor.py --raw_data_path /data/driving/waymo/raw/mini --proc_data_path /data/driving/waymo/variants/base --split training
+python src/controlledshifts/datasets/waymo/preprocessor.py --raw_data_path /data/driving/waymo/raw/mini --proc_data_path /data/driving/waymo/variants/base --split validation
+python src/controlledshifts/datasets/waymo/preprocessor.py --raw_data_path /data/driving/waymo/raw/mini --proc_data_path /data/driving/waymo/variants/base --split testing
 ```
 
 The training configuration will expect data in `/data/driving` by default (see [`default.yaml`](src/controlledshifts/configs/paths/default.yaml) for example).
@@ -62,6 +116,31 @@ It is convenient to create another symlink for it.
 ```shell
 mkdir -p /data/driving
 ```
+
+## Data layout: variants, splits, and the agent-centric cache
+
+The pipeline keeps a single canonical copy of each *truly different* dataset and re-splits it logically, instead of
+copying scenarios per benchmark:
+
+- `variants/<variant>/<scenario_id>.pkl` — the canonical scenario store. `base` is the unperturbed data; each causal
+  perturbation (`remove_causal`, `remove_noncausal`, `remove_noncausalequal`, `remove_static`) is its own variant.
+- `splits/<benchmark>.json` — each benchmark's train/validation/testing lists of scenario IDs (no data is copied).
+- `ac_cache/<variant>/<profile_hash>/` — the agent-centric tensors for a variant, built once per processing profile
+  (a hash of the tensor-affecting dataset/model config). `scenarios/<scenario_id>.pkl` holds one scenario's records;
+  `_index.pkl` lets the loader assemble its sample list without opening every file; `_profile.json` records the exact
+  config and is checked at load time so a mismatched cache is never read silently.
+
+After creating a benchmark split (see [BENCHMARKS.md](BENCHMARKS.md)), build the agent-centric cache once per variant
+per processing profile. The `model` selects the profile — e.g. MTR's `manually_split_lane` yields a distinct cache:
+
+```bash
+# Base variant for the AutoBot processing profile
+uv run -m controlledshifts.build_ac_cache variant=base model=autobot
+```
+
+Training/eval then read records straight from `ac_cache/<variant>/<profile_hash>/` — selected by the benchmark split
+JSON — with no reprocessing or copying. A benchmark's `paths/*.yaml` declares its sources as `{variant, split_json,
+split, tag}`.
 
 ## Prepare the Causal Agents (WOMD) Dataset
 
@@ -104,19 +183,26 @@ This scripts saves a summary file to `meta/validation_records.json` containing t
 uv run waymo_data_selection.py --parallel --input_data_path /datasets/waymo/raw/scenario/validation --output_dir mini_causal --percentage 1.0
 ```
 
-- Prepare the data for training:
+- Prepare the data for training (write the labeled scenes into the `base` variant store, alongside the rest):
 ```bash
-uv run waymo_data_processing.py --raw_data_path /datasets/waymo/raw/mini_causal --proc_data_path /datasets/waymo/processed/mini_causal --split training
-uv run waymo_data_processing.py --raw_data_path /datasets/waymo/raw/mini_causal --proc_data_path /datasets/waymo/processed/mini_causal --split validation
-uv run waymo_data_processing.py --raw_data_path /datasets/waymo/raw/mini_causal --proc_data_path /datasets/waymo/processed/mini_causal --split testing
+python src/controlledshifts/datasets/waymo/preprocessor.py --raw_data_path /data/driving/waymo/raw/mini_causal --proc_data_path /data/driving/waymo/variants/base --split training
+python src/controlledshifts/datasets/waymo/preprocessor.py --raw_data_path /data/driving/waymo/raw/mini_causal --proc_data_path /data/driving/waymo/variants/base --split validation
+python src/controlledshifts/datasets/waymo/preprocessor.py --raw_data_path /data/driving/waymo/raw/mini_causal --proc_data_path /data/driving/waymo/variants/base --split testing
 ```
 
-- Prepare the causal benchmark:
+- Create the causal benchmark. This reuses the `uniform` split and writes a perturbed variant store under
+  `variants/<strategy>/` for every masking strategy (`remove_causal`, `remove_noncausal`, `remove_noncausalequal`,
+  `remove_static`). Create the `uniform` split first if you have not already:
 ```bash
-uv run create_causal_benchmark.py --causal_data_path /datasets/waymo/processed/mini_causal --output_data_path /datasets/waymo/processed --causal_labels_path /datasets/waymo/causal_agents/processed_labels/ --benchmark remove_causal
-uv run create_causal_benchmark.py --causal_data_path /datasets/waymo/processed/mini_causal --output_data_path /datasets/waymo/processed --causal_labels_path /datasets/waymo/causal_agents/processed_labels/ --benchmark remove_noncausal
-uv run create_causal_benchmark.py --causal_data_path /datasets/waymo/processed/mini_causal --output_data_path /datasets/waymo/processed --causal_labels_path /datasets/waymo/causal_agents/processed_labels/ --benchmark remove_noncausalequal
-uv run create_causal_benchmark.py --causal_data_path /datasets/waymo/processed/mini_causal --output_data_path /datasets/waymo/processed --causal_labels_path /datasets/waymo/causal_agents/processed_labels/ --benchmark remove_static
+uv run -m controlledshifts.create_benchmark benchmark=uniform
+uv run -m controlledshifts.create_benchmark benchmark=causal_agents
+```
+
+- Build the agent-centric cache for the base variant and every perturbed variant you intend to evaluate (per
+  processing profile; `model=autobot` shown):
+```bash
+uv run -m controlledshifts.build_ac_cache variant=base model=autobot
+uv run -m controlledshifts.build_ac_cache variant=remove_noncausal model=autobot
 ```
 
 7. **[Optional Sanity Check]**: Verify causal agent IDs exist in processed data:
@@ -140,8 +226,8 @@ gsutil -m cp -r "gs://waymo_open_dataset_motion_v_1_2_0/uncompressed/scenario/va
 4. Process the scenarios:
 ```bash
 cd ControlledShifts/src/scripts
-uv run waymo_data_processing.py --raw_data_path /datasets/waymo/raw/scenario/ --proc_data_path /datasets/safeshift_all --search_safeshift --safeshift_data_splits_path /datasets/mtr_process_splits --safeshift_prefix score_asym_combined_80_ --split training
-uv run waymo_data_processing.py --raw_data_path /datasets/waymo/raw/scenario/ --proc_data_path /datasets/safeshift_all --search_safeshift --safeshift_data_splits_path /datasets/mtr_process_splits --safeshift_prefix score_asym_combined_80_ --split validation
+python src/controlledshifts/datasets/waymo/preprocessor.py --raw_data_path /datasets/waymo/raw/scenario/ --proc_data_path /datasets/safeshift_all --search_safeshift --safeshift_data_splits_path /datasets/mtr_process_splits --safeshift_prefix score_asym_combined_80_ --split training
+python src/controlledshifts/datasets/waymo/preprocessor.py --raw_data_path /datasets/waymo/raw/scenario/ --proc_data_path /datasets/safeshift_all --search_safeshift --safeshift_data_splits_path /datasets/mtr_process_splits --safeshift_prefix score_asym_combined_80_ --split validation
 ```
 
 2. Re-split the processed data:

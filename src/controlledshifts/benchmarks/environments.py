@@ -39,8 +39,7 @@ from tqdm import tqdm
 
 from controlledshifts import utils
 from controlledshifts.benchmarks import common
-from controlledshifts.datasets.base_dataset import BaseDataset
-from controlledshifts.datasets.waymo_dataset import WaymoDataset
+from controlledshifts.datasets.waymo.repacker import load_scenario
 from controlledshifts.utils.map_utils import build_positioned_graph, visualize_scenario_graph
 from controlledshifts.utils.scenario_visualizers.scenario import ScenarioVisualizer
 
@@ -427,7 +426,6 @@ def visualize_cluster_scenarios(  # noqa: PLR0913
     input_data_path: Path,
     output_path: Path,
     visualizer: ScenarioVisualizer,
-    dataset: BaseDataset,
     *,
     n_examples: int = 30,
     seed: int = 42,
@@ -442,7 +440,6 @@ def visualize_cluster_scenarios(  # noqa: PLR0913
         input_data_path: Root of the input dataset tree; scenario pickle files are discovered recursively from here.
         output_path: Directory under which per-cluster subdirectories are created.
         visualizer: Instantiated ScenarioVisualizer used to render each scenario.
-        dataset: Dataset instance used to load and repack raw scenario pickles into Scenario objects.
         n_examples: Maximum number of example scenarios to render per cluster. Defaults to 30.
         seed: Random seed for example sampling. Defaults to 42.
     """
@@ -462,7 +459,7 @@ def visualize_cluster_scenarios(  # noqa: PLR0913
             if filepath is None:
                 continue
             try:
-                scenario = dataset.load_as_open_scenario(filepath)
+                scenario = load_scenario(filepath)
                 visualizer.visualize_scenario(scenario, output_dir=str(cluster_dir))
             except Exception:  # noqa: BLE001
                 _LOGGER.warning("Failed to visualize scenario %s, skipping.", scenario_id, exc_info=True)
@@ -872,7 +869,6 @@ def create_environments_benchmark(config: DictConfig) -> common.BenchmarkSplit: 
         if cluster_scenarios_path.exists():
             shutil.rmtree(cluster_scenarios_path)
 
-        dataset = WaymoDataset(config.dataset.config)
         visualizer = ScenarioVisualizer(config.visualization.visualizer.config)
 
         visualize_cluster_scenarios(
@@ -880,7 +876,6 @@ def create_environments_benchmark(config: DictConfig) -> common.BenchmarkSplit: 
             input_data_path,
             cluster_scenarios_path,
             visualizer,
-            dataset,
             n_examples=config.n_examples,
             seed=config.seed,
         )

@@ -1,14 +1,16 @@
 r"""Script used for creating benchmark dataset splits.
 
-Each benchmark computes its train/validation/testing split and saves it as JSON under ``splits_path``. Pass
-``copy_splits=true`` to also organize the data into split subdirectories after the splits are saved.
+Each benchmark computes its train/validation/testing split of scenario IDs and saves it as JSON under ``splits_path``.
+Scenarios are never copied into per-split directories: training/eval select IDs from the split JSON and read
+agent-centric records from the canonical per-variant cache (see ``controlledshifts.build_ac_cache``). The causal_agents
+benchmark additionally writes its perturbed variant stores under ``variants_path`` as a preparation step.
 
 Example usage:
 
     # Uniform benchmark (plain IID random split, no distribution shift)
     uv run -m controlledshifts.create_benchmark benchmark=uniform
 
-    # Causal Agents benchmark (generates all perturbation strategies up front)
+    # Causal Agents benchmark (generates all perturbation variant stores up front)
     uv run -m controlledshifts.create_benchmark benchmark=causal_agents
 
     # Causal Agents Hard benchmark
@@ -20,10 +22,6 @@ Example usage:
 
     # Environments benchmark
     uv run -m controlledshifts.create_benchmark benchmark=environments
-
-    # Save the splits and copy the data into training/validation/testing subdirs
-    uv run -m controlledshifts.create_benchmark benchmark=ego_safeshift copy_splits=true \\
-        scenario_score_mapping_filepath=meta/ego-safeshift/scores_8/scenario_to_scores_mapping.csv
 
 See `configs/create_benchmark.yaml` and the per-benchmark configs under `configs/benchmark/` for all options.
 """
@@ -65,9 +63,11 @@ def main(cfg: DictConfig) -> None:
     """Hydra entry point for creating benchmark dataset splits.
 
     Reuses the split saved at ``${splits_path}/${benchmark_name}.json`` when it exists (unless ``overwrite`` is set);
-    otherwise the benchmark computes the split, runs any data preparation (such as causal_agents' perturbations), the
-    split is checked for overlap (aborting on overlap) and saved as JSON. When ``copy_splits`` is enabled, the
-    benchmark's copy targets are organized into training/validation/testing subdirectories.
+    otherwise the benchmark computes the split, runs any data preparation (such as causal_agents' perturbations writing
+    a perturbed variant store), checks the split for overlap (aborting on overlap) and saves it as JSON. The split JSON
+    is all that is produced: scenarios are never copied into per-split directories. Training/eval select scenario IDs
+    from the split JSON and read agent-centric records from the canonical per-variant cache (see
+    ``controlledshifts.build_ac_cache``).
 
     Raises:
         ValueError: If the computed training/validation/testing splits overlap.
@@ -83,17 +83,6 @@ def main(cfg: DictConfig) -> None:
         split = _compute_split(benchmark, cfg)
         benchmarks.check_overlap(split)
         benchmarks.save_benchmark_split(split, cfg.benchmark_name, splits_path, overwrite=cfg.overwrite)
-
-    if cfg.copy_splits:
-        for target in benchmarks.plan_copy_targets(benchmark, cfg):
-            benchmarks.copy_split_dataset(
-                split,
-                target.source,
-                target.output,
-                num_workers=cfg.num_workers,
-                unlink_source=cfg.unlink_source,
-                overwrite=cfg.overwrite,
-            )
 
 
 if __name__ == "__main__":

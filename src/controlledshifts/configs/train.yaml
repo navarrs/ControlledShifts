@@ -60,5 +60,4 @@ percentage: 0.45
 sample_selection_filepath: ${sample_selection_path}/sample_selection_${sample_selection_strategy}_${percentage}.json
 sample_selection_intention_points_filepath: ${sample_selection_path}/sample_selection_intention_points_${sample_selection_strategy}_${percentage}.pkl
 
-overwrite_cache: false
 autolabel_agents: false

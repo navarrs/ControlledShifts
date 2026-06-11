@@ -10,18 +10,11 @@ defaults:
 seed: 42
 num_workers: 20
 
-# If true, the source scenario file is deleted after being copied to the output directory.
-unlink_source: false
-
 # Directory where each benchmark's split is saved as ${splits_path}/${benchmark_name}.json.
 splits_path: /data/driving/waymo/splits
 
-# If true, copy the input (and any prepared perturbed datasets) into training/validation/testing subdirs after the
-# splits are saved. If false, only the split JSON files are produced.
-copy_splits: false
-
-# If false, reuse work that already exists: an existing split JSON is loaded instead of recomputed, prepared
-# perturbations and already-copied scenario files are left in place. Set true to regenerate everything.
+# If false, reuse work that already exists: an existing split JSON is loaded instead of recomputed and prepared
+# perturbed variant stores are left in place. Set true to regenerate everything.
 overwrite: false
 
 task_name: create_benchmark

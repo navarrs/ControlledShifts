@@ -338,7 +338,11 @@ def process_waymo_data_with_scenario_proto(
         if scenario_ids is not None and scenario.scenario_id not in scenario_ids:
             continue
 
+<<<<<<< HEAD
         info: dict[str, Any] = {
+=======
+        info = {
+>>>>>>> 70a8391 (Refactor dataset preparation)
             "scenario_id": scenario.scenario_id,
             "timestamps_seconds": list(scenario.timestamps_seconds),
             "current_time_index": scenario.current_time_index,

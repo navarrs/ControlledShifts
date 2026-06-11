@@ -5,24 +5,18 @@ re-organizes scenarios into train/validation/testing splits by difficulty. Diffi
 in a scenario: the scenarios with the most non-causal agents form the test set (following ``split_ratios``), mirroring
 how ego_safeshift/safeshift move the hardest scenarios to test.
 
-Each scenario is materialized twice under the same split: an unperturbed ``original`` copy and a ``perturbed`` copy with
-non-causal agents removed. This keeps a 1-1 correspondence so the original and perturbed versions of the same held-out
-scenarios can be compared. Existing ``remove_noncausal`` perturbed files are reused when found; otherwise they are
-generated on the fly.
-
-Output layout under output_data_path::
-
-    causal_agents_hard/
-    ├── original/          {training, validation, testing}
-    └── remove_noncausal/  {training, validation, testing}
+The benchmark produces a single split JSON (``splits/causal_agents_hard.json``). The unperturbed scenes are served from
+the ``base`` variant and the perturbed scenes from the ``remove_noncausal`` variant; both are selected by the same split
+so the original and perturbed versions of the same held-out scenarios can be compared. As a preparation step, the
+``remove_noncausal`` perturbations are written flat to ``perturbed_data_path`` (a variant store), reusing existing files
+when found.
 
 Example usage:
 
     uv run -m controlledshifts.create_benchmark benchmark=causal_agents_hard \\
-        input_data_path=/data/driving/waymo/processed/mini_causal \\
-        output_data_path=/data/driving/waymo/processed/causal_agents_hard \\
-        causal_labels_path=/data/driving/waymo/causal_agents/processed_labels \\
-        perturbed_data_path=/data/driving/waymo/processed/remove_noncausal
+        input_data_path=/data/driving/waymo/variants/base \\
+        causal_labels_path=/data/driving/waymo/meta/causal_agents/processed_labels \\
+        perturbed_data_path=/data/driving/waymo/variants/remove_noncausal
 
 See configs/benchmark/causal_agents_hard.yaml for all available options.
 """
@@ -115,15 +109,14 @@ def create_causal_agents_hard_benchmark(config: DictConfig) -> BenchmarkSplit:
 
     Computes the non-causal agent count for each scenario and splits scenarios into train/validation/testing by that
     count (the scenarios with the most non-causal agents form the test set, following split_ratios). The
-    ``remove_noncausal`` perturbed dataset is generated flat under ``perturbed_data_path`` (reusing existing files),
-    so that both the original and perturbed datasets are complete flat datasets sharing the same split. The copy
-    targets (see ``common.plan_copy_targets``) later organize the input and the perturbed dataset into
-    ``output_data_path/{original,remove_noncausal}/<split>/``.
+    ``remove_noncausal`` perturbed dataset is generated flat under ``perturbed_data_path`` (a variant store, reusing
+    existing files), so both the ``base`` and ``remove_noncausal`` variants share this split. Only the split JSON is
+    produced; training/eval select IDs from it and read agent-centric records from the per-variant cache.
 
     Args:
         config: Hydra config.
-            Expected keys: input_data_path, output_data_path, causal_labels_path, perturbed_data_path,
-            split_ratios, num_workers, seed, overwrite.
+            Expected keys: input_data_path, causal_labels_path, perturbed_data_path, split_ratios, num_workers, seed,
+            overwrite.
 
     Returns:
         The shared BenchmarkSplit (used for both the original and perturbed datasets).

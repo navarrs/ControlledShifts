@@ -1,38 +1,20 @@
 defaults:
   - default.yaml
 
-# TODO: Revise this config.
-
-# Combines the Causal and SafeShift Benchmarks
+# TODO: Revise this config. Combines the SafeShift and CausalAgents benchmarks. The legacy copy-based layout mixed
+# several processed sets (mini_causal, safeshift_causal); under the canonical layout all unperturbed sources are the
+# base variant re-split by splits/safeshift.json, and the perturbed source reads the remove_noncausal variant.
 tag: 'safeshift'
 
-# NOTE: for training and validation, this is using the original (unmodified) scenarios from the CausalAgents benchmark.
-train_data_path: [
-  "${paths.base_path}/processed/mini_causal/training"
-] # list of paths to the training data
-train_data_tag: [
-  "mini-causal-training"
-]
+# Training and validation use the original (unmodified) base scenes under the SafeShift split.
+train_sources:
+  - {variant: base, split_json: safeshift, split: training, tag: safeshift-training}
 
-val_data_path: [
-  "${paths.base_path}/processed/mini_causal/validation"
-] # list of paths to the validation data
-val_data_tag: [
-  "mini-causal-validation"
-]
+val_sources:
+  - {variant: base, split_json: safeshift, split: validation, tag: safeshift-id}
 
-# NOTE: for testing, we combine the CausalAgents and SafeShift benchmarks.
-test_data_path: [
-  "${paths.base_path}/processed/mini_causal/testing",
-  "${paths.base_path}/processed/causal_agents/remove_noncausal/validation",
-  "${paths.base_path}/processed/causal_agents/remove_noncausal/testing",
-  "${paths.base_path}/processed/safeshift_causal/validation",
-  "${paths.base_path}/processed/safeshift_causal/testing"
-]
-test_data_tag: [
-  "mini-causal-testing",
-  "remove-noncausal-validation",      # Perturbed Scenes by removing agents that are NOT labeled as causal to the ego.
-  "remove-noncausal-testing",
-  "safeshift-id",                     # In-Distribution Scenes determined by the SafeShift scoring strategies.
-  "safeshift-ood"                     # Out-of-Distribution Scenes determined by the SafeShift scoring strategies.
-]
+# Testing combines the SafeShift OOD scenes with their perturbed (remove_noncausal) counterparts.
+test_sources:
+  - {variant: base, split_json: safeshift, split: testing, tag: safeshift-ood}
+  - {variant: remove_noncausal, split_json: safeshift, split: validation, tag: remove-noncausal-validation}
+  - {variant: remove_noncausal, split_json: safeshift, split: testing, tag: remove-noncausal-testing}

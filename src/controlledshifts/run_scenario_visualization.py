@@ -17,7 +17,7 @@ Example usage:
     uv run -m controlledshifts.run_scenario_visualization \
         visualization=viz_static \
         split_filepath=/data/driving/waymo/splits/uniform.json \
-        scenarios_root=/data/driving/waymo/processed/uniform \
+        scenarios_root=/data/driving/waymo/variants/base \
         splits_to_visualize=[testing] num_scenarios=3
 
     # Scored visualization (requires the autolabel processors).
@@ -42,7 +42,8 @@ from numpy.typing import NDArray
 from omegaconf import DictConfig
 
 from controlledshifts import benchmarks, utils
-from controlledshifts.datasets.base_dataset import BaseDataset
+from controlledshifts.datasets.agent_centric_processor import AgentCentricProcessor
+from controlledshifts.datasets.waymo.repacker import load_scenario
 from controlledshifts.schemas import AgentCentricScenario, ModelOutput
 from controlledshifts.utils.constants import ModelStatus, VizType
 from controlledshifts.utils.scenario_visualizers.base_visualizer import BaseVisualizer
@@ -77,64 +78,64 @@ class PreparedScenario(NamedTuple):
     causal_gt_ids: NDArray[np.int_] | None = None
 
 
-def _compute_scores(dataset: BaseDataset, scenario: Scenario) -> tuple[Scenario, ScenarioScores]:
-    """Computes scenario map metadata, features, and scores; requires an autolabel-enabled dataset."""
-    if dataset.scenario_features_processor is None or dataset.scenario_scores_processor is None:
+def _compute_scores(processor: AgentCentricProcessor, scenario: Scenario) -> tuple[Scenario, ScenarioScores]:
+    """Computes scenario map metadata, features, and scores; requires an autolabel-enabled processor."""
+    if processor.scenario_features_processor is None or processor.scenario_scores_processor is None:
         error_message = (
-            "Scoring requires the dataset's feature/score processors. Re-run with the override "
+            "Scoring requires the processor's feature/score processors. Re-run with the override "
             "`dataset.config.autolabel_agents=true`."
         )
         raise ValueError(error_message)
-    scenario = dataset.compute_scenario_map_metadata(scenario)
-    features = dataset.scenario_features_processor.compute(scenario)
-    scores = dataset.scenario_scores_processor.compute(scenario, features)
+    scenario = processor.compute_scenario_map_metadata(scenario)
+    features = processor.scenario_features_processor.compute(scenario)
+    scores = processor.scenario_scores_processor.compute(scenario, features)
     return scenario, scores
 
 
 def _to_agent_centric(
-    dataset: BaseDataset, scenario: Scenario, scores: ScenarioScores | None
+    processor: AgentCentricProcessor, scenario: Scenario, scores: ScenarioScores | None
 ) -> AgentCentricScenario | None:
     """Transforms a scenario into agent-centric format, returning None when the transform yields no agents."""
-    processed = dataset.process_agent_centric_scenario(scenario, scenario_scores=scores)
+    processed = processor.process_agent_centric_scenario(scenario, scenario_scores=scores)
     if not processed:
         return None
     return AgentCentricScenario(**processed[0])
 
 
 def prepare_regular(
-    dataset: BaseDataset, visualizer: BaseVisualizer, scenario: Scenario, model_output: ModelOutput | None
+    processor: AgentCentricProcessor, visualizer: BaseVisualizer, scenario: Scenario, model_output: ModelOutput | None
 ) -> PreparedScenario | None:
     """Regular visualization: draw the scenario as-is."""
-    del dataset, visualizer, model_output
+    del processor, visualizer, model_output
     return PreparedScenario(scenario)
 
 
 def prepare_scored(
-    dataset: BaseDataset, visualizer: BaseVisualizer, scenario: Scenario, model_output: ModelOutput | None
+    processor: AgentCentricProcessor, visualizer: BaseVisualizer, scenario: Scenario, model_output: ModelOutput | None
 ) -> PreparedScenario | None:
     """Scored visualization: compute features -> scores and render the scene score."""
     del visualizer, model_output
-    scenario, scores = _compute_scores(dataset, scenario)
+    scenario, scores = _compute_scores(processor, scenario)
     return PreparedScenario(scenario, scores=scores)
 
 
 def prepare_trajpred(
-    dataset: BaseDataset, visualizer: BaseVisualizer, scenario: Scenario, model_output: ModelOutput | None
+    processor: AgentCentricProcessor, visualizer: BaseVisualizer, scenario: Scenario, model_output: ModelOutput | None
 ) -> PreparedScenario | None:
     """Trajectory-prediction visualization: transform to agent-centric and overlay model predictions."""
     del visualizer
-    agent_centric = _to_agent_centric(dataset, scenario, scores=None)
+    agent_centric = _to_agent_centric(processor, scenario, scores=None)
     if agent_centric is None:
         return None
     return PreparedScenario(agent_centric, model_output=model_output)
 
 
 def prepare_model_output(
-    dataset: BaseDataset, visualizer: BaseVisualizer, scenario: Scenario, model_output: ModelOutput | None
+    processor: AgentCentricProcessor, visualizer: BaseVisualizer, scenario: Scenario, model_output: ModelOutput | None
 ) -> PreparedScenario | None:
     """Model-output visualization: render cached model outputs, transforming to agent-centric when required."""
     if visualizer.is_ego_centric:
-        agent_centric = _to_agent_centric(dataset, scenario, scores=None)
+        agent_centric = _to_agent_centric(processor, scenario, scores=None)
         if agent_centric is None:
             return None
         return PreparedScenario(agent_centric, model_output=model_output)
@@ -142,11 +143,11 @@ def prepare_model_output(
 
 
 def prepare_causal_gt(
-    dataset: BaseDataset, visualizer: BaseVisualizer, scenario: Scenario, model_output: ModelOutput | None
+    processor: AgentCentricProcessor, visualizer: BaseVisualizer, scenario: Scenario, model_output: ModelOutput | None
 ) -> PreparedScenario | None:
     """Causal ground-truth visualization: load causal agent ids from the causal-label files (no model output)."""
     del visualizer, model_output
-    causal_labels_path = dataset.config.get("causal_labels_path", None)
+    causal_labels_path = processor.config.get("causal_labels_path", None)
     if causal_labels_path is None:
         error_message = (
             "viz_type 'causal_gt' needs causal labels; set `dataset.config.causal_labels_path` to the labels directory."
@@ -164,7 +165,7 @@ def prepare_causal_gt(
     return PreparedScenario(scenario, causal_gt_ids=causal_ids)
 
 
-PrepareFn = Callable[[BaseDataset, BaseVisualizer, Scenario, ModelOutput | None], PreparedScenario | None]
+PrepareFn = Callable[[AgentCentricProcessor, BaseVisualizer, Scenario, ModelOutput | None], PreparedScenario | None]
 
 SCENARIO_PREPARER: dict[VizType, PrepareFn] = {
     VizType.REGULAR: prepare_regular,
@@ -207,7 +208,7 @@ def main(config: DictConfig) -> None:
     start = time()
 
     visualizer = hydra.utils.instantiate(config.visualization.visualizer)
-    dataset = hydra.utils.instantiate(config.dataset)
+    processor = AgentCentricProcessor(config.dataset.config)
 
     scenarios_root = Path(config.scenarios_root)
     output_root = Path(config.output_dir)
@@ -248,8 +249,8 @@ def main(config: DictConfig) -> None:
             random.seed(config.seed)
             scenario_ids = random.sample(scenario_ids, config.num_scenarios)
 
-        # Map each scenario id to its pickle on disk and build the destination folder for this split.
-        id_to_path = benchmarks.get_scenario_mapping(scenario_ids, scenarios_root, split_key)
+        # Map each scenario id to its pickle in the flat variant store and build the destination folder for this split.
+        id_to_path = {scenario_id: scenarios_root / f"{scenario_id}.pkl" for scenario_id in scenario_ids}
         output_dir = build_output_dir(output_root, render, split_type, split_tag, pane_type)
         log.info("Visualizing %d scenarios for split '%s' -> %s", len(scenario_ids), split_key, output_dir)
 
@@ -260,12 +261,12 @@ def main(config: DictConfig) -> None:
                 log.warning("Scenario %s not found at %s, skipping.", scenario_id, scenario_path)
                 continue
 
-            # Load the scenario, grab its model output (if any), then run the per-type prep (scoring, agent-centric
-            # transform, etc.). prepare() returns None when the scenario can't be visualized for this type.
-            scenario = dataset.load_as_open_scenario(scenario_path)
+            # Load the canonical Scenario, apply the same profile shaping the cache builder uses, then run the per-type
+            # prep (scoring, agent-centric transform, etc.). prepare() returns None when the scenario can't be drawn.
+            scenario = processor.shape_scenario(load_scenario(scenario_path))
             model_output = batches.get(scenario_id) if batches is not None else None
 
-            prepared = prepare(dataset, visualizer, scenario, model_output)
+            prepared = prepare(processor, visualizer, scenario, model_output)
             if prepared is None:
                 log.warning("Could not prepare scenario %s for %s, skipping.", scenario_id, viz_type.value)
                 continue

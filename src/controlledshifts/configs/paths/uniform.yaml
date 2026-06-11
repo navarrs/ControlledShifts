@@ -3,26 +3,14 @@ defaults:
 
 tag: 'uniform'
 
+# Each source = {variant, split_json, split, tag}. The split JSON (splits/uniform.json) selects scenario IDs; the
+# variant's agent-centric cache supplies the records; the tag labels the source for per-source metrics.
+train_sources:
+  - {variant: base, split_json: uniform, split: training, tag: uniform-training}
 
-train_data_path: [
-  "${paths.base_path}/processed/uniform/training"
-] # list of paths to the training data
-train_data_tag: [
-  "uniform-training"
-]
+val_sources:
+  - {variant: base, split_json: uniform, split: validation, tag: uniform-validation}
 
-val_data_path: [
-  "${paths.base_path}/processed/uniform/validation"
-] # list of paths to the validation data
-val_data_tag: [
-  "uniform-validation"
-]
-
-test_data_path: [
-  "${paths.base_path}/processed/uniform/validation",
-  "${paths.base_path}/processed/uniform/testing",
-]
-test_data_tag: [
-  "uniform-validation",
-  "uniform-testing"
-]
+test_sources:
+  - {variant: base, split_json: uniform, split: validation, tag: uniform-validation}
+  - {variant: base, split_json: uniform, split: testing, tag: uniform-testing}
