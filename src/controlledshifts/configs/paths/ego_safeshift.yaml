@@ -1,32 +1,18 @@
 defaults:
   - default.yaml
 
-# Combines the Causal and SafeShift Benchmarks
+# Re-splits the base scenes by Ego-SafeShift's per-scenario 'gt' scores (hardest go to testing); the partition lives in
+# splits/ego_safeshift.json.
 tag: 'ego-safeshift'
 
-# NOTE: for training and validation, this is using the In-Distribution (ID) subset of the CausalAgents benchmark, obtained
-# through Ego-SafeShift's 'gt' scoring strategy
-train_data_path: [
-  "${paths.base_path}/processed/ego_safeshift/training"
-] # list of paths to the training data
-train_data_tag: [
-  "ego-safeshift-training"
-]
+# Training and validation use the In-Distribution (ID) subset.
+train_sources:
+  - {variant: base, split_json: ego_safeshift, split: training, tag: ego-safeshift-training}
 
-val_data_path: [
-  "${paths.base_path}/processed/ego_safeshift/validation"
-] # list of paths to the validation data
-val_data_tag: [
-  "ego-safeshift-validation"
-]
+val_sources:
+  - {variant: base, split_json: ego_safeshift, split: validation, tag: ego-safeshift-validation}
 
-# NOTE: for testing, this is using the Out-Of-Distribution (OOD) subset of the CausalAgents benchmark, obtained
-# through Ego-SafeShift's 'gt' scoring strategy
-test_data_path: [
-  "${paths.base_path}/processed/ego_safeshift/validation",
-  "${paths.base_path}/processed/ego_safeshift/testing",
-]
-test_data_tag: [
-  "ego-safeshift-id",
-  "ego-safeshift-ood",
-]
+# Testing reports ID (validation) and OOD (testing) subsets.
+test_sources:
+  - {variant: base, split_json: ego_safeshift, split: validation, tag: ego-safeshift-id}
+  - {variant: base, split_json: ego_safeshift, split: testing, tag: ego-safeshift-ood}

@@ -2,21 +2,22 @@ r"""Benchmark creation for the Causal Agents benchmark.
 
 Reuses the split of a reference benchmark (``reference_benchmark``, by default ``uniform``) rather than computing its
 own, so the perturbed scenes land in the same train/validation/testing bucket as their unperturbed counterparts. As a
-preparation step, it generates the perturbed dataset for every masking strategy (causal, non-causal, non-causal-equal,
-static), written flat under ``output_data_path/<strategy>/`` with no split subdirectories. The shared split is returned
-(and saved as JSON by the entry point); the optional copy step organizes each perturbed dataset into
-``output_data_path/causal_agents/<strategy>/<split>/``. The unperturbed "original" data is not re-copied; it is served
-directly from the reference benchmark's split directories (e.g. ``processed/uniform/<split>/``).
+preparation step, it generates a perturbed variant store for every masking strategy (causal, non-causal,
+non-causal-equal, static), written flat under ``output_data_path/<strategy>/`` (i.e. ``variants/<strategy>/``) with no
+split subdirectories. The shared reference split is returned (and saved as JSON by the entry point). Nothing is copied:
+training/eval select scenario IDs from the reference split JSON and read agent-centric records from the per-variant
+cache (the unperturbed scenes from the ``base`` variant, each perturbed strategy from its own variant).
 
 The reference split must exist before running this benchmark. Create it first with, e.g.:
 
-    uv run -m controlledshifts.create_benchmark benchmark=uniform copy_splits=true
+    uv run -m controlledshifts.create_benchmark benchmark=uniform
 
 Example usage:
 
     uv run -m controlledshifts.create_benchmark benchmark=causal_agents \\
-        input_data_path=/datasets/waymo/processed/mini_causal \\
-        causal_labels_path=/datasets/waymo/causal_agents/processed_labels
+        input_data_path=/data/driving/waymo/variants/base \\
+        output_data_path=/data/driving/waymo/variants \\
+        causal_labels_path=/data/driving/waymo/meta/causal_agents/processed_labels
 
 See configs/benchmark/causal_agents.yaml for all available options.
 """
@@ -51,7 +52,7 @@ def _remove_causal(scenario: dict[str, Any], causal_labels: dict[str, Any], outp
     """Removes causal objects from a scenario by setting the last column of the trajectories to 0 for causal objects.
 
     Args:
-        scenario: Scenario dictionary.
+        scenario: Decoded raw scenario dictionary.
         causal_labels: Causal labels dictionary.
         output_filepath: Path to the output file.
     """
@@ -79,7 +80,7 @@ def _remove_causal(scenario: dict[str, Any], causal_labels: dict[str, Any], outp
     causal_track_index_mask = ~np.isin(track_index, causal_idxs)
     scenario["tracks_to_predict"] = {
         "track_index": track_index[causal_track_index_mask].tolist(),
-        "track_difficulty": track_difficulty[causal_track_index_mask].tolist(),
+        "difficulty": track_difficulty[causal_track_index_mask].tolist(),
         "object_type": object_type[causal_track_index_mask].tolist(),
     }
 
@@ -92,7 +93,7 @@ def remove_noncausal(scenario: dict[str, Any], causal_labels: dict[str, Any], ou
     objects.
 
     Args:
-        scenario: Scenario dictionary.
+        scenario: Decoded raw scenario dictionary.
         causal_labels: Causal labels dictionary.
         output_filepath: Path to the output file.
     """
@@ -118,7 +119,7 @@ def remove_noncausal(scenario: dict[str, Any], causal_labels: dict[str, Any], ou
     noncausal_track_index_mask = ~np.isin(track_index, noncausal_idxs)
     scenario["tracks_to_predict"] = {
         "track_index": track_index[noncausal_track_index_mask].tolist(),
-        "track_difficulty": track_difficulty[noncausal_track_index_mask].tolist(),
+        "difficulty": track_difficulty[noncausal_track_index_mask].tolist(),
         "object_type": object_type[noncausal_track_index_mask].tolist(),
     }
 
@@ -132,7 +133,7 @@ def _remove_noncausalequal(
     """Removes a random subset of non-causal objects equal in count to the causal objects.
 
     Args:
-        scenario: Scenario dictionary.
+        scenario: Decoded raw scenario dictionary.
         causal_labels: Causal labels dictionary.
         output_filepath: Path to the output file.
         random_generator: Random number generator.
@@ -163,7 +164,7 @@ def _remove_noncausalequal(
     noncausal_track_index_mask = ~np.isin(track_index, noncausal_idxs_to_remove)
     scenario["tracks_to_predict"] = {
         "track_index": track_index[noncausal_track_index_mask].tolist(),
-        "track_difficulty": track_difficulty[noncausal_track_index_mask].tolist(),
+        "difficulty": track_difficulty[noncausal_track_index_mask].tolist(),
         "object_type": object_type[noncausal_track_index_mask].tolist(),
     }
 
@@ -175,7 +176,7 @@ def _remove_static(scenario: dict[str, Any], output_filepath: Path, threshold_di
     """Removes static objects from a scenario by masking trajectories with displacement below threshold_distance.
 
     Args:
-        scenario: Scenario dictionary.
+        scenario: Decoded raw scenario dictionary.
         output_filepath: Path to the output file.
         threshold_distance: Minimum displacement to consider an object dynamic. Defaults to 0.1.
     """
@@ -214,7 +215,7 @@ def _remove_static(scenario: dict[str, Any], output_filepath: Path, threshold_di
 
     scenario["tracks_to_predict"] = {
         "track_index": filtered_track_index,
-        "track_difficulty": track_difficulty[static_track_index_mask].tolist(),
+        "difficulty": track_difficulty[static_track_index_mask].tolist(),
         "object_type": object_type[static_track_index_mask].tolist(),
     }
 
@@ -231,11 +232,11 @@ def _perturb_scenario(  # noqa: PLR0913
     *,
     overwrite: bool = False,
 ) -> None:
-    """Applies a masking strategy to a single scenario and writes it flat to ``perturbed_path/<id>.pkl``.
+    """Applies a masking strategy to a single decoded scenario dict and writes it flat to ``perturbed_path/<id>.pkl``.
 
     Args:
-        input_filepath: Path to the input scenario pkl.
-        perturbed_path: Flat output directory for the perturbed dataset (no split subdirs).
+        input_filepath: Path to the input (base variant) scenario pickle.
+        perturbed_path: Flat output directory for the perturbed variant store (no split subdirs).
         causal_labels_path: Directory with per-scenario JSON causal labels (unused by ``remove_static``).
         strategy: Masking strategy name.
         random_generator: Random number generator (used by ``remove_noncausalequal``).
@@ -323,13 +324,11 @@ def create_causal_agents_benchmark(config: DictConfig) -> BenchmarkSplit:
     """Reuses the reference benchmark's split and (optionally) prepares the perturbed datasets.
 
     Loads the split saved by ``config.reference_benchmark`` (by default ``uniform``) from
-    ``config.splits_path/<reference_benchmark>.json`` instead of computing its own, so the perturbed scenes are
-    organized into the same train/validation/testing buckets as their unperturbed counterparts. When
-    config.prepare_perturbations is true, the perturbed dataset for every masking strategy is generated up front and
-    written flat under output_data_path/<strategy>/, mirroring the input. The copy targets (see
-    ``common.plan_copy_targets``) later organize each perturbed dataset into
-    output_data_path/causal_agents/<strategy>/<split>/; the unperturbed data is served directly from the reference
-    benchmark's split directories and is not re-copied.
+    ``config.splits_path/<reference_benchmark>.json`` instead of computing its own, so the perturbed scenes share the
+    same train/validation/testing buckets as their unperturbed counterparts. When config.prepare_perturbations is true,
+    a perturbed variant store for every masking strategy is generated up front and written flat under
+    output_data_path/<strategy>/ (i.e. variants/<strategy>/), mirroring the input. Nothing is copied; the unperturbed
+    scenes are served from the ``base`` variant cache.
 
     Args:
         config: Hydra config.

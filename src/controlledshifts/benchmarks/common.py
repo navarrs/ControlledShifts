@@ -2,18 +2,13 @@
 
 import itertools
 import json
-import multiprocessing
-import shutil
 from collections.abc import Iterable, Sequence
 from enum import Enum
-from functools import partial
 from pathlib import Path
 from typing import Any, NamedTuple
 
 import numpy as np
 from numpy.random import Generator
-from omegaconf import DictConfig
-from tqdm import tqdm
 
 from controlledshifts import utils
 
@@ -49,78 +44,7 @@ class BenchmarkSplit(NamedTuple):
     benchmark_name: str = ""
 
 
-class CopyTarget(NamedTuple):
-    """A flat source dataset and the destination root to organize it into per the split.
-
-    ``source`` is a directory of ``<id>.pkl`` files (resolved recursively, so split subdirs are also supported).
-    ``output`` is the destination root: each split id is copied to ``<output>/<split>/<id>.pkl``.
-    """
-
-    source: Path
-    output: Path
-
-
 _DEFAULT_SPLITS: tuple[str, ...] = ("training", "validation", "testing")
-
-
-def plan_copy_targets(benchmark: Benchmark, config: DictConfig) -> list[CopyTarget]:
-    """Returns the (source, output) datasets the copy step organizes for a benchmark.
-
-    Most benchmarks copy the input directory into ``output_data_path``. causal_agents reuses the reference benchmark's
-    split and only organizes the perturbed datasets (one target per strategy); its unperturbed data is served directly
-    from the reference benchmark's split directories, so no ``original`` copy is planned. causal_agents_hard maps to an
-    unperturbed copy plus its perturbed dataset. Only the destination layout is declared here; the copy itself is the
-    shared ``copy_split_dataset``.
-
-    Args:
-        benchmark: Benchmark whose copy targets are requested.
-        config: Hydra config (reads input_data_path, output_data_path, and perturbed_data_path where applicable).
-
-    Returns:
-        List of CopyTarget (source dataset directory, destination root) pairs.
-    """
-    input_data_path = Path(config.input_data_path)
-    output_data_path = Path(config.output_data_path)
-
-    match benchmark:
-        case Benchmark.CAUSAL_AGENTS:
-            benchmark_root = output_data_path / "causal_agents"
-            return [
-                CopyTarget(source=output_data_path / strategy, output=benchmark_root / strategy)
-                for strategy in CAUSAL_STRATEGIES
-            ]
-        case Benchmark.CAUSAL_AGENTS_HARD:
-            return [
-                CopyTarget(source=input_data_path, output=output_data_path / "original"),
-                CopyTarget(source=Path(config.perturbed_data_path), output=output_data_path / "remove_noncausal"),
-            ]
-        case _:
-            return [CopyTarget(source=input_data_path, output=output_data_path)]
-
-
-def verify_splits(output_path: Path, splits: Iterable[str] = _DEFAULT_SPLITS) -> None:
-    """Reads scenario files from train/val/test subdirectories of output_path and prints any filename overlap."""
-    split_data: dict[str, set[str]] = {
-        split: {p.name for p in (output_path / split).rglob("*.pkl") if p.is_file()} for split in splits
-    }
-    for set1, set2 in itertools.combinations(splits, 2):
-        intersection = split_data[set1] & split_data[set2]
-        if intersection:
-            _LOGGER.warning("Overlap between %s and %s: %d scenarios", set1, set2, len(intersection))
-        else:
-            _LOGGER.info("No overlap between %s and %s", set1, set2)
-
-
-def create_split_dirs(output_path: Path, splits: Iterable[str] = _DEFAULT_SPLITS) -> None:
-    """Creates split subdirectories under output_path.
-
-    Args:
-        output_path: Root directory under which split subdirs are created.
-        splits: Split names. Defaults to ("training", "validation", "testing").
-    """
-    for split in splits:
-        (output_path / split).mkdir(parents=True, exist_ok=True)
-        _LOGGER.info("Creating benchmark subdir: %s", output_path / split)
 
 
 def get_noncausal_mask(scenario: dict[str, Any], causal_labels: dict[str, Any]) -> np.ndarray:
@@ -129,7 +53,7 @@ def get_noncausal_mask(scenario: dict[str, Any], causal_labels: dict[str, Any]) 
     Non-causal agents are those whose object_id is neither in the causal labels nor the ego agent.
 
     Args:
-        scenario: Scenario dictionary.
+        scenario: Decoded raw scenario dictionary.
         causal_labels: Causal labels dictionary with a "causal_ids" key.
 
     Returns:
@@ -233,51 +157,6 @@ def collect_scenario_filepaths(data_path: Path) -> list[Path]:
         List of .pkl filepaths whose stem does not contain 'infos'.
     """
     return [fp for fp in data_path.rglob("*.pkl") if "infos" not in fp.stem]
-
-
-def get_scenario_mapping(
-    scenario_ids: list[str],
-    output_data_path: Path,
-    split: str,
-) -> dict[str, Path]:
-    """Creates a mapping from scenario IDs to output file paths.
-
-    Args:
-        scenario_ids: List of scenario IDs.
-        output_data_path: Path to the output data.
-        split: Data split (e.g., 'training', 'validation', 'testing').
-
-    Returns:
-        Mapping from scenario IDs to output file paths (each ending in .pkl).
-    """
-    return {scenario_id: output_data_path / split / f"{scenario_id}.pkl" for scenario_id in scenario_ids}
-
-
-def copy_scenario(
-    scenario_id: str,
-    input_filepath: Path,
-    output_filepath: Path,
-    *,
-    unlink_source: bool = False,
-    overwrite: bool = False,
-) -> None:
-    """Copies a scenario file from input_filepath to output_filepath.
-
-    Args:
-        scenario_id: Scenario ID, used only for warning messages.
-        input_filepath: Source file path.
-        output_filepath: Destination file path.
-        unlink_source: If True, delete the source file after a successful copy. Defaults to False.
-        overwrite: If False, skip the copy when output_filepath already exists. Defaults to False.
-    """
-    if output_filepath.exists() and not overwrite:
-        return
-    if not input_filepath.exists():
-        _LOGGER.warning("Scenario %s not found at %s.", scenario_id, input_filepath)
-        return
-    shutil.copy2(input_filepath, output_filepath)
-    if unlink_source:
-        input_filepath.unlink()
 
 
 def split_mapping_to_lists(mapping: dict[str, str], invalid: Iterable[str] | None = None) -> BenchmarkSplit:
@@ -399,56 +278,3 @@ def check_overlap(split: BenchmarkSplit) -> None:
             error_message = f"Overlap between {name1} and {name2}: {len(intersection)} scenarios"
             raise ValueError(error_message)
     _LOGGER.info("No overlap between splits (training: %d, validation: %d, testing: %d)", *map(len, sets.values()))
-
-
-def copy_split_dataset(  # noqa: PLR0913
-    split: BenchmarkSplit,
-    source: Path,
-    output: Path,
-    *,
-    num_workers: int,
-    unlink_source: bool = False,
-    overwrite: bool = False,
-) -> None:
-    """Organizes a flat source dataset into training/validation/testing subdirs of ``output`` per ``split``.
-
-    Source files are resolved by recursive glob (scenario_id -> filepath) from ``source``. Each scenario id in the
-    split's train/val/test lists is copied to ``<output>/<split>/<id>.pkl``. Scenarios absent from ``source`` are
-    skipped with a warning by ``copy_scenario``.
-
-    Args:
-        split: Split assigning scenario IDs to training/validation/testing.
-        source: Flat source dataset directory (searched recursively for ``<id>.pkl`` files).
-        output: Destination root; split subdirectories are created here.
-        num_workers: Number of parallel worker processes for copying.
-        unlink_source: If True, delete each source file after a successful copy. Defaults to False.
-        overwrite: If False, scenarios already present at the destination are skipped. Defaults to False.
-    """
-    create_split_dirs(output)
-    input_mapping = {fp.stem: fp for fp in collect_scenario_filepaths(source)}
-
-    output_mapping: dict[str, Path] = {}
-    for split_name, scenario_ids in (
-        ("training", split.training),
-        ("validation", split.validation),
-        ("testing", split.testing),
-    ):
-        output_mapping.update(get_scenario_mapping(scenario_ids, output, split_name))
-
-    tasks: list[tuple[str, Path, Path]] = [
-        (scenario_id, input_mapping[scenario_id], output_mapping[scenario_id])
-        for scenario_id in output_mapping
-        if scenario_id in input_mapping
-    ]
-    _LOGGER.info("Copying %d scenarios from %s into split subdirs of %s", len(tasks), source, output)
-
-    with multiprocessing.Pool(num_workers) as pool:
-        list(
-            tqdm(
-                pool.starmap(partial(copy_scenario, unlink_source=unlink_source, overwrite=overwrite), tasks),
-                total=len(tasks),
-                desc="Copying scenarios",
-            )
-        )
-
-    verify_splits(output)

@@ -3,43 +3,23 @@ defaults:
 
 tag: 'causal-agents-all'
 
-# NOTE: training and validation use the unmodified scenes, served from the reused uniform split directories.
-train_data_path: [
-  "${paths.base_path}/processed/uniform/training"
-] # list of paths to the training data
-train_data_tag: [
-  "uniform-training"
-]
+# Training and validation use the unmodified scenes (uniform split reused by the causal_agents benchmark).
+train_sources:
+  - {variant: base, split_json: uniform, split: training, tag: uniform-training}
 
-val_data_path: [
-  "${paths.base_path}/processed/uniform/validation"
-] # list of paths to the validation data
-val_data_tag: [
-  "uniform-validation"
-]
+val_sources:
+  - {variant: base, split_json: uniform, split: validation, tag: uniform-validation}
 
-# NOTE: testing uses the unmodified scenes (from uniform) and their perturbed counterparts for every strategy.
-test_data_path: [
-  "${paths.base_path}/processed/uniform/validation",
-  "${paths.base_path}/processed/uniform/testing",
-  "${paths.base_path}/processed/causal_agents/remove_causal/validation",
-  "${paths.base_path}/processed/causal_agents/remove_causal/testing",
-  "${paths.base_path}/processed/causal_agents/remove_noncausal/validation",
-  "${paths.base_path}/processed/causal_agents/remove_noncausal/testing",
-  "${paths.base_path}/processed/causal_agents/remove_noncausalequal/validation",
-  "${paths.base_path}/processed/causal_agents/remove_noncausalequal/testing",
-  "${paths.base_path}/processed/causal_agents/remove_static/validation",
-  "${paths.base_path}/processed/causal_agents/remove_static/testing",
-]
-test_data_tag: [
-  "uniform-validation",
-  "uniform-testing",
-  "remove-causal-validation",         # Perturbation: removes agents that are causal to the ego.
-  "remove-causal-testing",
-  "remove-noncausal-validation",      # Perturbation: removes agents that are NOT causal to the ego.
-  "remove-noncausal-testing",
-  "remove-noncausalequal-validation", # Perturbation: removes agents that are NOT causal to the ego, but removes an
-  "remove-noncausalequal-testing",    #               amount of agents equal to the number of causal agents.
-  "remove-static-validation",         # Perturbation: removes all agents that are not moving beyond a threshold.
-  "remove-static-testing",
-]
+# Testing uses the unmodified scenes and their perturbed counterparts for every masking strategy (same IDs, different
+# variant cache).
+test_sources:
+  - {variant: base, split_json: uniform, split: validation, tag: uniform-validation}
+  - {variant: base, split_json: uniform, split: testing, tag: uniform-testing}
+  - {variant: remove_causal, split_json: uniform, split: validation, tag: remove-causal-validation}
+  - {variant: remove_causal, split_json: uniform, split: testing, tag: remove-causal-testing}
+  - {variant: remove_noncausal, split_json: uniform, split: validation, tag: remove-noncausal-validation}
+  - {variant: remove_noncausal, split_json: uniform, split: testing, tag: remove-noncausal-testing}
+  - {variant: remove_noncausalequal, split_json: uniform, split: validation, tag: remove-noncausalequal-validation}
+  - {variant: remove_noncausalequal, split_json: uniform, split: testing, tag: remove-noncausalequal-testing}
+  - {variant: remove_static, split_json: uniform, split: validation, tag: remove-static-validation}
+  - {variant: remove_static, split_json: uniform, split: testing, tag: remove-static-testing}

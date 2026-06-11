@@ -5,7 +5,10 @@ root_dir: ${oc.env:PROJECT_ROOT}
 tag: 'mini'
 
 base_path: /data/driving/${scenario.dataset_name}
-data_cache_path: ${paths.base_path}/data_cache
+# Canonical scenario store (one flat directory per variant), benchmark split JSONs, and the agent-centric cache.
+variants_path: ${paths.base_path}/variants
+splits_path: ${paths.base_path}/splits
+ac_cache_path: ${paths.base_path}/ac_cache
 experiment_cache_path: ${paths.base_path}/${paths.tag}/model_cache
 temp_path: "temp"
 

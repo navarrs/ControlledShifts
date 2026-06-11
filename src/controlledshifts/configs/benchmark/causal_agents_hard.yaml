@@ -8,7 +8,7 @@ benchmark_name: causal_agents_hard
 # generation of the perturbed copies).
 causal_labels_path: /data/driving/waymo/meta/causal_agents/processed_labels/
 
-# Path to an existing remove_noncausal perturbed output to reuse. Scenarios missing from this directory are generated
-# on the fly. If the directory does not exist, all perturbed copies are generated.
+# Path to the remove_noncausal perturbed variant store to reuse. Scenarios missing from this directory are generated on
+# the fly. If the directory does not exist, all perturbed copies are generated.
 # Scenarios with the most non-causal agents form the test set, following the inherited split_ratios.
-perturbed_data_path: /data/driving/waymo/processed/remove_noncausal/
+perturbed_data_path: /data/driving/waymo/variants/remove_noncausal/

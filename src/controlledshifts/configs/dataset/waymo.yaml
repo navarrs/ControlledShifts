@@ -1,4 +1,5 @@
 defaults:
   - default.yaml
 
-_target_: controlledshifts.datasets.waymo_dataset.WaymoDataset
+# The training-time dataset is now dataset-agnostic (it reads the prebuilt agent-centric cache); the Waymo-specific
+# repack happens offline in datasets/waymo/preprocessor.py. _target_ is inherited from default.yaml (BaseDataset).

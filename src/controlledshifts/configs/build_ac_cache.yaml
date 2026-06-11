@@ -1,0 +1,32 @@
+# @package _global_
+defaults:
+  - model: autobot          # selects the processing profile (e.g. mtr sets manually_split_lane -> distinct cache)
+  - dataset: waymo
+  - scenario: waymo
+  - paths: default
+  - _self_
+
+# Variant to build (matches a directory under ${paths.variants_path}, e.g. base, remove_noncausal).
+variant: base
+
+num_workers: 20
+overwrite: false
+task_name: build_ac_cache
+
+# The model's experiment-centric paths (batch_cache_path, ...) interpolate ${exp_name}; the builder never uses them,
+# but a literal keeps a full-tree config dump resolvable.
+exp_name: build_ac_cache
+
+# The builder only processes scenarios; it never loads a split or selects samples. Override the dataset config keys that
+# would otherwise interpolate training-only globals so this config is self-contained. autolabel_agents is part of the
+# processing profile, so it MUST match the value used at training time (false by default) or the cache hash will differ.
+dataset:
+  config:
+    load_data: false
+    train_sources: null
+    val_sources: null
+    test_sources: null
+    seed: 0
+    sample_selection_strategy: all
+    sample_selection_filepath: null
+    autolabel_agents: false

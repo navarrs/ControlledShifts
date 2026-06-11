@@ -3,24 +3,28 @@ config:
   load_data: true
   split: null
   num_data_to_consider: null
+  # Seed for the (DDP-deterministic) sample shuffle and the train-only subsample.
+  seed: ${seed}
 
   past_len: ${scenario.past_len}
   future_len: ${scenario.future_len}
 
-  train_data_path: ${paths.train_data_path}
-  train_data_tag: ${paths.train_data_tag}
-  val_data_path: ${paths.val_data_path}
-  val_data_tag: ${paths.val_data_tag}
-  test_data_path: ${paths.test_data_path}
-  test_data_tag: ${paths.test_data_tag}
+  # Canonical agent-centric cache + benchmark split roots. The input is always the same cache; only the per-source
+  # split definition (which split JSON, which variant) changes between benchmarks.
+  ac_cache_root: ${paths.ac_cache_path}
+  splits_root: ${paths.splits_path}
+  # Cosmetic label stored in the cache index/profile files; the cache identity is the processing-profile hash.
+  profile_alias: ${oc.select:model.config.model_name,unknown}
+
+  # Each source = {variant, split_json, split, tag}. The split JSON selects scenario IDs; the variant's cache supplies
+  # the agent-centric records; the tag labels the source (reported per-source via dataset_name).
+  train_sources: ${paths.train_sources}
+  val_sources: ${paths.val_sources}
+  test_sources: ${paths.test_sources}
 
   sample_selection_strategy: ${sample_selection_strategy}
   sample_selection_filepath: ${sample_selection_filepath}
 
-  temp_path: ${paths.temp_path}
-  cache_path: ${paths.data_cache_path}
-  use_cache: false
-  overwrite_cache: ${overwrite_cache}
   store_data_in_memory: false
 
   masked_attributes: ['z_axis', 'size']

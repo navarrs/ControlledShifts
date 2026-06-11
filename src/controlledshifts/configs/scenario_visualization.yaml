@@ -15,7 +15,7 @@ task_name: scenario_visualization
 split_filepath: ???                                      # path to the benchmark split JSON
 splits_to_visualize: [training, validation, testing]     # subset of the JSON keys to visualize
 
-# Directory holding the scenario pickles, organized into training/ validation/ testing/ subdirs of <id>.pkl.
+# Flat directory holding the scenario pickles (<id>.pkl), i.e. a variant store such as variants/base.
 scenarios_root: ???
 
 # Output root. Visualizations are written to: output_dir/<render>/<split_type>/<split>/<pane_type>

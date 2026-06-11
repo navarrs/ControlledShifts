@@ -9,11 +9,10 @@ benchmark_name: causal_agents
 # first; its split directories also serve the unperturbed "original" data, which is not re-copied here.
 reference_benchmark: uniform
 
-# Root for the flat perturbed datasets and the split-organized copy. The preparation step writes each strategy's
-# perturbed dataset flat to output_data_path/<strategy>/ (e.g. /data/driving/waymo/processed/remove_noncausal, reused
-# by the causal_agents_hard benchmark). When copy_splits is enabled, each perturbed dataset is organized into
-# output_data_path/causal_agents/<strategy>/{training,validation,testing}/.
-output_data_path: /data/driving/waymo/processed
+# Root for the flat perturbed variant stores. The preparation step writes each strategy's perturbed scenes flat to
+# output_data_path/<strategy>/ (e.g. /data/driving/waymo/variants/remove_noncausal, reused by the causal_agents_hard
+# benchmark). Build the agent-centric cache per variant afterwards via controlledshifts.build_ac_cache.
+output_data_path: /data/driving/waymo/variants
 
 # Path to the directory containing per-scenario JSON causal labels.
 causal_labels_path: /data/driving/waymo/meta/causal_agents/processed_labels/
