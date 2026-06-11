@@ -296,13 +296,16 @@ class BaseModel(LightningModule, ABC):
             scenario_scores (ScenarioScores | None): Pydantic model containing scenario score information.
         """
         scenario_scores = None
-        if "individual_agent_scores" in inputs and "interaction_agent_scores" in inputs:
-            individual_safety_scores = inputs["individual_agent_scores"].squeeze(-1)
-            interaction_safety_scores = inputs["interaction_agent_scores"].squeeze(-1)
+        individual_agent_scores = inputs.get("individual_agent_scores")
+        interaction_agent_scores = inputs.get("interaction_agent_scores")
+        # Safety scores are optional: they are only populated when agents are autolabeled or a scored cache variant is
+        # used. Otherwise the keys are absent or carry None (a list of None after collate), so gate on the values being
+        # real tensors rather than on key presence.
+        if isinstance(individual_agent_scores, torch.Tensor) and isinstance(interaction_agent_scores, torch.Tensor):
             scenario_scores = ScenarioScores(
-                individual_agent_scores=individual_safety_scores,
+                individual_agent_scores=individual_agent_scores.squeeze(-1),
                 individual_scenario_score=inputs["individual_scene_scores"],
-                interaction_agent_scores=interaction_safety_scores,
+                interaction_agent_scores=interaction_agent_scores.squeeze(-1),
                 interaction_scenario_score=inputs["interaction_scene_scores"],
             )
         return scenario_scores

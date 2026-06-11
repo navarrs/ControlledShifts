@@ -18,10 +18,11 @@ never imports tensorflow/waymo.
 import argparse
 import json
 import multiprocessing
-import os
 import pickle  # nosec B403
+from collections.abc import Iterable
 from functools import partial
 from pathlib import Path
+from typing import NotRequired, TypedDict
 
 import numpy as np
 import tensorflow as tf
@@ -98,12 +99,38 @@ signal_state = {
     8: "LANE_STATE_FLASHING_CAUTION",
 }
 
-signal_state_to_id = {}
-for key, val in signal_state.items():
-    signal_state_to_id[val] = key
+signal_state_to_id = {val: key for key, val in signal_state.items()}
 
 
-def decode_tracks_from_proto(tracks):
+class TrackInfos(TypedDict):
+    """Decoded agent tracks: per-object ids, types, and stacked trajectories."""
+
+    object_id: list[int]
+    object_type: list[str]
+    trajs: np.ndarray
+
+
+class MapInfos(TypedDict):
+    """Decoded map features grouped by type, plus the concatenated polyline buffer."""
+
+    lane: list[dict]
+    road_line: list[dict]
+    road_edge: list[dict]
+    stop_sign: list[dict]
+    crosswalk: list[dict]
+    speed_bump: list[dict]
+    all_polylines: NotRequired[np.ndarray]
+
+
+class DynamicMapInfos(TypedDict):
+    """Decoded dynamic map states (e.g. traffic signals) per timestep."""
+
+    lane_id: list[np.ndarray]
+    state: list[np.ndarray]
+    stop_point: list[np.ndarray]
+
+
+def decode_tracks_from_proto(tracks: Iterable[scenario_pb2.Track]) -> TrackInfos:
     """Decodes agent tracks from Waymo scenario proto.
 
     Args:
@@ -113,11 +140,9 @@ def decode_tracks_from_proto(tracks):
         dict: Dictionary with keys 'object_id', 'object_type', and 'trajs' containing
             agent IDs, types, and trajectories as numpy arrays.
     """
-    track_infos = {
-        "object_id": [],  # {0: unset, 1: vehicle, 2: pedestrian, 3: cyclist, 4: others}
-        "object_type": [],
-        "trajs": [],
-    }
+    object_ids: list[int] = []  # {0: unset, 1: vehicle, 2: pedestrian, 3: cyclist, 4: others}
+    object_types: list[str] = []
+    trajs: list[np.ndarray] = []
     for cur_data in tracks:  # number of objects
         cur_traj = [
             np.array(
@@ -137,17 +162,19 @@ def decode_tracks_from_proto(tracks):
             )
             for x in cur_data.states
         ]
-        cur_traj = np.stack(cur_traj, axis=0)  # (num_timestamp, 10)
 
-        track_infos["object_id"].append(cur_data.id)
-        track_infos["object_type"].append(object_type[cur_data.object_type])
-        track_infos["trajs"].append(cur_traj)
+        object_ids.append(cur_data.id)
+        object_types.append(object_type[cur_data.object_type])
+        trajs.append(np.stack(cur_traj, axis=0))  # (num_timestamp, 10)
 
-    track_infos["trajs"] = np.stack(track_infos["trajs"], axis=0)  # (num_objects, num_timestamp, 9)
-    return track_infos
+    return {
+        "object_id": object_ids,
+        "object_type": object_types,
+        "trajs": np.stack(trajs, axis=0),  # (num_objects, num_timestamp, 10)
+    }
 
 
-def get_polyline_dir(polyline):
+def get_polyline_dir(polyline: np.ndarray) -> np.ndarray:
     """Computes direction vectors for each segment of a polyline.
 
     Args:
@@ -159,11 +186,10 @@ def get_polyline_dir(polyline):
     polyline_pre = np.roll(polyline, shift=1, axis=0)
     polyline_pre[0] = polyline[0]
     diff = polyline - polyline_pre
-    polyline_dir = diff / np.clip(np.linalg.norm(diff, axis=-1)[:, np.newaxis], a_min=1e-6, a_max=1000000000)
-    return polyline_dir
+    return diff / np.clip(np.linalg.norm(diff, axis=-1)[:, np.newaxis], a_min=1e-6, a_max=1000000000)
 
 
-def decode_map_features_from_proto(map_features):
+def decode_map_features_from_proto(map_features: Iterable[scenario_pb2.MapFeature]) -> MapInfos:  # noqa: PLR0915
     """Decodes map features from Waymo scenario proto.
 
     Args:
@@ -173,7 +199,14 @@ def decode_map_features_from_proto(map_features):
         dict: Dictionary containing map features (lanes, road lines, road edges, stop signs,
             crosswalks, speed bumps) and all polylines as numpy arrays.
     """
-    map_infos = {"lane": [], "road_line": [], "road_edge": [], "stop_sign": [], "crosswalk": [], "speed_bump": []}
+    map_infos: MapInfos = {
+        "lane": [],
+        "road_line": [],
+        "road_edge": [],
+        "stop_sign": [],
+        "crosswalk": [],
+        "speed_bump": [],
+    }
     polylines_list = []
 
     point_cnt = 0
@@ -290,7 +323,7 @@ def decode_map_features_from_proto(map_features):
     return map_infos
 
 
-def decode_dynamic_map_states_from_proto(dynamic_map_states):
+def decode_dynamic_map_states_from_proto(dynamic_map_states: Iterable[scenario_pb2.DynamicMapState]) -> DynamicMapInfos:
     """Decodes dynamic map states (e.g., traffic signals) from Waymo scenario proto.
 
     Args:
@@ -299,7 +332,7 @@ def decode_dynamic_map_states_from_proto(dynamic_map_states):
     Returns:
         dict: Dictionary with lane IDs, signal states, and stop points for each timestep.
     """
-    dynamic_map_infos = {"lane_id": [], "state": [], "stop_point": []}
+    dynamic_map_infos: DynamicMapInfos = {"lane_id": [], "state": [], "stop_point": []}
     for cur_data in dynamic_map_states:  # (num_timestamp)
         lane_id, state, stop_point = [], [], []
         # Skip over empty ones
@@ -351,7 +384,11 @@ def process_waymo_data_with_scenario_proto(
         map_infos = decode_map_features_from_proto(scenario.map_features)
         dynamic_map_infos = decode_dynamic_map_states_from_proto(scenario.dynamic_map_states)
 
-        save_infos = {"track_infos": track_infos, "dynamic_map_infos": dynamic_map_infos, "map_infos": map_infos}
+        save_infos: dict[str, object] = {
+            "track_infos": track_infos,
+            "dynamic_map_infos": dynamic_map_infos,
+            "map_infos": map_infos,
+        }
         save_infos.update(info)
 
         with (output_path / f"{scenario.scenario_id}.pkl").open("wb") as f:
@@ -364,7 +401,7 @@ def get_infos_from_protos(
     data_path: Path, output_path: Path, scenario_ids: list[str] | None = None, num_workers: int = 8
 ) -> list[dict]:
     """Decodes all .tfrecord files in a directory in parallel, writing decoded scenario dicts to ``output_path``."""
-    os.makedirs(output_path, exist_ok=True)
+    output_path.mkdir(parents=True, exist_ok=True)
     src_files = sorted(data_path.glob("*.tfrecord*"))
     func = partial(process_waymo_data_with_scenario_proto, output_path=output_path, scenario_ids=scenario_ids)
     with multiprocessing.Pool(num_workers) as pool:
@@ -372,7 +409,8 @@ def get_infos_from_protos(
     return [item for infos in data_infos for item in infos]
 
 
-def run(
+def run(  # noqa: PLR0913
+    *,
     raw_data_path: Path,
     proc_data_path: Path,
     split: str,
@@ -403,7 +441,7 @@ def run(
     # Write all scenarios flat into the canonical base variant store (keyed by scenario_id), regardless of which raw
     # Waymo split they came from. Benchmark splits (splits/*.json) are the source of truth for train/val/test; the raw
     # origin split is recorded in _variant_manifest.json only for provenance.
-    os.makedirs(proc_data_path, exist_ok=True)
+    proc_data_path.mkdir(parents=True, exist_ok=True)
 
     scenario_ids: list[str] = []
     if search_safeshift:
