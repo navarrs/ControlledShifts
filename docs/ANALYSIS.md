@@ -109,40 +109,44 @@ scores* per model per metric, measured against a reference. Two reference modes 
 - `uniform_relative` — each model vs **its own** performance in the **Uniform** benchmark (e.g. AutoBot on
   EgoSafeShift vs AutoBot on Uniform). The Uniform benchmark is excluded from this mode's aggregation.
 
-All metrics are lower-is-better (errors). Working in natural-log space, a model's total out-of-distribution advantage
-over the reference decomposes **exactly and additively** into two reference-relative robustness terms:
-
-```
-log(ref_unseen / model_unseen) = log(ref_seen / model_seen) + log((ref_unseen/ref_seen) / (model_unseen/model_seen))
-   robustness_score (overall)  =     seen_robustness_score   +              shift_robustness_score
-```
+All metrics are lower-is-better (errors). Working in natural-log space, each model is characterized by two
+reference-relative robustness axes:
 
 - `seen_robustness_score = log(ref_seen / model_seen)` — **ID-level robustness**: how much better the model already is
   on the seen split (its starting point).
 - `shift_robustness_score = log((ref_unseen/ref_seen) / (model_unseen/model_seen))` — **shift robustness**: how much
   *less* the model degrades seen→unseen than the reference. Sign-preserving, so a model that improves under shift is
   rewarded.
-- `robustness_score = seen_robustness_score + shift_robustness_score = log(ref_unseen / model_unseen)` — **overall OOD
-  robustness** vs the reference.
 
-All three share the same log units, are symmetric and unbounded both ways (a 2× improvement and a 2× degradation are
+Both share the same log units, are symmetric and unbounded both ways (a 2× improvement and a 2× degradation are
 `±log 2`), and are `0` for the reference compared against itself (so the Naive row is a visible baseline in
-`naive_relative`). In both reference modes the convention is the same: **higher == more robust than the reference**,
-`0` == on par, negative == worse. There are no epsilon/clip knobs and no regression — the terms are exact log ratios.
+`naive_relative`): **higher == more robust than the reference**, `0` == on par, negative == worse. There are no
+epsilon/clip knobs and no regression — the axes are exact log ratios. Each is aggregated across benchmarks (NaN-safe
+`mean`/`median`, set by `score.aggregate`); the `Combined` column holds the per-model mean across metrics.
 
-Each term is aggregated across benchmarks (NaN-safe `mean`/`median`, set by `score.aggregate`); the `Combined` column
-always holds the per-model mean across metrics.
+### Combined ranking score
+
+To rank models by a single value, the two axes are reduced to a **combined** score. Their raw sum is deliberately *not*
+used: it telescopes to `seen + shift = log(ref_unseen / model_unseen)`, which ranks models purely by OOD error (the
+reference cancels to an additive constant) and adds nothing beyond the OOD numbers. Instead the combined score uses
+**standardized equal-influence**: each axis is z-scored across the model cohort (per metric, NaN-aware), the two
+z-scores are summed, and the per-model mean across metrics is the ranking value. This gives both axes — and every
+metric — equal say regardless of their natural spread. The trade-off is that the combined score is **cohort-relative**:
+`0` is the cohort average (not the reference), and scores recenter if the set of models changes. It is a ranking tool,
+not an absolute metric.
 
 Run the analysis as:
 ```bash
 uv run -m controlledshifts.run_analysis analysis=sensitivity_score
 ```
 
-For each reference mode it writes, under `<output_path>/<mode>/`, a radar plot, CSV table and LaTeX table for each term
-(`seen_robustness_*`, `shift_robustness_*`, `robustness_*`) plus a `robustness_decomposition.png` scatter — one panel
-per metric placing each model at `(seen_robustness_score, shift_robustness_score)`, with the reference at the origin and
-anti-diagonals marking constant overall robustness. Upper-right points are both better in-distribution and more
-shift-robust than the reference.
+For each reference mode it writes, under `<output_path>/<mode>/`:
+- a radar plot, CSV and LaTeX table for each axis (`seen_robustness_*`, `shift_robustness_*`);
+- a `robustness_decomposition.png` scatter — one panel per metric placing each model at
+  `(seen_robustness_score, shift_robustness_score)`, with the reference at the origin; the upper-right quadrant is both
+  better in-distribution and more shift-robust than the reference;
+- the combined ranking as a sorted bar chart (`combined_robustness_ranking.png`, best first) plus its CSV and LaTeX
+  table (`combined_robustness_scores.*`).
 
 
 # Sample Selection
