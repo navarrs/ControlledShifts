@@ -80,7 +80,7 @@ def _remove_causal(scenario: dict[str, Any], causal_labels: dict[str, Any], outp
     causal_track_index_mask = ~np.isin(track_index, causal_idxs)
     scenario["tracks_to_predict"] = {
         "track_index": track_index[causal_track_index_mask].tolist(),
-        "track_difficulty": track_difficulty[causal_track_index_mask].tolist(),
+        "difficulty": track_difficulty[causal_track_index_mask].tolist(),
         "object_type": object_type[causal_track_index_mask].tolist(),
     }
 
@@ -119,7 +119,7 @@ def remove_noncausal(scenario: dict[str, Any], causal_labels: dict[str, Any], ou
     noncausal_track_index_mask = ~np.isin(track_index, noncausal_idxs)
     scenario["tracks_to_predict"] = {
         "track_index": track_index[noncausal_track_index_mask].tolist(),
-        "track_difficulty": track_difficulty[noncausal_track_index_mask].tolist(),
+        "difficulty": track_difficulty[noncausal_track_index_mask].tolist(),
         "object_type": object_type[noncausal_track_index_mask].tolist(),
     }
 
@@ -164,7 +164,7 @@ def _remove_noncausalequal(
     noncausal_track_index_mask = ~np.isin(track_index, noncausal_idxs_to_remove)
     scenario["tracks_to_predict"] = {
         "track_index": track_index[noncausal_track_index_mask].tolist(),
-        "track_difficulty": track_difficulty[noncausal_track_index_mask].tolist(),
+        "difficulty": track_difficulty[noncausal_track_index_mask].tolist(),
         "object_type": object_type[noncausal_track_index_mask].tolist(),
     }
 
@@ -215,7 +215,7 @@ def _remove_static(scenario: dict[str, Any], output_filepath: Path, threshold_di
 
     scenario["tracks_to_predict"] = {
         "track_index": filtered_track_index,
-        "track_difficulty": track_difficulty[static_track_index_mask].tolist(),
+        "difficulty": track_difficulty[static_track_index_mask].tolist(),
         "object_type": object_type[static_track_index_mask].tolist(),
     }
 

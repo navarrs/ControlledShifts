@@ -1,184 +1,195 @@
 # Benchmarks
 
-## Splits and data copying
+A *benchmark* defines a train→test **distribution shift** over the single canonical scenario pool
+(`variants/base`, produced in [DATA_PREPARATION.md](DATA_PREPARATION.md)). It does this by deciding how the pool is
+re-split into train/validation/testing and — for the perturbation benchmarks — by generating perturbed copies of the
+scenes. See [DATA_PREPARATION.md](DATA_PREPARATION.md) for the full from-scratch pipeline (decode → benchmark → build
+agent-centric cache → train).
 
-Benchmark creation is split into two stages. Every `create_benchmark` run first **computes** the
-training/validation/testing assignment and saves it as a single JSON file at `${splits_path}/${benchmark_name}.json`:
+## How benchmarks are created and consumed
 
-```json
-{
-  "benchmark_name": "ego_safeshift",
-  "training":   ["scenario_id", "..."],
-  "validation": ["..."],
-  "testing":    ["..."],
-  "invalid":    ["..."]
-}
-```
+Benchmark creation only computes a **split** (lists of scenario IDs) and, for the causal benchmarks, writes **perturbed
+variant stores** — it never copies or duplicates the scenario data.
 
-The `training`/`validation`/`testing` lists are mutually exclusive; `invalid` holds scenarios that were considered but
-could not be placed (missing from the input directory, missing causal labels, etc.). Pass `copy_splits=true` to also
-**copy** the data into `training/validation/testing` subdirectories under each benchmark's `output_data_path` after the
-splits are saved. Without `copy_splits`, only the JSON files are produced. Key options (see
-`configs/create_benchmark.yaml`):
-- `splits_path`: directory where the split JSON files are written. Default: `/data/driving/waymo/splits`.
-- `copy_splits`: if true, organize the input (and any prepared perturbed datasets) into split subdirectories. Default: `false`.
+1. **Create** — `create_benchmark` writes a single split JSON at `${splits_path}/${benchmark_name}.json`:
+   ```json
+   {
+     "benchmark_name": "ego_safeshift",
+     "training":   ["scenario_id", "..."],
+     "validation": ["..."],
+     "testing":    ["..."],
+     "invalid":    ["..."]
+   }
+   ```
+   The `training`/`validation`/`testing` lists are mutually exclusive; `invalid` holds scenarios that were considered
+   but could not be placed (missing from the input store, missing causal labels, etc.). The `causal_agents` and
+   `causal_agents_hard` benchmarks additionally write perturbed variant stores under `variants/<strategy>/` (one flat
+   `<scenario_id>.pkl` per scene; see *Causal Agents*).
 
-## Waymo (default)
+2. **Build the agent-centric cache** — before training, build the cache for each variant the benchmark uses
+   (`base`, plus any perturbation variants): `uv run -m controlledshifts.build_ac_cache variant=<variant> model=<model>`
+   (see [DATA_PREPARATION.md](DATA_PREPARATION.md) step 5).
 
-No benchmark creation step required. Use the default Waymo paths.
+3. **Train / evaluate** — `paths=<benchmark>` selects scenario IDs from the split JSON and reads the matching variant's
+   cache. Unperturbed scenes come from the `base` variant; perturbed test sets come from the perturbation variants —
+   both indexed by the **same** split, so a scene is paired with its perturbed counterpart in the same bucket.
 
-**Training and evaluation:**
-```bash
-uv run -m controlledshifts.train model=[model_name] paths=waymo
-```
+Common `create_benchmark` options (see `configs/create_benchmark.yaml`):
+- `input_data_path`: the canonical scenario store to split. Default: `/data/driving/waymo/variants/base`.
+- `splits_path`: directory where the split JSON is written. Default: `/data/driving/waymo/splits`.
+- `seed`: makes the split deterministic. Default: `42`.
+- `overwrite`: if `false` (default), an existing split JSON and already-prepared perturbed variants are reused; set
+  `true` to regenerate.
 
 ## Uniform
 
-The plain IID baseline (no distribution shift). The input scenarios are split uniformly at random into training/validation/testing following `split_ratios`, with the same distribution across all three splits. Use it as a control to compare against the shift-inducing benchmarks below.
+The plain IID baseline (**no distribution shift**): the pool is split uniformly at random into
+training/validation/testing following `split_ratios`, with the same distribution across all three. Use it as a control,
+and as the **reference split** the perturbation benchmarks reuse.
 
-**Creating the benchmark:**
+**Create:**
 ```bash
-uv run -m controlledshifts.create_benchmark benchmark=uniform \
-    input_data_path=/data/driving/waymo/processed/mini
+uv run -m controlledshifts.create_benchmark benchmark=uniform   # -> splits/uniform.json
 ```
 
 Key options (see `configs/benchmark/uniform.yaml`):
-- `split_ratios`: `(train, val, test)` fractions of the full dataset. Default: `[0.70, 0.15, 0.15]`. The split is deterministic for a fixed `seed`.
+- `split_ratios`: `(train, val, test)` fractions. Default: `[0.70, 0.15, 0.15]`. Deterministic for a fixed `seed`.
+
+**Train / evaluate:**
+```bash
+uv run -m controlledshifts.train model=[model_name] paths=uniform
+```
 
 ## Causal Agents
 
-Evaluates robustness to causal agent perturbations. Rather than computing its own split, this benchmark **reuses the split of a reference benchmark** (`reference_benchmark`, by default `uniform`), so the perturbed scenes land in the same train/validation/testing buckets as their unperturbed counterparts. Create the reference benchmark first — `uv run -m controlledshifts.create_benchmark benchmark=uniform copy_splits=true` — or the run aborts with a `FileNotFoundError`. As a preparation step, the perturbed dataset for **every** masking strategy (causal, non-causal, non-causal-equal, static) is generated up front and written flat under `output_data_path/<strategy>/`, mirroring the input dataset with no split subdirectories. With `copy_splits=true`, each perturbed dataset is organized into `output_data_path/causal_agents/<strategy>/{training,validation,testing}`. The unperturbed "original" data is **not** re-copied: it is served directly from the reference benchmark's split directories (e.g. `processed/uniform/{training,validation,testing}`), so the same held-out scenes can be compared with and without the perturbation.
+Evaluates robustness to **agent removal**: does the model rely on the *right* (causal) agents? Rather than computing its
+own split, it **reuses the `uniform` split** (`reference_benchmark`, default `uniform`) so every perturbed scene stays in
+the same train/validation/testing bucket as its unperturbed counterpart — create `uniform` first or the run aborts with
+a `FileNotFoundError`. As preparation it generates a perturbed variant store for **every** masking strategy, written flat
+under `variants/<strategy>/` with the same scenario IDs as `base` (the selected agents have their trajectories
+invalidated and are dropped from the prediction targets):
 
-**Creating the benchmark:**
+- `variants/remove_causal/` — removes the agents labelled **causal** to the ego.
+- `variants/remove_noncausal/` — removes the agents **not** causal to the ego (keeps only the causal agents + ego).
+- `variants/remove_noncausalequal/` — removes a **random subset of non-causal** agents **equal in number** to the causal
+  agents (a control for *how many* agents are removed).
+- `variants/remove_static/` — removes **static** agents (start-to-end displacement below a threshold), keeping the ego.
+
+The unperturbed "original" scenes are not re-stored — they are the `base` variant, paired with the perturbed variants by
+the shared `uniform` split.
+
+**Create:**
 ```bash
-# Create the reference (uniform) split first.
-uv run -m controlledshifts.create_benchmark benchmark=uniform copy_splits=true
-
-uv run -m controlledshifts.create_benchmark benchmark=causal_agents \
-    input_data_path=/data/driving/waymo/processed/mini_causal \
-    causal_labels_path=/data/driving/waymo/causal_agents/processed_labels \
-    copy_splits=true
+uv run -m controlledshifts.create_benchmark benchmark=uniform          # reference split (run once)
+uv run -m controlledshifts.create_benchmark benchmark=causal_agents    # -> variants/remove_{causal,noncausal,noncausalequal,static}/
 ```
 
 Key options (see `configs/benchmark/causal_agents.yaml`):
-- `reference_benchmark`: benchmark whose saved split is reused and whose directories serve the unperturbed data. Default: `uniform`. It must be created first.
-- `causal_labels_path`: directory containing per-scenario JSON causal labels.
-- `prepare_perturbations`: if true, generate the flat perturbed dataset for every strategy up front. Default: `true`.
+- `reference_benchmark`: benchmark whose split is reused. Default: `uniform` (must exist first).
+- `causal_labels_path`: directory of per-scenario JSON causal labels. Default:
+  `/data/driving/waymo/meta/causal_agents/processed_labels/`.
+- `prepare_perturbations`: generate the perturbed variant stores up front. Default: `true`.
 
-**Training and evaluation:**
-
-`paths=causal_agents_all` evaluates against all perturbation strategies:
+**Train / evaluate** (build the `base` cache and the perturbation caches you will evaluate first):
 ```bash
+# Original vs the remove_noncausal perturbation:
+uv run -m controlledshifts.train model=[model_name] paths=causal_agents
+# Original vs all four perturbations:
 uv run -m controlledshifts.train model=[model_name] paths=causal_agents_all
 ```
 
-`paths=causal_agents` evaluates against `remove_causal` and `remove_noncausal` only:
-```bash
-uv run -m controlledshifts.train model=[model_name] paths=causal_agents
-```
-
-Test subsets for `causal_agents_all`:
-- *Original*: unperturbed scenes.
-- *Remove causal*: removes agents labeled as causal to the ego.
-- *Remove non-causal*: removes agents not labeled as causal to the ego.
-- *Remove non-causal-equal*: removes N non-causal agents, where N equals the number of causal agents.
-- *Remove static*: removes agents whose motion is below a threshold.
-
 ## Causal Agents Hard
 
-A harder variant of Causal Agents that focuses on a single perturbation — removing non-causal agents — and re-organizes scenarios by difficulty instead of reusing the original mini-causal splits. Difficulty is the number of non-causal agents in a scenario: the scenarios with the most non-causal agents form the test set (following `split_ratios`). Each scenario is materialized twice under the same split: an unperturbed `original` copy and a `remove_noncausal` copy with non-causal agents removed (matching the folder naming of the Causal Agents benchmark), so the original and perturbed versions of the same held-out scenes can be compared. Existing `remove_noncausal` perturbed files are reused when found and generated on the fly otherwise.
+A harder variant of Causal Agents focused on a single perturbation (**remove non-causal**) that **re-splits by
+difficulty** instead of reusing `uniform`. Difficulty is the number of non-causal agents per scene: the scenes with the
+most non-causal agents form the test set (following `split_ratios`). It writes `splits/causal_agents_hard.json` and
+generates the `remove_noncausal` perturbed variant store (reusing existing perturbed files when present), so the
+`base` (original) and `remove_noncausal` versions of the same held-out scenes can be compared.
 
-**Creating the benchmark:**
+**Create:**
 ```bash
-uv run -m controlledshifts.create_benchmark benchmark=causal_agents_hard \
-    input_data_path=/data/driving/waymo/processed/mini_causal \
-    output_data_path=/data/driving/waymo/processed/causal_agents_hard \
-    causal_labels_path=/data/driving/waymo/causal_agents/processed_labels \
-    perturbed_data_path=/data/driving/waymo/processed/remove_noncausal
+uv run -m controlledshifts.create_benchmark benchmark=causal_agents_hard
+# -> splits/causal_agents_hard.json (+ variants/remove_noncausal/ if not already present)
 ```
 
 Key options (see `configs/benchmark/causal_agents_hard.yaml`):
-- `causal_labels_path`: directory containing per-scenario JSON causal labels.
-- `perturbed_data_path`: existing `remove_noncausal` output to reuse; missing scenarios are generated on the fly.
-- `split_ratios`: `(train, val, test)` fractions of the full dataset; scenarios with the most non-causal agents form the test set. Default: `[0.70, 0.15, 0.15]`.
+- `causal_labels_path`: directory of per-scenario JSON causal labels.
+- `perturbed_data_path`: `remove_noncausal` variant store to reuse/populate. Default: `/data/driving/waymo/variants/remove_noncausal/`.
+- `split_ratios`: `(train, val, test)` fractions; scenes with the most non-causal agents form the test set. Default: `[0.70, 0.15, 0.15]`.
 
-**Training and evaluation:**
-
-`paths=causal_agents_hard` trains on the reorganized original splits and evaluates on the original and perturbed versions of the hardest held-out scenes:
+**Train / evaluate** (trains on `base` under this split, evaluates `base` vs `remove_noncausal` on the hardest held-out scenes):
 ```bash
 uv run -m controlledshifts.train model=[model_name] paths=causal_agents_hard
 ```
 
 ## SafeShift
 
-Evaluates generalization to safety-critical scenarios. Splits are derived from the full SafeShift dataset using the asymmetric-combined scoring strategy. Train/val use the In-Distribution (ID) subset; test uses the Out-of-Distribution (OOD) subset.
+Evaluates generalization to **safety-critical** scenes. The split is derived from the SafeShift score metadata
+(asymmetric-combined scoring): train/val are the In-Distribution (ID) subset, test is the Out-of-Distribution (OOD)
+subset. The scenario *data* is still the `base` variant — only the split assignment comes from the SafeShift metadata.
 
-**Creating the benchmark:**
+**Create:**
 ```bash
-uv run -m controlledshifts.create_benchmark benchmark=safeshift \
-    input_data_path=/datasets/scenarios/safeshift_all \
-    output_data_path=/data/driving/waymo/processed/safeshift \
-    scores_path=/datasets/waymo/mtr_process_splits \
-    prefix=score_asym_combined_80_
+uv run -m controlledshifts.create_benchmark benchmark=safeshift   # -> splits/safeshift.json
 ```
 
 Key options (see `configs/benchmark/safeshift.yaml`):
-- `scores_path`: directory containing the SafeShift score metadata (`*_infos.pkl` files).
-- `prefix`: filename prefix used to locate the metadata files. Default: `score_asym_combined_80_`.
+- `scores_path`: directory of SafeShift score metadata (`*_infos.pkl`). Default: `/data/driving/waymo/meta/safeshift/mtr_process_splits`.
+- `prefix`: filename prefix for the metadata files. Default: `score_asym_combined_80_`.
 
-**Training and evaluation:**
-
-`paths=safeshift` trains on the SafeShift ID subset and evaluates on OOD:
+**Train / evaluate:**
 ```bash
+# Pure SafeShift ID (train/val) -> OOD (test):
+uv run -m controlledshifts.train model=[model_name] paths=safeshift_original
+# SafeShift OOD combined with the remove_noncausal causal perturbation at test time:
 uv run -m controlledshifts.train model=[model_name] paths=safeshift
-```
-
-`paths=safeshift_causal` combines the Causal Agents and SafeShift benchmarks, training on mini-causal data and evaluating on both:
-```bash
-uv run -m controlledshifts.train model=[model_name] paths=safeshift_causal
 ```
 
 ## Ego-SafeShift
 
-Evaluates generalization to ego-safety-critical scenarios. Splits are derived from the causal dataset by ranking scenarios using ego safety scores from the ground-truth scoring strategy. The highest-scoring (hardest) scenarios form the OOD test set; the remainder forms the ID train/val pool, following `split_ratios`.
+Like SafeShift, but scenes are ranked by **ego-centric** safety scores (ground-truth scoring): the highest-scoring
+(hardest) scenes form the OOD test set and the rest form the ID train/val pool, following `split_ratios`.
 
-**Creating the benchmark:**
+**Create:**
 ```bash
 uv run -m controlledshifts.create_benchmark benchmark=ego_safeshift \
-    input_data_path=/data/driving/waymo/processed/mini_causal \
-    output_data_path=/data/driving/waymo/processed/causal_ego_safeshift \
-    scenario_score_mapping_filepath=meta/scenario_to_scores_mapping.csv
+    scenario_score_mapping_filepath=/data/driving/waymo/meta/ego-safeshift/scores_8/scenario_to_scores_mapping.csv
+# -> splits/ego_safeshift.json
 ```
 
 Key options (see `configs/benchmark/ego_safeshift.yaml`):
-- `scenario_score_mapping_filepath`: CSV file with columns `scenario_ids` and a score column.
-- `score_type`: column to rank scenarios by (higher = harder = test). Default: `gt_critical_continuous_safeshift`.
-- `split_ratios`: `(train, val, test)` fractions of the full dataset; the hardest scenarios form the test set. Default: `[0.70, 0.15, 0.15]`.
+- `scenario_score_mapping_filepath` (**required**): CSV with a `scenario_ids` column and a score column.
+- `score_type`: column to rank by (higher = harder = test). Default: `gt_critical_continuous_safeshift`.
+- `split_ratios`: `(train, val, test)` fractions; the hardest scenes form the test set. Default: `[0.70, 0.15, 0.15]`.
 
-**NOTE:** The ego scores were computed using the [ScenarioCharacterization](https://github.com/navarrs/ScenarioCharacterization/) package. Please refer to the repository for instructions on how to obtain the scores. Here,
-we faciliate `scenario_to_scores_mapping.csv` which maps each scenario to their ego-score.
+**NOTE:** The ego scores are computed with the [ScenarioCharacterization](https://github.com/navarrs/ScenarioCharacterization/)
+package — see that repo for how to produce the `scenario_to_scores_mapping.csv` mapping each scenario to its ego score.
 
-**Training and evaluation:**
-
-`paths=ego_safeshift_causal` trains on the Ego-SafeShift ID subset and evaluates on OOD:
+**Train / evaluate:**
 ```bash
-uv run -m controlledshifts.train model=[model_name] paths=ego_safeshift_causal
+uv run -m controlledshifts.train model=[model_name] paths=ego_safeshift
 ```
 
 ## Environments
 
-Evaluates generalization across road topology types. Scenarios are clustered by map structure using NetLSD graph descriptors and KMeans; splits are assigned based on cluster hardness (silhouette score).
+Evaluates generalization across **road-topology** types. Scenes are clustered by map structure (NetLSD graph
+descriptors) and clusters are ranked by hardness; the hardest clusters form the OOD test set. The clustering artifacts
+(model, scatter plots, per-cluster examples) are written under `cache_path`; the split assignment is written to
+`splits/environments.json`.
 
-**Creating the benchmark:**
+**Create:**
 ```bash
-uv run -m controlledshifts.create_benchmark benchmark=environments \
-    input_data_path=/datasets/waymo/processed/mini_causal \
-    output_data_path=/datasets/waymo/processed/environment_benchmark
+uv run -m controlledshifts.create_benchmark benchmark=environments   # -> splits/environments.json
 ```
 
 Key options (see `configs/benchmark/environments.yaml`):
-- `n_clusters`: number of KMeans clusters. Default: `10`.
-- `sample_percentage`: fraction of scenarios used to fit the model. Default: `0.20`.
-- `reduction`: dimensionality reduction for the scatter plot — `pca` or `tsne`. Default: `pca`.
+- `clustering_algorithm`: `kmeans` / `ward` / `spectral` / etc. Default: `ward`.
+- `n_clusters`: number of clusters. Default: `10`.
+- `hardness_metric`: how cluster hardness is ranked — `silhouette` (lowest = hardest) or `dbi` (highest = hardest). Default: `silhouette`.
+- `sample_percentage` / `num_scenarios`: fraction (or count) of scenes used to fit the clustering model.
+- `cache_path`: directory for clustering artifacts. Default: `/data/driving/waymo/meta/environments`.
 
-Training and evaluation paths are under development.
+**Train / evaluate:**
+```bash
+uv run -m controlledshifts.train model=[model_name] paths=environments
+```
