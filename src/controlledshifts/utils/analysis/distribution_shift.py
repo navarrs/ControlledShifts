@@ -7,6 +7,7 @@ import math
 from itertools import product
 from logging import Logger
 from pathlib import Path
+from typing import NamedTuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -399,6 +400,79 @@ def _plot_benchmark(
     _plot_grouped_bar_chart(summary_df, metrics_map, output_path, key_metrics_display=key_metrics_display)
 
 
+class _MetricMeans(NamedTuple):
+    """Per-metric mean seen/unseen values and mean OOD gap (percent) for a set of rows, each keyed by metric name."""
+
+    seen: dict[str, float]
+    unseen: dict[str, float]
+    gap: dict[str, float]
+
+
+def _benchmark_metric_means(
+    benchmark_df: pd.DataFrame, id_split: str, ood_split: str, metrics: list[str]
+) -> _MetricMeans:
+    """Compute per-metric mean seen/unseen values and mean per-model OOD gap for one benchmark block.
+
+    The mean gap is the mean of the per-model relative ID->OOD gaps (NaNs skipped) -- i.e. the average degradation
+    across the models in the benchmark, not the gap between the averaged values.
+
+    Args:
+        benchmark_df (pd.DataFrame): Per-model frame from :func:`build_benchmark_df`.
+        id_split (str): Column prefix of the In-Distribution split.
+        ood_split (str): Column prefix of the Out-of-Distribution split.
+        metrics (list[str]): Metric names to summarize.
+
+    Returns:
+        _MetricMeans: Per-metric mean seen value, mean unseen value, and mean OOD gap.
+    """
+    mean_seen: dict[str, float] = {}
+    mean_unseen: dict[str, float] = {}
+    mean_gap: dict[str, float] = {}
+    for metric in metrics:
+        id_vals = benchmark_df[f"{id_split}/{metric}"]
+        ood_vals = benchmark_df[f"{ood_split}/{metric}"]
+        gaps: pd.Series = relative_gap_pct(ood_vals, id_vals)  # pyright: ignore[reportAssignmentType, reportArgumentType]
+        mean_seen[metric] = float(id_vals.mean())
+        mean_unseen[metric] = float(ood_vals.mean())
+        mean_gap[metric] = float(gaps.mean())
+    return _MetricMeans(mean_seen, mean_unseen, mean_gap)
+
+
+def _build_mean_row(
+    benchmark_label: str, model_label: str, means: _MetricMeans, metrics: list[str], gray_level: float
+) -> str:
+    r"""Render a gray-shaded summary row of per-metric mean seen/unseen values and mean OOD gaps (plain text).
+
+    The row matches the model rows' column layout (lead columns + seen metrics + two spacers + unseen metrics) and is
+    shaded via ``\rowcolor`` so it reads as an aggregate. Unlike the model rows, the gap is plain text (no color/bold).
+
+    Args:
+        benchmark_label (str): Leading benchmark cell (empty inside a block; a label such as ``Overall`` otherwise).
+        model_label (str): Text for the model cell (e.g. ``Mean``).
+        means (_MetricMeans): Per-metric mean seen/unseen values and mean OOD gap.
+        metrics (list[str]): Metric names, in column order.
+        gray_level (float): ``\rowcolor[gray]`` level (0=black, 1=white); lower is darker.
+
+    Returns:
+        str: The LaTeX row string, prefixed with the row-color directive.
+    """
+    row_parts = [benchmark_label, model_label, ""]  # benchmark, model, model-size (blank for aggregates)
+
+    id_values = [f"{means.seen[metric]:.3f}" if pd.notna(means.seen[metric]) else "---" for metric in metrics]
+    id_values.append("")  # spacer column
+
+    ood_values = [""]  # spacer column
+    for metric in metrics:
+        if pd.notna(means.unseen[metric]) and pd.notna(means.gap[metric]):
+            ood_values.append(f"{means.unseen[metric]:.3f} ({means.gap[metric]:+.2f}\\%)")
+        else:
+            ood_values.append("---")
+
+    row_parts.extend(id_values)
+    row_parts.extend(ood_values)
+    return f"\\rowcolor[gray]{{{gray_level}}}\n" + " & ".join(row_parts) + " \\\\"
+
+
 def _build_benchmark_rows(  # noqa: PLR0912, PLR0915
     benchmark_df: pd.DataFrame,
     benchmark_name: str,
@@ -493,6 +567,10 @@ def _build_benchmark_rows(  # noqa: PLR0912, PLR0915
         row_parts.extend(ood_values)
         table_rows.append(" & ".join(row_parts) + " \\\\")
 
+    # Light-gray per-benchmark mean row; benchmark cell left empty so the multirow label stays over the model rows.
+    means = _benchmark_metric_means(benchmark_df, id_split, ood_split, metrics)
+    table_rows.append(_build_mean_row("", "Mean", means, metrics, gray_level=0.9))
+
     return table_rows
 
 
@@ -516,10 +594,30 @@ def _write_combined_tex_table(
             body_rows.append("\\midrule")
         body_rows.extend(_build_benchmark_rows(benchmark_df, benchmark_name, id_split, ood_split, metrics))
 
+    # Gray overall mean row across the entire sweep (grand mean over all benchmark x model entries).
+    acc_id: dict[str, list[pd.Series]] = {metric: [] for metric in metrics}
+    acc_ood: dict[str, list[pd.Series]] = {metric: [] for metric in metrics}
+    acc_gap: dict[str, list[pd.Series]] = {metric: [] for metric in metrics}
+    for _, id_split, ood_split, benchmark_df in blocks:
+        for metric in metrics:
+            id_vals = benchmark_df[f"{id_split}/{metric}"]
+            ood_vals = benchmark_df[f"{ood_split}/{metric}"]
+            acc_id[metric].append(id_vals)
+            acc_ood[metric].append(ood_vals)
+            acc_gap[metric].append(pd.Series(relative_gap_pct(ood_vals, id_vals)))
+    overall_means = _MetricMeans(
+        seen={metric: float(pd.concat(acc_id[metric], ignore_index=True).mean()) for metric in metrics},
+        unseen={metric: float(pd.concat(acc_ood[metric], ignore_index=True).mean()) for metric in metrics},
+        gap={metric: float(pd.concat(acc_gap[metric], ignore_index=True).mean()) for metric in metrics},
+    )
+    body_rows.append("\\midrule")
+    body_rows.append(_build_mean_row("\\texttt{Overall}", "Mean", overall_means, metrics, gray_level=0.8))
+
     n_metrics = len(metrics)
     col_spec = "l l c " + "c" * (2 * n_metrics) + "cc"
 
     latex_lines: list[str] = [
+        "% Requires \\usepackage[table]{xcolor} (\\rowcolor), plus multirow/graphicx as before.",
         "\\begin{table*}[t]",
         "\\centering",
         "\\small",
