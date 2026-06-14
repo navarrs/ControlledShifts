@@ -97,7 +97,10 @@ uv run -m controlledshifts.run_analysis analysis=distribution_shift
 ```
 
 It writes per-benchmark comparison plots under `<output_path>/<benchmark>/` and one combined LaTeX table spanning all
-benchmarks to `<output_path>/results.tex`.
+benchmarks to `<output_path>/results.tex`. Each benchmark block ends with a light-gray mean row holding the per-metric
+mean seen value, mean unseen value, and mean OOD gap (the mean of the per-model gaps), and the table closes with a gray
+overall-mean row giving the per-metric mean across the entire sweep. Because these rows are shaded with `\rowcolor`, the
+consuming LaTeX document must load `\usepackage[table]{xcolor}`.
 
 
 ## Robustness Score Analysis
