@@ -11,32 +11,31 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 
 from controlledshifts.schemas import output_schemas as output
-from controlledshifts.utils.data_utils import resplit_batch
 
 
 def _load_model_outputs(outputs_path: Path, tag: str, num_scenarios: int | None) -> dict[str, output.ModelOutput]:
     """Loads cached model outputs (pickle files) from a directory.
 
     Args:
-        outputs_path: path to the directory containing cached model output pickle files.
-        tag: filename tag used to filter files (e.g. 'val', 'train').
+        outputs_path: root cache directory holding one per-split subdirectory per tag.
+        tag: split subdirectory to load from (e.g. 'val', 'train').
         num_scenarios: if set, limits the number of scenarios loaded.
 
     Returns:
         A dict mapping scenario_id -> ModelOutput.
     """
     model_outputs: dict[str, output.ModelOutput] = {}
-    pattern = f"*{tag}*" if tag else "*.pkl"
-    files = sorted(outputs_path.glob(pattern))
+    search_dir = outputs_path / tag if tag else outputs_path
+    files = sorted(search_dir.glob("*.pkl"))
     if not files:
-        error_message = f"No files matching '{pattern}' found in {outputs_path}"
+        error_message = f"No .pkl files found in {search_dir}"
         raise ValueError(error_message)
 
-    print(f"Found {len(files)} file(s) in {outputs_path}")
-    for batch_file in files:
-        with batch_file.open("rb") as f:
-            batch: output.ModelOutput = pickle.load(f)  # nosec B301
-        model_outputs.update(resplit_batch(batch))
+    print(f"Found {len(files)} file(s) in {search_dir}")
+    for scenario_file in files:
+        with scenario_file.open("rb") as f:
+            scenario_output: output.ModelOutput = pickle.load(f)  # nosec B301
+        model_outputs[scenario_output.scenario_id[0]] = scenario_output
         if num_scenarios is not None and len(model_outputs) >= num_scenarios:
             break
 
