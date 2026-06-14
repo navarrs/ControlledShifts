@@ -19,7 +19,7 @@ Additional command line arguments:
 ## Logging Details
 
 #### CSV (Default)
-Outputs will be saved to `out/logs/runs/date/experiment_name/csv`.
+Outputs are saved under the per-run folder `<base_path>/model_cache/<benchmark>/<model>/<date_time>/logs/<task>/csv`, where `<base_path>` is `/data/driving/<dataset>` and `<task>` is `train` or `eval`.
 
 ####  MLflow (Default)
 Currently, it needs **tracking_uri** specification, as:
@@ -61,7 +61,7 @@ To run a sweep of experiments use `-m` and specify in the command line the param
 ```bash
 uv run -m controlledshifts.train -m model=[model_name] model.config.num_classes=10,20,50,100
 ```
-This will launch 4 sequential experiments where the value `num_classess` will be set to 10, 20, 50 and 100, respectively. The experiment logs will be saved to `out/logs/multiruns` instead of `out/logs/runs/`.
+This will launch 4 sequential experiments where the value `num_classess` will be set to 10, 20, 50 and 100, respectively. The experiment logs will be saved under the per-run `logs/<task>/multiruns/` folder instead of `logs/<task>/`.
 
 # Model types
 

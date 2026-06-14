@@ -9,7 +9,7 @@ base_path: /data/driving/${scenario.dataset_name}
 variants_path: ${paths.base_path}/variants
 splits_path: ${paths.base_path}/splits
 ac_cache_path: ${paths.base_path}/ac_cache
-experiment_cache_path: ${paths.base_path}/${paths.tag}/model_cache
+experiment_cache_path: ${paths.base_path}/model_cache
 temp_path: "temp"
 
 # path to output directory, created dynamically by hydra
@@ -20,7 +20,7 @@ work_dir: ${hydra:runtime.cwd}
 output_dir: ${hydra:runtime.output_dir}
 
 # Temporary outputs
-experiment_dir: ${exp_name}_${now:%Y-%m-%d}_${now:%H-%M-%S}
+experiment_dir: ${paths.tag}/${model.config.model_name}${sweep_type}/${now:%Y-%m-%d}_${now:%H-%M-%S}
 meta_path: ${paths.experiment_cache_path}/${paths.experiment_dir}/meta
 log_path: ${paths.experiment_cache_path}/${paths.experiment_dir}/logs
 ckpt_path: ${paths.experiment_cache_path}/${paths.experiment_dir}/ckpts
