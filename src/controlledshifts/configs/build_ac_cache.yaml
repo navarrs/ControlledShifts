@@ -13,9 +13,9 @@ num_workers: 20
 overwrite: false
 task_name: build_ac_cache
 
-# The model's experiment-centric paths (batch_cache_path, ...) interpolate ${exp_name}; the builder never uses them,
-# but a literal keeps a full-tree config dump resolvable.
-exp_name: build_ac_cache
+# The model's experiment-centric paths (batch_cache_path, ...) interpolate ${model.config.model_name} and
+# ${sweep_type}; the builder never uses them, but a literal sweep_type keeps a full-tree config dump resolvable.
+sweep_type: ''
 
 # The builder only processes scenarios; it never loads a split or selects samples. Override the dataset config keys that
 # would otherwise interpolate training-only globals so this config is self-contained. autolabel_agents is part of the

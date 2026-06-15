@@ -896,36 +896,36 @@ def load_batches(
     seed: int,
     tag: str = "val",
 ) -> dict[str, output.ModelOutput]:
-    """Loads pickled scenario batches from disk and returns a random subset of scenarios.
+    """Loads pickled per-scenario model outputs from disk and returns a random subset of scenarios.
 
     Args:
-        base_data_path (str | Path): directory containing the pickled batch files.
-        num_batches (int | None): maximum number of batch files to load; None loads all (capped at `MAX_NUM_BATCHES`).
+        base_data_path (str | Path): root cache directory holding one per-split subdirectory per ``tag``.
+        num_batches (int | None): maximum number of per-scenario files to load; None loads all
+            (capped at `MAX_NUM_BATCHES`).
         num_scenarios (int | None): number of scenarios to keep; None keeps all loaded scenarios.
-        seed (int): random seed used to select batches and scenarios.
-        tag (str): substring that batch filenames must contain (e.g. ``val``).
+        seed (int): random seed used to select scenarios.
+        tag (str): split subdirectory to load from (e.g. ``val``).
 
     Returns:
         dict[str, output.ModelOutput]: maps the selected scenario ids to their per-scenario outputs.
 
     Raises:
-        ValueError: if no batch files matching `tag` are found.
+        ValueError: if no per-scenario files are found under the `tag` subdirectory.
     """
-    _LOGGER.info("Loading scenario batches from %s", base_data_path)
+    _LOGGER.info("Loading scenario outputs from %s", Path(base_data_path) / tag)
     num_batches = MAX_NUM_BATCHES if num_batches is None else min(num_batches, MAX_NUM_BATCHES)
     random.seed(seed)
 
     batches = {}
-    for n, batch_file in enumerate(Path(base_data_path).glob(f"*{tag}*")):
+    for n, scenario_file in enumerate((Path(base_data_path) / tag).glob("*.pkl")):
         if n >= num_batches:
             break
-        with batch_file.open("rb") as f:
-            batch: output.ModelOutput = pickle.load(f)
-        batch_resplit = resplit_batch(batch)
-        batches.update(batch_resplit)
+        with scenario_file.open("rb") as f:
+            scenario_output: output.ModelOutput = pickle.load(f)
+        batches[scenario_output.scenario_id[0]] = scenario_output
 
     if not batches:
-        msg = f"No batches found in {base_data_path} with tag {tag}"
+        msg = f"No per-scenario files found in {Path(base_data_path) / tag}"
         raise ValueError(msg)
     # Select scenarios
     scenario_ids = batches.keys()
@@ -985,12 +985,19 @@ def load_causal_agents_labels(causal_agents_labels_path: str | Path, scenario_id
     return causal_agents_labels
 
 
-def save_cache(cache_infos: output.ModelOutput, filepath: Path) -> None:
-    """Pickles a model output to disk.
+def save_cache(cache_infos: output.ModelOutput, cache_dir: Path, tag: str) -> None:
+    """Splits a batched model output per scenario and pickles one file per scenario.
+
+    Each scenario is written to ``cache_dir / tag / f"{scenario_id}.pkl"`` as ``ModelOutput`` (detached, CPU). Files
+    sharing a ``scenario_id`` overwrite, matching ``resplit_batch``'s dict-keyed-by-id behavior.
 
     Args:
-        cache_infos (output.ModelOutput): the model output to cache.
-        filepath (Path): destination path for the pickle file.
+        cache_infos (output.ModelOutput): the batched model output covering several scenarios.
+        cache_dir (Path): root cache directory; a per-split subdirectory ``tag`` is created under it.
+        tag (str): split name used as the subdirectory (e.g. ``train``/``val``/``test``).
     """
-    with filepath.open("wb") as f:
-        pickle.dump(cache_infos, f)
+    split_dir = cache_dir / tag
+    split_dir.mkdir(parents=True, exist_ok=True)
+    for scenario_id, scenario_output in resplit_batch(cache_infos).items():
+        with (split_dir / f"{scenario_id}.pkl").open("wb") as f:
+            pickle.dump(scenario_output, f)

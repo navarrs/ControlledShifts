@@ -128,11 +128,9 @@ class BaseModel(LightningModule, ABC):
         loss = self.criterion(model_output)
         self.log_info(batch["input_dict"], model_output, loss, status=status)
         if self.sample_selection:
-            cache_filepath = Path(self.batch_cache_path, f"train_batch_{batch_idx}.pkl")
-            save_cache(model_output, cache_filepath)
+            save_cache(model_output, self.batch_cache_path, "train")
         elif status != ModelStatus.TRAIN and self.cache_batch and batch_idx % self.cache_every_batch_idx == 0:
-            cache_filepath = Path(self.batch_cache_path, f"{status}_batch_{batch_idx}.pkl")
-            save_cache(model_output, cache_filepath)
+            save_cache(model_output, self.batch_cache_path, f"{status}")
         return loss
 
     def training_step(self, batch: dict, batch_idx: int) -> torch.Tensor:

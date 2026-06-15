@@ -25,7 +25,7 @@ where:
 * `split_filepath`: path to the benchmark split JSON. The visualized scenarios are taken from this file's `training`/`validation`/`testing` lists, and its `benchmark_name` becomes the `split_type` folder in the output path.
 * `splits_to_visualize`: which of `training`/`validation`/`testing` to render (each becomes its own output subfolder).
 * `scenarios_root`: directory holding the scenario pickles, organized into `training/`, `validation/`, `testing/` subdirectories of `<scenario_id>.pkl`.
-* `num_batches` / `num_scenarios`: for the model-based types (`trajpred`, `model_output`), control how many cached batches/scenarios are loaded; scenarios are sampled if more are available than requested.
+* `num_batches` / `num_scenarios`: for the model-based types (`trajpred`, `model_output`), control how many cached scenarios are loaded; scenarios are sampled if more are available than requested. Cached model outputs live as one pickle per scenario under `batch_cache_path/<split>/<scenario_id>.pkl` (split is `train`/`val`/`test`).
 * `model_experiment`: for generic `model_output` visualizations, the tag used as the output `pane_type` folder.
 
 Outputs are written under:
