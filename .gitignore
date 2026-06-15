@@ -228,3 +228,6 @@ tests/
 meta/
 outputs/
 temp/
+
+# One-off model_cache layout migration script
+src/scripts/migrate_model_cache_layout.py
