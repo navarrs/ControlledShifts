@@ -52,8 +52,8 @@ def _remove_causal(scenario: dict[str, Any], causal_labels: dict[str, Any], outp
     """Removes causal objects from a scenario by setting the last column of the trajectories to 0 for causal objects.
 
     Args:
-        scenario: Decoded raw scenario dictionary.
-        causal_labels: Causal labels dictionary.
+        scenario: Decoded raw scenario.
+        causal_labels: Causal labels with a "causal_ids" key.
         output_filepath: Path to the output file.
     """
     causal_ids = np.array(causal_labels["causal_ids"], dtype=np.int64)
@@ -93,8 +93,8 @@ def remove_noncausal(scenario: dict[str, Any], causal_labels: dict[str, Any], ou
     objects.
 
     Args:
-        scenario: Decoded raw scenario dictionary.
-        causal_labels: Causal labels dictionary.
+        scenario: Decoded raw scenario.
+        causal_labels: Causal labels with a "causal_ids" key.
         output_filepath: Path to the output file.
     """
     object_ids = np.array(scenario["track_infos"]["object_id"])
@@ -133,8 +133,8 @@ def _remove_noncausalequal(
     """Removes a random subset of non-causal objects equal in count to the causal objects.
 
     Args:
-        scenario: Decoded raw scenario dictionary.
-        causal_labels: Causal labels dictionary.
+        scenario: Decoded raw scenario.
+        causal_labels: Causal labels with a "causal_ids" key.
         output_filepath: Path to the output file.
         random_generator: Random number generator.
     """
@@ -176,7 +176,7 @@ def _remove_static(scenario: dict[str, Any], output_filepath: Path, threshold_di
     """Removes static objects from a scenario by masking trajectories with displacement below threshold_distance.
 
     Args:
-        scenario: Decoded raw scenario dictionary.
+        scenario: Decoded raw scenario.
         output_filepath: Path to the output file.
         threshold_distance: Minimum displacement to consider an object dynamic. Defaults to 0.1.
     """

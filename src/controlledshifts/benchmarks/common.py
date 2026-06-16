@@ -53,8 +53,8 @@ def get_noncausal_mask(scenario: dict[str, Any], causal_labels: dict[str, Any]) 
     Non-causal agents are those whose object_id is neither in the causal labels nor the ego agent.
 
     Args:
-        scenario: Decoded raw scenario dictionary.
-        causal_labels: Causal labels dictionary with a "causal_ids" key.
+        scenario: Decoded raw scenario.
+        causal_labels: Causal labels with a "causal_ids" key.
 
     Returns:
         Boolean array of shape (num_agents,), True where the agent is non-causal.
@@ -181,14 +181,7 @@ def split_mapping_to_lists(mapping: dict[str, str], invalid: Iterable[str] | Non
 
 
 def load_benchmark_split(filepath: Path) -> BenchmarkSplit:
-    """Reads a BenchmarkSplit from a JSON file written by ``save_benchmark_split``.
-
-    Args:
-        filepath: Path to the split JSON file.
-
-    Returns:
-        The deserialized BenchmarkSplit.
-    """
+    """Reads a BenchmarkSplit from a JSON file written by ``save_benchmark_split``."""
     with filepath.open("r") as f:
         payload = json.load(f)
     return BenchmarkSplit(
@@ -260,9 +253,6 @@ def save_benchmark_split(
 
 def check_overlap(split: BenchmarkSplit) -> None:
     """Raises a ValueError if the training/validation/testing ID sets of a split intersect.
-
-    Args:
-        split: Split to check for overlapping scenario IDs.
 
     Raises:
         ValueError: If any pair of splits shares one or more scenario IDs.

@@ -32,11 +32,10 @@ def create_uniform_benchmark(config: DictConfig) -> BenchmarkSplit:
     shift between splits.
 
     Args:
-        config: Hydra config.
-            Expected keys: input_data_path, split_ratios, seed.
+        config: Hydra config with keys: input_data_path, split_ratios, seed.
 
     Returns:
-        The BenchmarkSplit.
+        The train/val/test benchmark split.
     """
     input_data_path = Path(config.input_data_path)
     random_generator: Generator = default_rng(config.seed)
