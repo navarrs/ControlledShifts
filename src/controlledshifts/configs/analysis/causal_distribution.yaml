@@ -1,0 +1,30 @@
+# @package _global_
+defaults:
+  - default.yaml
+
+analysis_name: causal_distribution
+output_path: ./outputs/causal_distribution_analysis
+
+# Unlike the other analyses this reads raw data (split JSONs + base-variant scenario pkls + per-scenario causal labels)
+# rather than the combined model-results CSV, so it defines its own absolute path keys matching the benchmark configs.
+splits_path: /data/driving/waymo/splits
+variants_base_path: /data/driving/waymo/variants/base
+causal_labels_path: /data/driving/waymo/meta/causal_agents/processed_labels/
+
+num_workers: 8
+# When false (default), plots are regenerated from the cached causal_distribution.csv (and per_scenario_counts.csv)
+# without touching the scenario pkls or split JSONs. Set true to recompute everything from scenarios -- also required
+# to pick up changes to `benchmarks` against already-cached CSVs.
+overwrite: false
+
+# Per-scenario quantities to plot, each as its own side-by-side violin, histogram and ridgeline figure. Split colors
+# are fixed in SPLIT_COLOR_MAP (controlledshifts.utils.analysis.common), not a palette.
+quantities: [n_causal, n_noncausal, frac_noncausal, n_total]
+
+benchmarks:
+  - causal_agents:
+      name: CausalAgents
+      split_json: causal_agents
+  - causal_agents_hard:
+      name: CausalAgentsHard
+      split_json: causal_agents_hard

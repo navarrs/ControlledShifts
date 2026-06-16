@@ -152,6 +152,51 @@ For each reference mode it writes, under `<output_path>/<mode>/`:
   table (`combined_robustness_scores.*`).
 
 
+## Causal Agent Distribution Analysis
+
+The file `configs/analysis/causal_distribution.yaml` configures a data-side comparison of how the two causal-agents
+benchmarks distribute agents across their train/validation/testing splits. The standard `causal_agents` benchmark
+reuses a random reference split, so its per-scenario agent counts should look the same across splits; `causal_agents_hard`
+ranks scenarios by non-causal agent count and sends the hardest scenarios to the test set, so its test split should be
+visibly shifted toward more non-causal agents.
+
+Unlike the other analyses, this one reads raw data rather than the combined model-results CSV: per-scenario `base`
+variant pkls (`variants_base_path`), per-scenario JSON causal labels (`causal_labels_path`), and the benchmark split
+JSONs (`splits_path`). Each benchmark entry names the split JSON to read:
+
+```yaml
+benchmarks:
+  - causal_agents:
+      name: CausalAgents
+      split_json: causal_agents
+  - causal_agents_hard:
+      name: CausalAgentsHard
+      split_json: causal_agents_hard
+```
+
+For every scenario in the union of both splits, it counts causal agents (`causal_ids` + ego) and non-causal agents
+(everything else) using the same `get_noncausal_mask` the benchmarks use. Counts are intrinsic to a scenario, so they
+are computed once (over `num_workers` processes) and cached to `<output_path>/per_scenario_counts.csv`.
+
+The plots are driven entirely by the cached CSVs. On a re-run (with `overwrite=false`), if `causal_distribution.csv`
+exists it is loaded directly and the figures are regenerated from it without touching the scenario pkls or the split
+JSONs — so you can restyle the plots, or render them on a machine that only has the CSVs. Failing that, the cached
+`per_scenario_counts.csv` is reused to rebuild the long-form frame from the splits. Only when neither cache exists (or
+`overwrite=true`) are the scenarios loaded and counts recomputed; `overwrite=true` is also needed to pick up changes to
+`benchmarks` against already-cached CSVs.
+
+Run the analysis as:
+```bash
+uv run -m controlledshifts.run_analysis analysis=causal_distribution
+```
+
+It writes, under `<output_path>/`: the cached `per_scenario_counts.csv`, the bucketed long-form `causal_distribution.csv`,
+a per-benchmark/per-split `summary.csv` (mean/median/std/count), and for each quantity in `quantities`
+(`n_causal`, `n_noncausal`, `frac_noncausal`, `n_total`) three side-by-side views with one panel/column per benchmark:
+a violin (`<quantity>_violin.png`, splits on the x-axis), a histogram (`<quantity>_histogram.png`, overlaid per-split
+density curves), and a ridgeline (`<quantity>_ridge.png`, one overlapping density row per split).
+
+
 # Sample Selection
 
 Cache training set embeddings:
