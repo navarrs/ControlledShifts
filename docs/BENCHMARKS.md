@@ -162,8 +162,12 @@ Key options (see `configs/benchmark/ego_safeshift.yaml`):
 - `score_type`: column to rank by (higher = harder = test). Default: `gt_critical_continuous_safeshift`.
 - `split_ratios`: `(train, val, test)` fractions; the hardest scenes form the test set. Default: `[0.70, 0.15, 0.15]`.
 
-**NOTE:** The ego scores are computed with the [ScenarioCharacterization](https://github.com/navarrs/ScenarioCharacterization/)
-package — see that repo for how to produce the `scenario_to_scores_mapping.csv` mapping each scenario to its ego score.
+**Producing the score file:** the ego scores come from the [ScenarioCharacterization](https://github.com/navarrs/ScenarioCharacterization/)
+package, which scores each scene from the perspective of the ego agent. Follow its scoring
+[instructions](https://github.com/navarrs/ScenarioCharacterization/blob/main/docs/CHARACTERIZATION.md) to produce the
+`scenario_to_scores_mapping.csv` required above — a CSV with a `scenario_ids` column plus the score column named by
+`score_type` (default `gt_critical_continuous_safeshift`), e.g. at `meta/ego-safeshift/scores_8/scenario_to_scores_mapping.csv`.
+A precomputed file is available [here](https://drive.google.com/file/d/1Ptv1JIM0qymo7180_a5svLZJXWn03yQx/view?usp=drive_link); place it in the `./meta` folder.
 
 **Train / evaluate:**
 ```bash
