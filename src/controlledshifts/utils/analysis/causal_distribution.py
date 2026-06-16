@@ -19,28 +19,19 @@ from functools import partial
 from logging import Logger
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import pandas as pd
-import seaborn as sns
-from matplotlib.figure import Figure
-from matplotlib.patches import Patch
 from omegaconf import DictConfig
 from tqdm import tqdm
 
 from controlledshifts.benchmarks.common import get_noncausal_mask, load_benchmark_split
-from controlledshifts.utils.analysis.common import SPLIT_COLOR_MAP
+from controlledshifts.utils.analysis.common import (
+    SPLIT_COLOR_MAP,
+    SPLIT_ORDER,
+    SplitDistributionPlotConfig,
+    render_distribution_plots,
+)
 from controlledshifts.utils.plotting import set_analysis_theme
 
-
-_SPLIT_ORDER: tuple[str, ...] = ("training", "validation", "testing")
-_SPLIT_LABELS: dict[str, str] = {"training": "Train", "validation": "Val", "testing": "Test"}
-
-_TITLE_FONTSIZE = 16
-_LABEL_FONTSIZE = 15
-_TICK_FONTSIZE = 13
-_SUPTITLE_FONTSIZE = 17
-_LEGEND_FONTSIZE = 14
-_TEXT_COLOR = "#808080"
 
 _QUANTITY_LABELS: dict[str, str] = {
     "n_causal": "Causal Agents per Scenario",
@@ -130,234 +121,13 @@ def _build_long_frame(counts_df: pd.DataFrame, benchmark_name: str, split_json_p
     """
     split = load_benchmark_split(split_json_path)
     frames = []
-    for split_key in _SPLIT_ORDER:
+    for split_key in SPLIT_ORDER:
         ids = [scenario_id for scenario_id in getattr(split, split_key) if scenario_id in counts_df.index]
         subset = counts_df.loc[ids].reset_index()
         subset.insert(0, "split", split_key)
         subset.insert(0, "benchmark", benchmark_name)
         frames.append(subset)
     return pd.concat(frames, ignore_index=True)
-
-
-def _add_split_legend(fig: Figure, palette: list[str]) -> None:
-    """Attaches a single split legend to ``fig``, outside the panels on the right.
-
-    Args:
-        fig: Figure to attach the legend to.
-        palette: One color per split (aligned with ``_SPLIT_ORDER``).
-    """
-    handles = [
-        Patch(facecolor=color, edgecolor="none", label=_SPLIT_LABELS[split_key])
-        for split_key, color in zip(_SPLIT_ORDER, palette, strict=False)
-    ]
-    legend = fig.legend(
-        handles=handles,
-        title="Split",
-        loc="center left",
-        bbox_to_anchor=(1.0, 0.5),
-        fontsize=_LEGEND_FONTSIZE,
-        title_fontsize=_LEGEND_FONTSIZE,
-        labelcolor=_TEXT_COLOR,
-        frameon=False,
-    )
-    legend.get_title().set_color(_TEXT_COLOR)
-
-
-def _plot_violin(
-    long_df: pd.DataFrame,
-    quantity: str,
-    benchmark_names: list[str],
-    palette: list[str],
-    output_path: Path,
-) -> None:
-    """Saves a side-by-side violin plot of ``quantity`` per split, one panel per benchmark.
-
-    Args:
-        long_df: Long-form frame with ``benchmark``, ``split`` and the quantity columns.
-        quantity: Column to plot on the y-axis.
-        benchmark_names: Benchmark display names, in panel order.
-        palette: One color per split (aligned with ``_SPLIT_ORDER``).
-        output_path: Directory to save the figure.
-    """
-    order = list(_SPLIT_ORDER)
-    fig, axes = plt.subplots(1, len(benchmark_names), figsize=(6 * len(benchmark_names), 6), sharey=True, squeeze=False)
-    for ax, benchmark in zip(axes[0], benchmark_names, strict=False):
-        data = long_df[long_df["benchmark"] == benchmark]
-        sns.violinplot(
-            data=data,
-            x="split",
-            y=quantity,
-            order=order,
-            hue="split",
-            hue_order=order,
-            palette=palette,
-            legend=False,
-            cut=0,
-            density_norm="width",
-            alpha=0.6,
-            ax=ax,
-        )
-        ax.set_title(benchmark, fontsize=_TITLE_FONTSIZE, color=_TEXT_COLOR)
-        ax.set_xlabel("")
-        ax.set_xticks(range(len(order)))
-        ax.set_xticklabels([_SPLIT_LABELS[split_key] for split_key in order])
-        ax.set_ylabel(
-            _QUANTITY_LABELS[quantity] if ax is axes[0, 0] else "", fontsize=_LABEL_FONTSIZE, color=_TEXT_COLOR
-        )
-        ax.tick_params(labelsize=_TICK_FONTSIZE, colors=_TEXT_COLOR)
-
-    fig.suptitle(_QUANTITY_LABELS[quantity], fontsize=_SUPTITLE_FONTSIZE, color=_TEXT_COLOR)
-    _add_split_legend(fig, palette)
-    fig.tight_layout()
-    output_file = output_path / f"{quantity}_violin.png"
-    fig.savefig(output_file, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print(f"✓ Plot saved as '{output_file}'")
-
-
-def _plot_ridge(
-    long_df: pd.DataFrame,
-    quantity: str,
-    benchmark_names: list[str],
-    palette: list[str],
-    output_path: Path,
-) -> None:
-    """Saves a side-by-side ridgeline plot of ``quantity``: one overlapping density row per split, per benchmark.
-
-    Each split's distribution gets its own row (stacked with a slight vertical overlap) so the three can be read
-    separately, while sharing the x-axis within a benchmark column. Densities are normalized per split.
-
-    Args:
-        long_df: Long-form frame with ``benchmark``, ``split`` and the quantity columns.
-        quantity: Column to plot on the x-axis.
-        benchmark_names: Benchmark display names, in column order.
-        palette: One color per split (aligned with ``_SPLIT_ORDER``).
-        output_path: Directory to save the figure.
-    """
-    order = list(_SPLIT_ORDER)
-    color_map = dict(zip(order, palette, strict=False))
-    n_rows, n_cols = len(order), len(benchmark_names)
-    fig, axes = plt.subplots(
-        n_rows, n_cols, figsize=(6 * n_cols, 1.5 * n_rows + 1), sharex=True, sharey=True, squeeze=False
-    )
-    for col, benchmark in enumerate(benchmark_names):
-        data = long_df[long_df["benchmark"] == benchmark]
-        for row, split_key in enumerate(order):
-            ax = axes[row, col]
-            sns.kdeplot(
-                x=data[data["split"] == split_key][quantity],
-                fill=True,
-                alpha=0.6,
-                color=color_map[split_key],
-                cut=0,
-                clip=(0, None),
-                linewidth=1.2,
-                ax=ax,
-            )
-            ax.patch.set_alpha(0.0)  # transparent background so overlapping rows show through
-            ax.set_ylabel("")
-            ax.set_yticks([])
-            ax.set_ylim(bottom=0)
-            for spine in ("left", "right", "top"):
-                ax.spines[spine].set_visible(False)
-
-            if col == 0:
-                ax.text(
-                    0.0,
-                    0.15,
-                    _SPLIT_LABELS[split_key],
-                    transform=ax.transAxes,
-                    ha="right",
-                    va="bottom",
-                    fontsize=_LABEL_FONTSIZE,
-                    fontweight="bold",
-                    color=color_map[split_key],
-                )
-            if row == 0:
-                ax.set_title(benchmark, fontsize=_TITLE_FONTSIZE, color=_TEXT_COLOR)
-            if row == n_rows - 1:
-                ax.set_xlabel(_QUANTITY_LABELS[quantity], fontsize=_LABEL_FONTSIZE, color=_TEXT_COLOR)
-                ax.tick_params(axis="x", labelsize=_TICK_FONTSIZE, colors=_TEXT_COLOR)
-            else:
-                ax.set_xlabel("")
-                ax.spines["bottom"].set_visible(False)
-                ax.tick_params(axis="x", length=0)
-
-    fig.suptitle(_QUANTITY_LABELS[quantity], fontsize=_SUPTITLE_FONTSIZE, color=_TEXT_COLOR)
-    fig.subplots_adjust(hspace=-0.25, top=0.9)
-    output_file = output_path / f"{quantity}_ridge.png"
-    fig.savefig(output_file, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print(f"✓ Plot saved as '{output_file}'")
-
-
-def _plot_histogram(
-    long_df: pd.DataFrame,
-    quantity: str,
-    benchmark_names: list[str],
-    palette: list[str],
-    output_path: Path,
-) -> None:
-    """Saves a side-by-side density plot of ``quantity`` per split, one panel per benchmark.
-
-    Splits are overlaid as filled kernel-density curves, each normalized independently so they are comparable across
-    splits of different sizes. Complements the ridgeline view, which separates the same distributions onto their own
-    rows.
-
-    Args:
-        long_df: Long-form frame with ``benchmark``, ``split`` and the quantity columns.
-        quantity: Column to plot on the x-axis.
-        benchmark_names: Benchmark display names, in panel order.
-        palette: One color per split (aligned with ``_SPLIT_ORDER``).
-        output_path: Directory to save the figure.
-    """
-    order = list(_SPLIT_ORDER)
-    fig, axes = plt.subplots(
-        1, len(benchmark_names), figsize=(6 * len(benchmark_names), 6), sharex=True, sharey=True, squeeze=False
-    )
-    for ax, benchmark in zip(axes[0], benchmark_names, strict=False):
-        data = long_df[long_df["benchmark"] == benchmark]
-        sns.kdeplot(
-            data=data,
-            x=quantity,
-            hue="split",
-            hue_order=order,
-            palette=palette,
-            fill=True,
-            alpha=0.3,
-            common_norm=False,
-            cut=0,
-            clip=(0, None),
-            legend=False,
-            ax=ax,
-        )
-        ax.set_title(benchmark, fontsize=_TITLE_FONTSIZE, color=_TEXT_COLOR)
-        ax.set_xlabel(_QUANTITY_LABELS[quantity], fontsize=_LABEL_FONTSIZE, color=_TEXT_COLOR)
-        ax.set_ylabel("Density" if ax is axes[0, 0] else "", fontsize=_LABEL_FONTSIZE, color=_TEXT_COLOR)
-        ax.tick_params(labelsize=_TICK_FONTSIZE, colors=_TEXT_COLOR)
-
-    fig.suptitle(_QUANTITY_LABELS[quantity], fontsize=_SUPTITLE_FONTSIZE, color=_TEXT_COLOR)
-    _add_split_legend(fig, palette)
-    fig.tight_layout()
-    output_file = output_path / f"{quantity}_histogram.png"
-    fig.savefig(output_file, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print(f"✓ Plot saved as '{output_file}'")
-
-
-def _write_summary(long_df: pd.DataFrame, quantities: list[str], output_path: Path) -> None:
-    """Writes per-benchmark, per-split mean/median/std/count for every quantity to ``summary.csv``.
-
-    Args:
-        long_df: Long-form frame with ``benchmark``, ``split`` and the quantity columns.
-        quantities: Quantity columns to summarize.
-        output_path: Directory to save the CSV.
-    """
-    summary = long_df.groupby(["benchmark", "split"], observed=True)[quantities].agg(["mean", "median", "std", "count"])
-    summary.columns = [f"{quantity}_{stat}" for quantity, stat in summary.columns]
-    summary_file = output_path / "summary.csv"
-    summary.reset_index().to_csv(summary_file, index=False)
-    print(f"✓ Summary saved as '{summary_file}'")
 
 
 def _build_distribution_frame(config: DictConfig, log: Logger, output_path: Path) -> pd.DataFrame | None:
@@ -444,16 +214,12 @@ def run_causal_distribution_analysis(config: DictConfig, log: Logger, output_pat
         if long_df is None:
             return
 
-    long_df["split"] = pd.Categorical(long_df["split"], categories=list(_SPLIT_ORDER), ordered=True)
+    long_df["split"] = pd.Categorical(long_df["split"], categories=list(SPLIT_ORDER), ordered=True)
     benchmark_names = list(dict.fromkeys(long_df["benchmark"]))
 
-    _write_summary(long_df, quantities, output_path)
-
-    palette = [SPLIT_COLOR_MAP[split_key] for split_key in _SPLIT_ORDER]
-    for quantity in quantities:
-        _plot_violin(long_df, quantity, benchmark_names, palette, output_path)
-        _plot_histogram(long_df, quantity, benchmark_names, palette, output_path)
-        _plot_ridge(long_df, quantity, benchmark_names, palette, output_path)
+    palette = [SPLIT_COLOR_MAP[split_key] for split_key in SPLIT_ORDER]
+    plot_config = SplitDistributionPlotConfig(benchmark_names, palette, _QUANTITY_LABELS, output_path)
+    render_distribution_plots(long_df, quantities, plot_config, log)
 
     print("\n✓ Analysis complete!")
     log.info("Causal distribution analysis complete!")

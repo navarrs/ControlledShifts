@@ -196,6 +196,45 @@ a per-benchmark/per-split `summary.csv` (mean/median/std/count), and for each qu
 a violin (`<quantity>_violin.png`, splits on the x-axis), a histogram (`<quantity>_histogram.png`, overlaid per-split
 density curves), and a ridgeline (`<quantity>_ridge.png`, one overlapping density row per split).
 
+## Ego-SafeShift Score Distribution Analysis
+
+The file `configs/analysis/score_distribution.yaml` configures a data-side comparison of how the ego-safeshift
+criticality scores distribute across train/validation/testing. The `ego_safeshift` benchmark ranks scenarios by a
+safety score (`score_type`) and sends the hardest (highest-scoring) scenarios to the test set, so its test split should
+be visibly shifted toward higher scores; the `uniform` baseline splits the same scenarios randomly, so its
+distributions should match across splits.
+
+Like the causal-agents analysis, this reads raw data rather than the combined model-results CSV — but only the scores
+CSV at `scores_csv_path` (columns: `scenario_ids` plus one column per score). Each benchmark's split is reproduced
+in-script from the scenario scores via the same `split_ids_by_score`/`split_ids_by_ratio` the benchmarks use (with the
+configured `score_type`, `split_ratios` and `seed`), so it needs neither the scenario pkls nor a pre-existing split
+JSON. Unlike benchmark creation, scenarios are not filtered by on-disk availability — every scored scenario in the CSV
+is included. Each benchmark entry names a display name and a split strategy:
+
+```yaml
+benchmarks:
+  - ego_safeshift:
+      name: EgoSafeShift
+      split: score
+  - uniform:
+      name: Uniform (random)
+      split: random
+```
+
+The plots are driven entirely by the cached `score_distribution.csv`. On a re-run (with `overwrite=false`) it is loaded
+directly and the figures are regenerated from it without re-reading the scores CSV. Set `overwrite=true` to rebuild the
+frame — also required to pick up changes to `benchmarks` against an already-cached CSV.
+
+Run the analysis as:
+```bash
+uv run -m controlledshifts.run_analysis analysis=score_distribution
+```
+
+It writes, under `<output_path>/`: the long-form `score_distribution.csv`, a per-benchmark/per-split `summary.csv`
+(mean/median/std/count), and for each quantity in `quantities` three side-by-side views with one panel/column per
+benchmark: a violin (`<quantity>_violin.png`, splits on the x-axis), a histogram (`<quantity>_histogram.png`, overlaid
+per-split density curves), and a ridgeline (`<quantity>_ridge.png`, one overlapping density row per split).
+
 
 # Sample Selection
 
