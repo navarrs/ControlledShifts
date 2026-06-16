@@ -34,7 +34,6 @@ from numpy.random import Generator, default_rng
 from omegaconf import DictConfig
 from tqdm import tqdm
 
-from controlledshifts import utils
 from controlledshifts.benchmarks.common import (
     CAUSAL_STRATEGIES,
     BenchmarkSplit,
@@ -43,9 +42,10 @@ from controlledshifts.benchmarks.common import (
     load_benchmark_split,
 )
 from controlledshifts.utils.constants import MIN_VALID_POINTS
+from controlledshifts.utils.pylogger import get_pylogger
 
 
-_LOGGER = utils.get_pylogger(__name__)
+_LOGGER = get_pylogger(__name__)
 
 
 def _remove_causal(scenario: dict[str, Any], causal_labels: dict[str, Any], output_filepath: Path) -> None:

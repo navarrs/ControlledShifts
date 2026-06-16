@@ -10,10 +10,10 @@ from typing import Any, NamedTuple
 import numpy as np
 from numpy.random import Generator
 
-from controlledshifts import utils
+from controlledshifts.utils.pylogger import get_pylogger
 
 
-_LOGGER = utils.get_pylogger(__name__)
+_LOGGER = get_pylogger(__name__)
 
 # Masking strategies generated up front by the causal_agents benchmark; each becomes a flat perturbed dataset.
 CAUSAL_STRATEGIES: tuple[str, ...] = ("remove_causal", "remove_noncausal", "remove_noncausalequal", "remove_static")

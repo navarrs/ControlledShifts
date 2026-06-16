@@ -22,16 +22,16 @@ import numpy as np
 import seaborn as sns
 from omegaconf import DictConfig
 
-from controlledshifts import utils
 from controlledshifts.benchmarks.common import (
     Benchmark,
     BenchmarkSplit,
     collect_scenario_filepaths,
     split_mapping_to_lists,
 )
+from controlledshifts.utils.pylogger import get_pylogger
 
 
-_LOGGER = utils.get_pylogger(__name__)
+_LOGGER = get_pylogger(__name__)
 
 
 def _plot_score_density(scores_path: Path, prefix: str) -> None:

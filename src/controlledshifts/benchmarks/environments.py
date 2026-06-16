@@ -37,14 +37,14 @@ from sklearn.metrics import silhouette_samples
 from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 
-from controlledshifts import utils
 from controlledshifts.benchmarks import common
 from controlledshifts.datasets.waymo.repacker import load_scenario
 from controlledshifts.utils.map_utils import build_positioned_graph, visualize_scenario_graph
+from controlledshifts.utils.pylogger import get_pylogger
 from controlledshifts.utils.scenario_visualizers.scenario import ScenarioVisualizer
 
 
-_LOGGER = utils.get_pylogger(__name__)
+_LOGGER = get_pylogger(__name__)
 
 
 def _compute_graph_descriptor(

@@ -22,6 +22,7 @@ uv run pre-commit run --all-files
 
 # Code Guidelines
 
+- Be concise. When writing documentation, docstrings, comments, new functions, classes, or entrypoints, write only what is needed to convey intent and usage. Avoid comments that restate the code, redundant or boilerplate docstrings, over-explaining obvious behavior, and filler prose. Match the verbosity and comment density of the surrounding code.
 - Line length limit is 120 columns. This applies to code, comments, and docstrings.
 - Avoid local imports unless they are strictly necessary.
 - When fixing pre-commit errors, prioritize fixing the root cause over adding suppression comments (like # noqa, # pyright: ignore, etc.)
