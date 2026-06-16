@@ -46,6 +46,7 @@ from controlledshifts.datasets.agent_centric_processor import AgentCentricProces
 from controlledshifts.datasets.waymo.repacker import load_scenario
 from controlledshifts.schemas import AgentCentricScenario, ModelOutput
 from controlledshifts.utils.constants import ModelStatus, VizType
+from controlledshifts.utils.plotting import configure_fonts
 from controlledshifts.utils.scenario_visualizers.base_visualizer import BaseVisualizer
 
 
@@ -204,6 +205,7 @@ def build_output_dir(output_dir: Path, render: str, split_type: str, split: str,
 @hydra.main(version_base="1.3", config_path="configs", config_name="scenario_visualization.yaml")
 def main(config: DictConfig) -> None:
     """Hydra entry point for rendering the scenarios of a benchmark split."""
+    configure_fonts(log=log)
     utils.print_config_tree(config, resolve=True, save_to_file=False)
     start = time()
 

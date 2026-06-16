@@ -11,6 +11,7 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 
 from controlledshifts.schemas import output_schemas as output
+from controlledshifts.utils.plotting import configure_fonts
 
 
 def _load_model_outputs(outputs_path: Path, tag: str, num_scenarios: int | None) -> dict[str, output.ModelOutput]:
@@ -227,6 +228,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=42, help="Random seed.")
 
     args = parser.parse_args()
+    configure_fonts()
     analyze_embeddings(
         outputs_path=args.outputs_path,
         output_path=args.output_path,

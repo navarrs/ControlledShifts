@@ -43,6 +43,7 @@ from omegaconf import DictConfig
 from controlledshifts.utils.analysis.common import METRIC_NAME_MAP, MODEL_COLOR_MAP, MODEL_NAME_MAP
 from controlledshifts.utils.analysis.distribution_shift import build_benchmark_df
 from controlledshifts.utils.constants import EPSILON
+from controlledshifts.utils.plotting import set_analysis_theme
 
 
 COMBINED_COLUMN = "Combined"
@@ -622,18 +623,7 @@ def run_score_analysis(config: DictConfig, log: Logger, output_path: Path) -> No
         log: Logger for analysis information.
         output_path: Directory to save the generated artifacts.
     """
-    plt.style.use("seaborn-v0_8-whitegrid")
-    sns.set_theme(
-        style="whitegrid",
-        context="talk",
-        rc={
-            "axes.spines.top": False,
-            "axes.spines.right": False,
-            "grid.alpha": 0.25,
-            "axes.titleweight": "bold",
-            "axes.labelweight": "bold",
-        },
-    )
+    set_analysis_theme(log=log)
 
     output_path = Path(output_path)
     output_path.mkdir(parents=True, exist_ok=True)
