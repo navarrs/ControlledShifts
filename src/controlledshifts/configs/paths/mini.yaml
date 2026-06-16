@@ -1,0 +1,15 @@
+defaults:
+  - default.yaml
+
+# Same-size, non-overlapping alternative to the base dataset, drawn from the external Waymo training dump and re-split
+# by splits/mini.json. Built via `uv run -m controlledshifts.build_mini_variant`.
+tag: 'mini'
+
+train_sources:
+  - {variant: mini, split_json: mini, split: training, tag: mini-training}
+
+val_sources:
+  - {variant: mini, split_json: mini, split: validation, tag: mini-id}
+
+test_sources:
+  - {variant: mini, split_json: mini, split: testing, tag: mini-ood}

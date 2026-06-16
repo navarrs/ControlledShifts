@@ -105,7 +105,7 @@ consuming LaTeX document must load `\usepackage[table]{xcolor}`.
 
 ## Robustness Score Analysis
 
-The file `configs/analysis/sensitivity_score.yaml` reduces the same combined results file into comparable *robustness
+The file `configs/analysis/robustness.yaml` reduces the same combined results file into comparable *robustness
 scores* per model per metric, measured against a reference. Two reference modes are produced:
 
 - `naive_relative` — each model vs the **Naive** baseline **within the same benchmark**.
@@ -140,7 +140,7 @@ not an absolute metric.
 
 Run the analysis as:
 ```bash
-uv run -m controlledshifts.run_analysis analysis=sensitivity_score
+uv run -m controlledshifts.run_analysis analysis=robustness
 ```
 
 For each reference mode it writes, under `<output_path>/<mode>/`:
