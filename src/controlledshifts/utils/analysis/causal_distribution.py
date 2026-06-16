@@ -32,21 +32,16 @@ from controlledshifts.utils.analysis.common import SPLIT_COLOR_MAP
 from controlledshifts.utils.plotting import set_analysis_theme
 
 
-# Consistent ordering and display labels for the dataset splits.
 _SPLIT_ORDER: tuple[str, ...] = ("training", "validation", "testing")
 _SPLIT_LABELS: dict[str, str] = {"training": "Train", "validation": "Val", "testing": "Test"}
 
-# Plot font sizes.
-_TITLE_FONTSIZE = 16  # per-panel benchmark titles
-_LABEL_FONTSIZE = 15  # axis labels
-_TICK_FONTSIZE = 13  # tick numbers
-_SUPTITLE_FONTSIZE = 17  # figure title
+_TITLE_FONTSIZE = 16
+_LABEL_FONTSIZE = 15
+_TICK_FONTSIZE = 13
+_SUPTITLE_FONTSIZE = 17
 _LEGEND_FONTSIZE = 14
-
-# Muted gray used for all figure text (titles, axis labels, tick numbers, legend).
 _TEXT_COLOR = "#808080"
 
-# Per-scenario quantities the analysis can plot, mapped to axis labels.
 _QUANTITY_LABELS: dict[str, str] = {
     "n_causal": "Causal Agents per Scenario",
     "n_noncausal": "Non-causal agents per Scenario",
@@ -373,10 +368,10 @@ def _build_distribution_frame(config: DictConfig, log: Logger, output_path: Path
     written to ``causal_distribution.csv``.
 
     Args:
-        config (DictConfig): Analysis configuration (``splits_path``, ``variants_base_path``, ``causal_labels_path``,
+        config: Analysis configuration (``splits_path``, ``variants_base_path``, ``causal_labels_path``,
             ``num_workers``, ``overwrite``, ``benchmarks``).
-        log (Logger): Logger for progress information.
-        output_path (Path): Directory holding/receiving the cached CSVs.
+        log: Logger.
+        output_path: Directory holding/receiving the cached CSVs.
 
     Returns:
         The long-form DataFrame, or None when no configured benchmark split could be found.
@@ -429,10 +424,10 @@ def run_causal_distribution_analysis(config: DictConfig, log: Logger, output_pat
     present, and only falling back to loading scenarios when no cache exists or ``overwrite`` is set.
 
     Args:
-        config (DictConfig): Analysis configuration (``splits_path``, ``variants_base_path``, ``causal_labels_path``,
+        config: Analysis configuration (``splits_path``, ``variants_base_path``, ``causal_labels_path``,
             ``num_workers``, ``overwrite``, ``quantities``, ``benchmarks``).
-        log (Logger): Logger for logging analysis information.
-        output_path (Path): Directory to save the generated counts, summary and plots.
+        log: Logger.
+        output_path: Directory to save the generated counts, summary and plots.
     """
     set_analysis_theme(log=log)
 

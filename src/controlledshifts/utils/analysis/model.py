@@ -20,11 +20,11 @@ def get_scenario_dec_embeddings(
     """Extracts and flattens scenario_dec embeddings from model outputs.
 
     Args:
-        model_outputs (dict[str, output.ModelOutput]): a dictionary containing model outputs per scenario.
+        model_outputs: Model outputs keyed by scenario.
 
     Returns:
-        scenario_ids (npt.NDArray[np.str_]): array of scenario IDs in insertion order.
-        embeddings (npt.NDArray[np.float64]): array of shape (num_scenarios, embedding_dim).
+        scenario_ids: array of scenario IDs in insertion order.
+        embeddings: array of shape (num_scenarios, embedding_dim).
     """
     scenario_ids = []
     embeddings = []
@@ -41,13 +41,12 @@ def compute_dimensionality_reduction(
     """Uses a manifold learning algorithm (TSNE, UMAP) to reduce the dimensionality of the scenario embeddings.
 
     Args:
-        config (DictConfig): encapsulates model analysis configuration parameters.
-        model_outputs (dict[str, output.ModelOutput]): a dictionary containing model outputs per scenario.
-        output_path (Path): output path where visualization will be saved to.
+        config: Model analysis configuration.
+        model_outputs: Model outputs keyed by scenario.
+        output_path: Directory where the result is saved.
 
     Returns:
-        model_results (npt.NDArray[np.float64]): a numpy array of shape (num_scenarios, config.num_components)
-            encapsulating the dimensionality reduction results.
+        Array of shape (num_scenarios, config.num_components) with the dimensionality-reduction results.
     """
     algorithm = config.dim_reduction_algorithm
     match algorithm:

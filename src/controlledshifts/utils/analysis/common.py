@@ -23,8 +23,6 @@ MODEL_NAME_MAP = {
     "naive": "Naive",
 }
 
-# Fixed per-model plot colors (Okabe-Ito, colorblind-safe), keyed by display name. Naive is always black so it reads
-# as the reference baseline across every plot. Models without an entry fall back to the configured palette.
 MODEL_COLOR_MAP = {
     "Naive": "#000000",
     "AutoBot": "#FF7F50",
@@ -33,9 +31,6 @@ MODEL_COLOR_MAP = {
     "MTR": "#9370DB",
 }
 
-# Fixed colors for the dataset splits (Okabe-Ito, colorblind-safe), keyed by split name. Reused across analyses so
-# training/validation/testing keep consistent colors instead of a generic palette. Edit these to recolor every split
-# plot at once.
 SPLIT_COLOR_MAP = {
     "training": "#355070",
     "validation": "#6d597a",
@@ -130,13 +125,13 @@ def plot_heatmap(  # noqa: PLR0913
     """Visualizes a heatmap matrix.
 
     Args:
-        heatmap (npt.NDArray[np.float64]): a heatmap matrix to plot.
-        title (str): the title of the heatmap.
-        x_label (str): the label of the x-axis.
-        y_label (str): the label of the y-axis.
-        cbar_label (str): the label of the heatmap's colorbar.
-        colormap (str): the colormap to use for the heatmap.
-        output_filepath (Path): filepath to save the visualization.
+        heatmap: the matrix to plot.
+        title: the title of the heatmap.
+        x_label: the label of the x-axis.
+        y_label: the label of the y-axis.
+        cbar_label: the label of the colorbar.
+        colormap: the colormap to use.
+        output_filepath: filepath to save the visualization.
     """
     plt.figure(figsize=(35, 30))
 
