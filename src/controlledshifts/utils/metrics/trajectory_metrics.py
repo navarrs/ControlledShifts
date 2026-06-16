@@ -16,18 +16,18 @@ def compute_displacement_error(
         D: trajectory dimensions (usually 2 for x and y)
 
     Args:
-        pred_traj (torch.Tensor(B, M, T, D)): predicted trajectory
-        gt_traj (torch.Tensor(B, 1, T, D)): ground truth trajectory
-        mask (torch.Tensor(B, 1, T)): valid trajectory datapoints
-        valid_idx (torch.Tensor(B)): valid_indeces for computing FDE
+        pred_traj: predicted trajectory, shape (B, M, T, D).
+        gt_traj: ground truth trajectory, shape (B, 1, T, D).
+        mask: valid trajectory datapoints, shape (B, 1, T).
+        valid_idx: valid indices for computing FDE, shape (B).
 
     Returns:
-        ade (torch.Tensor(B, M)) sum of average errors across the trajectory.
-        fde (torch.Tensor(B, M)) final error at the endpoint of the trajectory.
+        ade: sum of average errors across the trajectory, shape (B, M).
+        fde: final error at the endpoint of the trajectory, shape (B, M).
     """
     # ade_dist (B, M, T)
     ade_dist = torch.norm(pred_traj - gt_traj, 2, dim=-1)
-    # ade_losses (B, M)
+    # ade (B, M)
     ade = torch.sum(ade_dist * mask, dim=-1) / torch.sum(mask, dim=-1)
     fde = torch.gather(ade_dist, -1, valid_idx).squeeze(-1)
     return ade, fde
@@ -41,11 +41,11 @@ def compute_miss_rate(distances: torch.Tensor, miss_threshold: float = 2.0) -> t
         M: number of modes
 
     Args:
-        distances (torch.Tensor(B, M)): array of distances
-        miss_threshold (float): value for determining of a distances is considered a miss
+        distances: final distances, shape (B, M).
+        miss_threshold: distance above which a prediction is considered a miss.
 
-    Return:
-        miss_rate (torch.Tensor(B))
+    Returns:
+        miss_rate: fraction of modes that miss, shape (B).
     """
     num_modes = distances.shape[1]
     miss_values = distances > miss_threshold

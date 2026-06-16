@@ -130,7 +130,6 @@ def transform_map_elements(
     if all_polylines.shape[0] == 0:
         return all_polylines
 
-    # Transform all polyline points to the reference frame
     pts_ref: NDArray[np.float64] = all_polylines.copy()
     pts_ref[..., :2] -= ref_xy[:2]
     return _rotate_points_along_z(pts_ref, -ref_heading)
@@ -243,7 +242,7 @@ def map_infos_to_graph(
         map_range: L∞ half-width of the reference-frame range box in metres. Defaults to 100.0.
 
     Returns:
-        nx.DiGraph: Directed graph representing the road topology.
+        Directed graph representing the road topology.
     """
     graph = nx.DiGraph()
 

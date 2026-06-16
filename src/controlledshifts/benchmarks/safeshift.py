@@ -71,11 +71,10 @@ def create_safeshift_benchmark(config: DictConfig) -> BenchmarkSplit:
     ``config.plot_scores`` is true, a per-split score-density plot is saved to ``scores_pdf.png``.
 
     Args:
-        config: Hydra config.
-            Expected keys: input_data_path, scores_path, prefix, plot_scores.
+        config: Hydra config with keys: input_data_path, scores_path, prefix, plot_scores.
 
     Returns:
-        The BenchmarkSplit.
+        The train/val/test benchmark split.
     """
     input_data_path = Path(config.input_data_path)
     scores_path = Path(config.scores_path)

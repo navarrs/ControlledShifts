@@ -73,8 +73,8 @@ def _set_titles(fig: plt.Figure, title: str, subtitle: str) -> None:
 
     Args:
         fig: Figure to title.
-        title: Large bold main title.
-        subtitle: Smaller subtitle rendered immediately below the main title.
+        title: Main title text.
+        subtitle: Subtitle text.
     """
     fig.suptitle(title, fontsize=16, fontweight="bold")
     fig.text(0.5, 0.945, subtitle, ha="center", va="top", fontsize=11, color="dimgray")
@@ -347,8 +347,8 @@ def _plot_score_radar(  # noqa: PLR0913
         scores_df: Frame indexed by ``Model`` with metric columns plus a ``Combined`` column.
         output_path: Directory to save the plot.
         colormap: Seaborn/matplotlib palette name.
-        title: Large bold main title.
-        subtitle: Smaller subtitle beneath the title (the reference mode).
+        title: Main title.
+        subtitle: Subtitle (the reference mode).
         filename: Output file stem (``.png`` appended).
     """
     metrics = [column for column in scores_df.columns if column != COMBINED_COLUMN]
@@ -520,8 +520,8 @@ def _plot_robustness_decomposition(  # noqa: PLR0913
         shift_df: ``shift`` term frame, same shape/index as ``seen_df``.
         output_path: Directory to save the plot.
         colormap: Seaborn/matplotlib palette name.
-        title: Large bold main title.
-        subtitle: Smaller subtitle beneath the title (the reference mode).
+        title: Main title.
+        subtitle: Subtitle (the reference mode).
         filename: Output file stem (``.png`` appended).
     """
     panels = list(seen_df.columns)  # metric columns followed by COMBINED_COLUMN
@@ -602,8 +602,8 @@ def _plot_combined_ranking(  # noqa: PLR0913
         combined_df: Combined frame (indexed by ``Model``) whose ``Combined`` column is the ranking score.
         output_path: Directory to save the plot.
         colormap: Seaborn/matplotlib palette name (fallback for models without a fixed color).
-        title: Large bold main title.
-        subtitle: Smaller subtitle beneath the title (the reference mode).
+        title: Main title.
+        subtitle: Subtitle (the reference mode).
         filename: Output file stem (``.png`` appended).
     """
     ranking = combined_df[COMBINED_COLUMN].dropna().sort_values(ascending=True)  # ascending -> best ends up on top
@@ -663,7 +663,7 @@ def run_robustness_scores_analysis(config: DictConfig, log: Logger, output_path:
     Args:
         config: Analysis configuration (``benchmarks_filepath``, ``benchmarks``, ``models_to_compare``,
             ``trajectory_forecasting_metrics``, ``score_colormap`` and the ``score`` block).
-        log: Logger for analysis information.
+        log: Logger.
         output_path: Directory to save the generated artifacts.
     """
     set_analysis_theme(log=log)

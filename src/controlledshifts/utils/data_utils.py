@@ -32,18 +32,13 @@ def minmax_scaler(x: NDArray[np.float64]) -> NDArray[np.float64]:
     """Normalizes an input array using Min-Max normalization.
 
     Args:
-        x (NDArray[np.float64]): input array.
+        x: input array.
 
     Returns:
-        NDArray[np.float64]: array normalized to the [0, 1] range.
+        Array normalized to the [0, 1] range.
     """
-    # compute the distribution range
     value_range = np.max(x) - np.min(x)
-
-    # move the distribution so that it starts from zero by extracting the minimal value from all its values
     starts_from_zero = x - np.min(x)
-
-    # make the distribution fit [0; 1] by dividing by its range
     return starts_from_zero / value_range
 
 
@@ -60,15 +55,15 @@ def classify_track(  # noqa: PLR0913
     The classification strategy is taken from waymo_open_dataset/metrics/motion_metrics_utils.cc#L28.
 
     Args:
-        start_point (NDArray[np.float64]): start position as `(x, y)`.
-        end_point (NDArray[np.float64]): end position as `(x, y)`.
-        start_velocity (NDArray[np.float64]): start velocity as `(vx, vy)`.
-        end_velocity (NDArray[np.float64]): end velocity as `(vx, vy)`.
-        start_heading (float): start heading in radians.
-        end_heading (float): end heading in radians.
+        start_point: start position as `(x, y)`.
+        end_point: end position as `(x, y)`.
+        start_velocity: start velocity as `(vx, vy)`.
+        end_velocity: end velocity as `(vx, vy)`.
+        start_heading: start heading in radians.
+        end_heading: end heading in radians.
 
     Returns:
-        int: the value of the matching `TrajectoryType`.
+        The value of the matching `TrajectoryType`.
     """
     # Parameters for classification, taken from WOD
     max_speed_for_stationary = 2.0  # (m/s)
@@ -116,10 +111,10 @@ def get_heading(trajectory: NDArray[np.float64]) -> NDArray[np.float64]:
     """Approximates per-step headings from a sequence of positions.
 
     Args:
-        trajectory (NDArray[np.float64]): array of shape `(Time, 2)` with `(x, y)` positions.
+        trajectory: array of shape `(Time, 2)` with `(x, y)` positions.
 
     Returns:
-        NDArray[np.float64]: array of shape `(Time - 1,)` with the heading at each step in radians.
+        Array of shape `(Time - 1,)` with the heading at each step in radians.
     """
     dx = np.diff(trajectory[:, 0])
     dy = np.diff(trajectory[:, 1])
@@ -133,24 +128,21 @@ def get_trajectory_type(output: list[dict[str, Any]]) -> None:
     the ``trajectory_type`` key. Samples that fail classification are set to -1.
 
     Args:
-        output (list[dict[str, Any]]): data samples with the keys ``center_gt_final_valid_idx``,
+        output: data samples with the keys ``center_gt_final_valid_idx``,
             ``obj_trajs_future_state``, ``obj_trajs``, and ``obj_trajs_mask``. Mutated in place.
     """
     for data_sample in output:
-        # Get last gt position, velocity and heading
         valid_end_point = int(data_sample["center_gt_final_valid_idx"])
-        end_point = data_sample["obj_trajs_future_state"][0, valid_end_point, :2]  # (x,y)
-        end_velocity = data_sample["obj_trajs_future_state"][0, valid_end_point, 2:]  # (vx, vy)
-        # Get last heading, manually approximate it from the series of future position
+        end_point = data_sample["obj_trajs_future_state"][0, valid_end_point, :2]
+        end_velocity = data_sample["obj_trajs_future_state"][0, valid_end_point, 2:]
+        # Last heading is approximated from the series of future positions
         end_heading = get_heading(data_sample["obj_trajs_future_state"][0, : valid_end_point + 1, :2])[-1]
 
-        # Get start position, velocity and heading.
         assert data_sample["obj_trajs_mask"][0, -1]  # Assumes that the start point is always valid
-        start_point = data_sample["obj_trajs"][0, -1, :2]  # (x,y)
-        start_velocity = data_sample["obj_trajs"][0, -1, -4:-2]  # (vx, vy)
-        start_heading = 0.0  # Initial heading is zero
+        start_point = data_sample["obj_trajs"][0, -1, :2]
+        start_velocity = data_sample["obj_trajs"][0, -1, -4:-2]
+        start_heading = 0.0
 
-        # Classify the trajectory
         try:
             trajectory_type = classify_track(
                 start_point,
@@ -172,11 +164,11 @@ def load_causal_agent_ids(causal_labels_path: str | Path, scenario_id: str) -> N
     is missing (logged as a warning) so callers can decide whether to skip the scenario.
 
     Args:
-        causal_labels_path (str | Path): directory containing the per-scenario causal-label JSON files.
-        scenario_id (str): the scenario identifier used to locate the label file.
+        causal_labels_path: directory containing the per-scenario causal-label JSON files.
+        scenario_id: the scenario identifier used to locate the label file.
 
     Returns:
-        NDArray[np.int_] | None: the causal agent ids, or None when no label file exists for the scenario.
+        The causal agent ids, or None when no label file exists for the scenario.
     """
     causal_labels_filepath = Path(causal_labels_path) / f"{scenario_id}.json"
     if not causal_labels_filepath.exists():
@@ -191,7 +183,7 @@ def set_random_seed(seed: int) -> None:
     """Seeds Python, NumPy, and PyTorch RNGs and enables deterministic cuDNN behavior.
 
     Args:
-        seed (int): the random seed to apply.
+        seed: the random seed to apply.
     """
     random.seed(seed)
     np.random.seed(seed)  # noqa: NPY002
@@ -207,11 +199,11 @@ def estimate_kalman_filter(history: NDArray[np.float64], prediction_horizon: int
     hold the state covariances and the `k_*` arrays hold the Kalman gains.
 
     Args:
-        history (NDArray[np.float64]): array of shape `(length_of_history, 2)` with `(x, y)` positions.
-        prediction_horizon (int): number of steps into the future to predict.
+        history: array of shape `(length_of_history, 2)` with `(x, y)` positions.
+        prediction_horizon: number of steps into the future to predict.
 
     Returns:
-        tuple[float, float]: the predicted `(x, y)` position.
+        The predicted `(x, y)` position.
     """
     length_history = history.shape[0]
     # Measurements: the observed x/y positions the filter is fed step by step.
@@ -286,11 +278,11 @@ def calculate_epe(pred: tuple[float, float], gt: NDArray[np.float64]) -> float:
     """Computes the Euclidean end-point error between a predicted and ground-truth position.
 
     Args:
-        pred (tuple[float, float]): predicted `(x, y)` position.
-        gt (NDArray[np.float64]): ground-truth position as `(x, y)`.
+        pred: predicted `(x, y)` position.
+        gt: ground-truth position as `(x, y)`.
 
     Returns:
-        float: the Euclidean distance between the two positions.
+        The Euclidean distance between the two positions.
     """
     diff_x = (gt[0] - pred[0]) * (gt[0] - pred[0])
     diff_y = (gt[1] - pred[1]) * (gt[1] - pred[1])
@@ -301,11 +293,11 @@ def count_valid_steps_past(mask: NDArray[np.bool_]) -> int:
     """Counts the number of trailing valid steps in a mask.
 
     Args:
-        mask (NDArray[np.bool_]): 1D mask where True entries are valid.
+        mask: 1D mask where True entries are valid.
 
     Returns:
-        int: the number of valid steps counted backwards from the end until the first zero, or the
-            full length of the mask if it contains no zeros.
+        The number of valid steps counted backwards from the end until the first zero, or the
+        full length of the mask if it contains no zeros.
     """
     # Reverse the mask so the most recent step is first, then the position of the first invalid (zero)
     # entry equals the count of contiguous valid steps at the end of the original mask.
@@ -323,29 +315,25 @@ def get_kalman_difficulty(output: list[dict[str, Any]], sampling_freq: int = 10)
     horizon is set to -1. The result is stored under the ``kalman_difficulty`` key.
 
     Args:
-        output (list[dict[str, Any]]): data samples with the keys ``obj_trajs``, ``obj_trajs_mask``,
+        output: data samples with the keys ``obj_trajs``, ``obj_trajs_mask``,
             ``obj_trajs_future_state``, and ``center_gt_final_valid_idx``. Mutated in place.
-        sampling_freq (int): frequency at which the trajectory is sampled. In WOMD, datapoints are sampled at 10hz.
+        sampling_freq: frequency at which the trajectory is sampled. In WOMD, datapoints are sampled at 10hz.
     """
     num_steps_2s = 2 * sampling_freq - 1  # -1 since counting from 0
     num_steps_4s = 4 * sampling_freq - 1
     num_steps_6s = 6 * sampling_freq - 1
     for data_sample in output:
-        # past trajectory of agent of interest
         past_trajectory = data_sample["obj_trajs"][0, :, :2]  # Time X (x,y)
         past_mask = data_sample["obj_trajs_mask"][0, :]
         valid_past = count_valid_steps_past(past_mask)
         past_trajectory_valid = past_trajectory[-valid_past:, :]  # Time(valid) X (x,y)
 
-        # future gt trajectory of agent of interest
         gt_future = data_sample["obj_trajs_future_state"][0, :, :2]  # Time x (x, y)
-        # Get last valid position
         valid_future = int(data_sample["center_gt_final_valid_idx"])
 
         kalman_difficulty_2s, kalman_difficulty_4s, kalman_difficulty_6s = -1, -1, -1
         try:
             if valid_future >= num_steps_2s:  # -1 since counting from 0
-                # Get kalman future prediction at the horizon length, second argument is horizon length
                 kalman_2s = estimate_kalman_filter(past_trajectory_valid, num_steps_2s + 1)  # (x,y)
                 gt_future_2s = gt_future[num_steps_2s, :]
                 kalman_difficulty_2s = calculate_epe(kalman_2s, gt_future_2s)
@@ -368,7 +356,7 @@ def is_ddp() -> bool:
     """Returns whether the process is running under Distributed Data Parallel.
 
     Returns:
-        bool: True if the ``WORLD_SIZE`` environment variable is set.
+        True if the ``WORLD_SIZE`` environment variable is set.
     """
     return "WORLD_SIZE" in os.environ
 
@@ -377,17 +365,16 @@ def generate_mask(current_index: int, total_length: int, interval: int) -> NDArr
     """Builds a periodic 0/1 mask anchored at a given index.
 
     Args:
-        current_index (int): index that the periodic pattern is anchored to.
-        total_length (int): length of the mask to produce.
-        interval (int): spacing between consecutive valid (1) positions.
+        current_index: index that the periodic pattern is anchored to.
+        total_length: length of the mask to produce.
+        interval: spacing between consecutive valid (1) positions.
 
     Returns:
-        NDArray[np.int_]: array of length `total_length` with 1 at positions whose offset from
-            `current_index` is a multiple of `interval`, and 0 elsewhere.
+        Array of length `total_length` with 1 at positions whose offset from
+        `current_index` is a multiple of `interval`, and 0 elsewhere.
     """
     mask = []
     for i in range(total_length):
-        # Check if the position is a multiple of the frequency starting from current_index
         if (i - current_index) % interval == 0:
             mask.append(1)
         else:
@@ -400,10 +387,10 @@ def get_polyline_dir(polyline: NDArray[np.float64]) -> NDArray[np.float64]:
     """Computes the unit direction vector at each point of a polyline.
 
     Args:
-        polyline (NDArray[np.float64]): array of shape `(N, D)` with the polyline points.
+        polyline: array of shape `(N, D)` with the polyline points.
 
     Returns:
-        NDArray[np.float64]: array of shape `(N, D)` with the normalized direction at each point.
+        Array of shape `(N, D)` with the normalized direction at each point.
     """
     # Shift the polyline forward by one so each point can be differenced against its predecessor; the
     # first point is differenced against itself (zero direction). Normalize, clipping to avoid /0.
@@ -417,10 +404,10 @@ def check_numpy_to_torch(x: NDArray[np.float64] | torch.Tensor) -> tuple[torch.T
     """Converts a NumPy array to a float tensor, leaving tensors untouched.
 
     Args:
-        x (NDArray[np.float64] | torch.Tensor): the input array or tensor.
+        x: the input array or tensor.
 
     Returns:
-        tuple[torch.Tensor, bool]: the value as a tensor and a flag that is True if the input was a NumPy array.
+        The value as a tensor and a flag that is True if the input was a NumPy array.
     """
     if isinstance(x, np.ndarray):
         return torch.from_numpy(x).float(), True
@@ -434,13 +421,11 @@ def rotate_points_along_z_tensor(
     """Rotates points around the Z-axis using PyTorch, accepting NumPy or tensor inputs.
 
     Args:
-        points (NDArray[np.float64] | torch.Tensor): points of shape `(B, N, 3 + C)`.
-        angle (NDArray[np.float64] | torch.Tensor): per-batch angle of shape `(B,)` along the z-axis; the
-            angle increases as x rotates towards y.
+        points: points of shape `(B, N, 3 + C)`.
+        angle: per-batch angle of shape `(B,)` along the z-axis; the angle increases as x rotates towards y.
 
     Returns:
-        NDArray[np.float64] | torch.Tensor: the rotated points, returned as a NumPy array if `points` was a
-            NumPy array.
+        The rotated points, returned as a NumPy array if `points` was a NumPy array.
     """
     points, is_numpy = check_numpy_to_torch(points)
     angle, _ = check_numpy_to_torch(angle)
@@ -465,28 +450,22 @@ def rotate_points_along_z(points: NDArray[np.float64], angle: NDArray[np.float64
     """Rotate points around the Z-axis using the given angle.
 
     Args:
-        points (NDArray[np.float64]): array of shape `(B, N, 3 + C)` — B batches, N points per batch, 3
+        points: array of shape `(B, N, 3 + C)` — B batches, N points per batch, 3
             coordinates `(x, y, z)` plus C extra channels.
-        angle (NDArray[np.float64]): array of shape `(B,)` with the angle for each batch in radians.
+        angle: array of shape `(B,)` with the angle for each batch in radians.
 
     Returns:
-        NDArray[np.float64]: the rotated points.
+        The rotated points.
     """
-    # Checking if the input is 2D or 3D points
     is_2d = points.shape[-1] == _NUM_2D_COORDS
 
-    # Cosine and sine of the angles
     cosa = np.cos(angle)
     sina = np.sin(angle)
 
     if is_2d:
-        # Rotation matrix for 2D
         rot_matrix = np.stack((cosa, sina, -sina, cosa), axis=1).reshape(-1, 2, 2)
-
-        # Apply rotation
         points_rot = np.matmul(points, rot_matrix)
     else:
-        # Rotation matrix for 3D
         rot_matrix = np.stack(
             (
                 cosa,
@@ -502,10 +481,7 @@ def rotate_points_along_z(points: NDArray[np.float64], angle: NDArray[np.float64
             axis=1,
         ).reshape(-1, 3, 3)
 
-        # Apply rotation to the first 3 dimensions
         points_rot = np.matmul(points[:, :, :3], rot_matrix)
-
-        # Concatenate any additional dimensions back
         if points.shape[-1] > _NUM_3D_COORDS:
             points_rot = np.concatenate((points_rot, points[:, :, 3:]), axis=-1)
 
@@ -529,13 +505,12 @@ def merge_batch_by_padding_2nd_dim(
     """Stacks tensors that differ along their 2nd dimension by zero-padding to the maximum length.
 
     Args:
-        tensor_list (list[torch.Tensor]): tensors of shape `(B, T, F1)` or `(B, T, F1, F2)`, all
+        tensor_list: tensors of shape `(B, T, F1)` or `(B, T, F1, F2)`, all
             sharing the trailing feature dimensions but possibly differing in `T`.
-        return_pad_mask (bool): whether to also return the padding mask.
+        return_pad_mask: whether to also return the padding mask.
 
     Returns:
-        torch.Tensor | tuple[torch.Tensor, torch.Tensor]: the padded, concatenated tensor, and the
-            boolean padding mask if `return_pad_mask` is True.
+        The padded, concatenated tensor, and the boolean padding mask if `return_pad_mask` is True.
     """
     assert len(tensor_list[0].shape) in [_TENSOR_NDIM_3D, 4]
     only_3d_tensor = False
@@ -579,11 +554,11 @@ def get_batch_offsets(batch_idxs: torch.Tensor, bs: int) -> torch.Tensor:
     """Computes per-batch offsets from a tensor of batch indices.
 
     Args:
-        batch_idxs (torch.Tensor): tensor of shape `(N,)` with the batch index of each element.
-        bs (int): the batch size.
+        batch_idxs: tensor of shape `(N,)` with the batch index of each element.
+        bs: the batch size.
 
     Returns:
-        torch.Tensor: tensor of shape `(bs + 1,)` with the cumulative element offsets per batch.
+        Tensor of shape `(bs + 1,)` with the cumulative element offsets per batch.
     """
     # Each offset is the running total of elements in the preceding batches, so batch i occupies
     # the slice [batch_offsets[i], batch_offsets[i + 1]) of a flat, batch-sorted tensor.
@@ -598,32 +573,29 @@ def interpolate_polyline(polyline: NDArray[np.float64], step: float = 0.5) -> ND
     """Resamples a polyline at a fixed arc-length step using linear interpolation.
 
     Args:
-        polyline (NDArray[np.float64]): array of shape `(N, >= 2)`; only the first two columns are used.
-        step (float): arc-length spacing between resampled points.
+        polyline: array of shape `(N, >= 2)`; only the first two columns are used.
+        step: arc-length spacing between resampled points.
 
     Returns:
-        NDArray[np.float64]: array of shape `(M, 3)` with the resampled points and a zero z-coordinate, or the
-            original polyline if it contains a single point.
+        Array of shape `(M, 3)` with the resampled points and a zero z-coordinate, or the
+        original polyline if it contains a single point.
     """
-    # Calculate the cumulative distance along the polyline
     if polyline.shape[0] == 1:
         return polyline
     polyline = polyline[:, :2]
     distances = np.cumsum(np.sqrt(np.sum(np.diff(polyline, axis=0) ** 2, axis=1)))
-    distances = np.insert(distances, 0, 0)  # start with a distance of 0
+    distances = np.insert(distances, 0, 0)
 
-    # Create the new distance array
     max_distance = distances[-1]
     new_distances = np.arange(0, max_distance, step)
 
-    # Interpolate for x, y, z
     new_polyline = []
     for dim in range(polyline.shape[1]):
         interp_func = interp1d(distances, polyline[:, dim], kind="linear")
         new_polyline.append(interp_func(new_distances))
 
     new_polyline = np.column_stack(new_polyline)
-    # add the third dimension back with zeros
+    # Add a zero z-coordinate back
     return np.concatenate((new_polyline, np.zeros((new_polyline.shape[0], 1))), axis=1)
 
 
@@ -634,11 +606,11 @@ def polyline_cumulative_arclength(poly_xy: torch.Tensor, poly_mask: torch.Tensor
     arc-length (valid points are assumed contiguous from index 0, as produced by the dataset's segment packing).
 
     Args:
-        poly_xy (torch.Tensor): polyline point coordinates, shape ``(..., M, 2)``.
-        poly_mask (torch.Tensor): per-point validity mask, shape ``(..., M)``.
+        poly_xy: polyline point coordinates, shape ``(..., M, 2)``.
+        poly_mask: per-point validity mask, shape ``(..., M)``.
 
     Returns:
-        torch.Tensor: cumulative arc-length at each point, shape ``(..., M)``; the first point is always 0.
+        Cumulative arc-length at each point, shape ``(..., M)``; the first point is always 0.
     """
     # Per-segment displacement length between consecutive points, shape (..., M - 1).
     seg_len = torch.linalg.norm(poly_xy[..., 1:, :] - poly_xy[..., :-1, :], dim=-1)
@@ -661,16 +633,15 @@ def project_point_to_polylines(
         M: max number of points per polyline
 
     Args:
-        point (torch.Tensor): query points, shape ``(B, 2)``.
-        poly_xy (torch.Tensor): polyline point coordinates, shape ``(B, P, M, 2)``.
-        poly_mask (torch.Tensor): per-point validity mask, shape ``(B, P, M)``.
+        point: query points, shape ``(B, 2)``.
+        poly_xy: polyline point coordinates, shape ``(B, P, M, 2)``.
+        poly_mask: per-point validity mask, shape ``(B, P, M)``.
 
     Returns:
-        tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-            - nearest_idx (torch.Tensor): index of the nearest valid vertex per polyline, shape ``(B, P)``.
-            - nearest_dist (torch.Tensor): distance from ``point`` to that vertex, shape ``(B, P)``; polylines with no
-              valid point get ``+inf``.
-            - cum_s (torch.Tensor): cumulative arc-length at each point, shape ``(B, P, M)``.
+        - nearest_idx: index of the nearest valid vertex per polyline, shape ``(B, P)``.
+        - nearest_dist: distance from ``point`` to that vertex, shape ``(B, P)``; polylines with no
+          valid point get ``+inf``.
+        - cum_s: cumulative arc-length at each point, shape ``(B, P, M)``.
     """
     cum_s = polyline_cumulative_arclength(poly_xy, poly_mask)  # (B, P, M)
     # Distance from the query point to every polyline vertex, shape (B, P, M).
@@ -695,14 +666,14 @@ def interpolate_polyline_at_arclength(
         F: number of query distances per polyline
 
     Args:
-        poly_xy (torch.Tensor): polyline point coordinates, shape ``(G, M, 2)``.
-        poly_mask (torch.Tensor): per-point validity mask, shape ``(G, M)``.
-        cum_s (torch.Tensor): cumulative arc-length at each point, shape ``(G, M)`` (see
+        poly_xy: polyline point coordinates, shape ``(G, M, 2)``.
+        poly_mask: per-point validity mask, shape ``(G, M)``.
+        cum_s: cumulative arc-length at each point, shape ``(G, M)`` (see
             :func:`polyline_cumulative_arclength`).
-        query_s (torch.Tensor): query arc-lengths, shape ``(G, F)``; expected non-negative.
+        query_s: query arc-lengths, shape ``(G, F)``; expected non-negative.
 
     Returns:
-        torch.Tensor: interpolated positions, shape ``(G, F, 2)``.
+        Interpolated positions, shape ``(G, F, 2)``.
     """
     num_groups, num_points, _ = poly_xy.shape
     arange_g = torch.arange(num_groups, device=poly_xy.device)
@@ -745,7 +716,7 @@ class DynamicSampler(Sampler):
         """Initializes the sampler from a dataset collection and its sampling configuration.
 
         Args:
-            datasets (_DynamicSamplerDataset): collection exposing a ``config`` mapping (with
+            datasets: collection exposing a ``config`` mapping (with
                 ``sample_num``, ``sample_mode``, and ``max_data_num``) and a ``dataset_idx`` mapping
                 from dataset name to the available indices.
         """
@@ -763,7 +734,7 @@ class DynamicSampler(Sampler):
         """Selects the indices to sample from each dataset according to the given usage amounts.
 
         Args:
-            sampleing_dict (dict[str, float]): maps dataset name to the amount of data to use. Values in `[0, 1]` are
+            sampleing_dict: maps dataset name to the amount of data to use. Values in `[0, 1]` are
                 interpreted as a fraction of the dataset; values above 1 are an absolute count.
         """
         all_idx = []
@@ -775,7 +746,6 @@ class DynamicSampler(Sampler):
             if data_num == 0:
                 continue
             data_num = min(data_num, len(data_idx))
-            # randomly select data_idx by data_num
             sampled_data_idx = np.random.choice(data_idx, data_num, replace=False).tolist()  # noqa: NPY002
             all_idx.extend(sampled_data_idx)
             selected_idx[k] = sampled_data_idx
@@ -802,7 +772,7 @@ class DynamicSampler(Sampler):
         """Overrides the current index list.
 
         Args:
-            idx (list[int]): the indices to sample from.
+            idx: the indices to sample from.
         """
         self.idx = idx
 
@@ -811,10 +781,10 @@ def resplit_batch(batch: output.ModelOutput) -> dict[str, output.ModelOutput]:
     """Splits a batched `ModelOutput` into per-scenario `ModelOutput` objects on CPU.
 
     Args:
-        batch (output.ModelOutput): a batched model output covering several scenarios.
+        batch: a batched model output covering several scenarios.
 
     Returns:
-        dict[str, output.ModelOutput]: maps each scenario id to its detached, CPU-resident output.
+        Maps each scenario id to its detached, CPU-resident output.
     """
     batch_resplit = {}
 
@@ -899,15 +869,14 @@ def load_batches(
     """Loads pickled per-scenario model outputs from disk and returns a random subset of scenarios.
 
     Args:
-        base_data_path (str | Path): root cache directory holding one per-split subdirectory per ``tag``.
-        num_batches (int | None): maximum number of per-scenario files to load; None loads all
-            (capped at `MAX_NUM_BATCHES`).
-        num_scenarios (int | None): number of scenarios to keep; None keeps all loaded scenarios.
-        seed (int): random seed used to select scenarios.
-        tag (str): split subdirectory to load from (e.g. ``val``).
+        base_data_path: root cache directory holding one per-split subdirectory per ``tag``.
+        num_batches: maximum number of per-scenario files to load; None loads all (capped at `MAX_NUM_BATCHES`).
+        num_scenarios: number of scenarios to keep; None keeps all loaded scenarios.
+        seed: random seed used to select scenarios.
+        tag: split subdirectory to load from (e.g. ``val``).
 
     Returns:
-        dict[str, output.ModelOutput]: maps the selected scenario ids to their per-scenario outputs.
+        Maps the selected scenario ids to their per-scenario outputs.
 
     Raises:
         ValueError: if no per-scenario files are found under the `tag` subdirectory.
@@ -940,11 +909,11 @@ def load_scenario_scores(scores_paths: str | Path, scenario_ids: Iterable[str]) 
     """Loads precomputed SafeShift scene and agent scores for the given scenarios.
 
     Args:
-        scores_paths (str | Path): directory holding one pickle of scores per scenario.
-        scenario_ids (Iterable[str]): scenario ids to load scores for.
+        scores_paths: directory holding one pickle of scores per scenario.
+        scenario_ids: scenario ids to load scores for.
 
     Returns:
-        dict[str, dict[str, Any]]: a mapping with ``scene_scores`` and ``agents_scores``, each keyed by scenario id.
+        A mapping with ``scene_scores`` and ``agents_scores``, each keyed by scenario id.
     """
     _LOGGER.info("Loading scenario scores...")
     scores_files = {str(f).split("/")[-1].split(".")[0]: f for f in Path(scores_paths).iterdir()}
@@ -965,11 +934,11 @@ def load_causal_agents_labels(causal_agents_labels_path: str | Path, scenario_id
     """Loads causal-agent labels for the given scenarios from JSON files.
 
     Args:
-        causal_agents_labels_path (str | Path): directory holding one JSON of labels per scenario.
-        scenario_ids (list[str]): scenario ids to load labels for.
+        causal_agents_labels_path: directory holding one JSON of labels per scenario.
+        scenario_ids: scenario ids to load labels for.
 
     Returns:
-        dict[str, Any]: maps scenario id to its loaded causal-agent labels.
+        Maps scenario id to its loaded causal-agent labels.
     """
     _LOGGER.info("Loading causal agents labels...")
     causal_labels_files = {str(f).split("/")[-1].split(".")[0]: f for f in Path(causal_agents_labels_path).iterdir()}
@@ -992,9 +961,9 @@ def save_cache(cache_infos: output.ModelOutput, cache_dir: Path, tag: str) -> No
     sharing a ``scenario_id`` overwrite, matching ``resplit_batch``'s dict-keyed-by-id behavior.
 
     Args:
-        cache_infos (output.ModelOutput): the batched model output covering several scenarios.
-        cache_dir (Path): root cache directory; a per-split subdirectory ``tag`` is created under it.
-        tag (str): split name used as the subdirectory (e.g. ``train``/``val``/``test``).
+        cache_infos: the batched model output covering several scenarios.
+        cache_dir: root cache directory; a per-split subdirectory ``tag`` is created under it.
+        tag: split name used as the subdirectory (e.g. ``train``/``val``/``test``).
     """
     split_dir = cache_dir / tag
     split_dir.mkdir(parents=True, exist_ok=True)

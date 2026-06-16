@@ -27,7 +27,7 @@ from controlledshifts.utils.constants import EPSILON
 from controlledshifts.utils.plotting import set_analysis_theme
 
 
-# Minimum gap color intensity percentage (0-100); higher makes small OOD gaps more vibrant in the LaTeX table.
+# Higher makes small OOD gaps more vibrant in the LaTeX table.
 GAP_MIN_COLOR_VALUE = 20.0
 
 
@@ -38,11 +38,11 @@ def _plot_distribution_shift_comparison(
     highlighting the performance gaps.
 
     Args:
-        summary_df (pd.DataFrame): DataFrame containing model names and their corresponding metric values.
-        output_path (Path): Directory to save the generated plot.
-        colormap (str): Name of the matplotlib colormap to use for consistent coloring.
-        id_metric (str): Name of the ID metric.
-        ood_metric (str): Name of the OOD metric.
+        summary_df: Model metrics, one row per model.
+        output_path: Directory to save the generated plot.
+        colormap: Matplotlib colormap name.
+        id_metric: ID metric column.
+        ood_metric: OOD metric column.
     """
     assert id_metric in summary_df.columns, f"ID metric '{id_metric}' not found in summary_df columns"
     assert ood_metric in summary_df.columns, f"OOD metric '{ood_metric}' not found in summary_df columns"
@@ -106,10 +106,10 @@ def _plot_benchmark_comparison(
     """Plots a benchmark comparison across different models for specified metrics.
 
     Args:
-        summary_df (pd.DataFrame): DataFrame containing model names and their corresponding metric values.
-        metrics (dict[str, str]): Dictionary mapping metric column names to display names.
-        output_path (Path): Directory to save the generated plot.
-        colormap (str): Name of the matplotlib colormap to use for consistent coloring.
+        summary_df: Model metrics, one row per model.
+        metrics: Metric column names mapped to display names.
+        output_path: Directory to save the generated plot.
+        colormap: Matplotlib colormap name.
     """
     num_metrics = len(metrics)
     n_models = summary_df["Model"].shape[0]
@@ -174,10 +174,9 @@ def _plot_performance_gaps(
     """Plots comprehensive performance gaps (absolute and percentage) between OOD and ID metrics for multiple metrics.
 
     Args:
-        summary_df (pd.DataFrame): DataFrame containing model names and their corresponding metric values.
-        output_path (Path): Directory to save the generated plot.
-        metric_pairs (list[tuple[str, str, str]]): List of tuples containing (ID metric column name, OOD metric column
-            name, metric display name).
+        summary_df: Model metrics, one row per model.
+        output_path: Directory to save the generated plot.
+        metric_pairs: ``(id_metric_col, ood_metric_col, display_name)`` tuples.
     """
     gap_data = {}
     for id_col, ood_col, metric_name in metric_pairs:
@@ -250,10 +249,10 @@ def _plot_grouped_bar_chart(
     """Plots a grouped bar chart comparing multiple key metrics across different models.
 
     Args:
-        summary_df (pd.DataFrame): DataFrame containing model names and their corresponding metric values.
-        metrics (dict[str, str]): Dictionary mapping metric column names to display names.
-        output_path (Path): Directory to save the generated plot.
-        key_metrics_display (list[str]): List of key metric column names to include in the grouped bar chart.
+        summary_df: Model metrics, one row per model.
+        metrics: Metric column names mapped to display names.
+        output_path: Directory to save the generated plot.
+        key_metrics_display: Key metric column names to include in the chart.
     """
     _fig, ax = plt.subplots(figsize=(14, 7))
 
@@ -312,17 +311,16 @@ def build_benchmark_df(
     even different datasets); each value is taken from the first row that populates the corresponding column.
 
     Args:
-        metrics_df (pd.DataFrame): The combined results file with a ``Name`` (``<dataset>_<model>``) column and
-            ``<split>/<metric>`` value columns.
-        splits (tuple[str, str]): ``(seen_split, unseen_split)`` column prefixes, e.g.
+        metrics_df: Combined results with a ``Name`` (``<dataset>_<model>``) column and ``<split>/<metric>`` columns.
+        splits: ``(seen_split, unseen_split)`` column prefixes, e.g.
             ``("test/waymo-uniform-validation", "test/waymo-uniform-testing")``.
-        metrics (list[str]): Metric names to extract for each split.
-        models_to_compare (list[str]): Raw model identifiers (as they appear after ``<dataset>_``) to include.
-        show_run_id (bool): Whether to append the source run ID to the displayed model name.
+        metrics: Metric names to extract for each split.
+        models_to_compare: Raw model identifiers (as they appear after ``<dataset>_``) to include.
+        show_run_id: Whether to append the source run ID to the displayed model name.
 
     Returns:
-        pd.DataFrame: One row per model with a ``Model`` column and ``<split>/<metric>`` value columns (NaN when a
-            metric is absent), shape-compatible with the plotting and LaTeX-table helpers.
+        One row per model with a ``Model`` column and ``<split>/<metric>`` value columns (NaN when a metric is absent),
+        shape-compatible with the plotting and LaTeX-table helpers.
     """
     metrics_df = metrics_df.copy()
     metrics_df["model_name"] = metrics_df["Name"].str.rsplit("_", n=1).str[-1]
@@ -360,11 +358,11 @@ def _plot_benchmark(
     """Generates the per-benchmark ID-vs-OOD comparison plots for a single benchmark.
 
     Args:
-        benchmark_df (pd.DataFrame): Per-model frame from :func:`build_benchmark_df`.
-        splits (tuple[str, str]): ``(seen_split, unseen_split)`` column prefixes for the ID/OOD splits.
-        metrics (list[str]): Metric names to plot.
-        colormap (str): Name of the seaborn/matplotlib palette to use.
-        output_path (Path): Directory to save the generated plots.
+        benchmark_df: Per-model frame from :func:`build_benchmark_df`.
+        splits: ``(seen_split, unseen_split)`` column prefixes for the ID/OOD splits.
+        metrics: Metric names to plot.
+        colormap: Seaborn/matplotlib palette name.
+        output_path: Directory to save the generated plots.
     """
     seen_split, unseen_split = splits
     id_split_name = seen_split.split("/")[-1]
@@ -418,13 +416,13 @@ def _benchmark_metric_means(
     across the models in the benchmark, not the gap between the averaged values.
 
     Args:
-        benchmark_df (pd.DataFrame): Per-model frame from :func:`build_benchmark_df`.
-        id_split (str): Column prefix of the In-Distribution split.
-        ood_split (str): Column prefix of the Out-of-Distribution split.
-        metrics (list[str]): Metric names to summarize.
+        benchmark_df: Per-model frame from :func:`build_benchmark_df`.
+        id_split: Column prefix of the ID split.
+        ood_split: Column prefix of the OOD split.
+        metrics: Metric names to summarize.
 
     Returns:
-        _MetricMeans: Per-metric mean seen value, mean unseen value, and mean OOD gap.
+        Per-metric mean seen value, mean unseen value, and mean OOD gap.
     """
     mean_seen: dict[str, float] = {}
     mean_unseen: dict[str, float] = {}
@@ -448,14 +446,14 @@ def _build_mean_row(
     shaded via ``\rowcolor`` so it reads as an aggregate. Unlike the model rows, the gap is plain text (no color/bold).
 
     Args:
-        benchmark_label (str): Leading benchmark cell (empty inside a block; a label such as ``Overall`` otherwise).
-        model_label (str): Text for the model cell (e.g. ``Mean``).
-        means (_MetricMeans): Per-metric mean seen/unseen values and mean OOD gap.
-        metrics (list[str]): Metric names, in column order.
-        gray_level (float): ``\rowcolor[gray]`` level (0=black, 1=white); lower is darker.
+        benchmark_label: Leading benchmark cell (empty inside a block; a label such as ``Overall`` otherwise).
+        model_label: Text for the model cell (e.g. ``Mean``).
+        means: Per-metric mean seen/unseen values and mean OOD gap.
+        metrics: Metric names, in column order.
+        gray_level: ``\rowcolor[gray]`` level (0=black, 1=white); lower is darker.
 
     Returns:
-        str: The LaTeX row string, prefixed with the row-color directive.
+        The LaTeX row string, prefixed with the row-color directive.
     """
     row_parts = [benchmark_label, model_label, ""]  # benchmark, model, model-size (blank for aggregates)
 
@@ -487,14 +485,14 @@ def _build_benchmark_rows(  # noqa: PLR0912, PLR0915
     block is self-scaled.
 
     Args:
-        benchmark_df (pd.DataFrame): Per-model frame from :func:`build_benchmark_df`.
-        benchmark_name (str): Display name of the benchmark for the leading multirow cell.
-        id_split (str): Column prefix of the In-Distribution split.
-        ood_split (str): Column prefix of the Out-of-Distribution split.
-        metrics (list[str]): Metric names to include, in column order.
+        benchmark_df: Per-model frame from :func:`build_benchmark_df`.
+        benchmark_name: Display name of the benchmark for the leading multirow cell.
+        id_split: Column prefix of the ID split.
+        ood_split: Column prefix of the OOD split.
+        metrics: Metric names to include, in column order.
 
     Returns:
-        list[str]: One LaTeX row string per model in the benchmark.
+        One LaTeX row string per model in the benchmark.
     """
     # Precompute best ID/OOD and gap severity per metric
     best_id, best_ood, gap_stats = {}, {}, {}
@@ -581,13 +579,12 @@ def _write_combined_tex_table(
     r"""Writes a single LaTeX table spanning all benchmarks, each as a multirow block separated by ``\midrule``.
 
     Args:
-        blocks (list[tuple[str, str, str, pd.DataFrame]]): One ``(benchmark_name, id_split, ood_split, benchmark_df)``
-            tuple per benchmark, in display order.
-        metrics (list[str]): Metric names to include, in column order.
-        output_path (Path): Directory to save the generated ``results.tex`` file.
+        blocks: One ``(benchmark_name, id_split, ood_split, benchmark_df)`` tuple per benchmark, in display order.
+        metrics: Metric names to include, in column order.
+        output_path: Directory to save the generated ``results.tex`` file.
 
     Returns:
-        str: The rendered LaTeX table string.
+        The rendered LaTeX table string.
     """
     body_rows: list[str] = []
     for i, (benchmark_name, id_split, ood_split, benchmark_df) in enumerate(blocks):
@@ -661,10 +658,10 @@ def run_distribution_shift_analysis(config: DictConfig, log: Logger, output_path
     LaTeX table spanning all benchmarks is written to ``output_path/results.tex``.
 
     Args:
-        config (DictConfig): Analysis configuration (``benchmarks_filepath``, ``benchmarks``, ``models_to_compare``,
+        config: Analysis configuration (``benchmarks_filepath``, ``benchmarks``, ``models_to_compare``,
             ``trajectory_forecasting_metrics``, ``benchmark_colormap``, ``show_run_id``).
-        log (Logger): Logger for logging analysis information.
-        output_path (Path): Directory to save the generated plots and table.
+        log: Logger.
+        output_path: Directory to save the generated plots and table.
     """
     set_analysis_theme(log=log)
 

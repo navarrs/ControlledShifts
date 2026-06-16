@@ -117,9 +117,6 @@ def _load_descriptor_cache(cache_path: Path) -> dict[str, tuple[str, str, NDArra
 
     Args:
         cache_path: Path to the cache pickle file.
-
-    Returns:
-        Dict mapping filepath string to (scenario_id, split, descriptor).
     """
     if not cache_path.exists():
         return {}
@@ -301,8 +298,8 @@ def select_train_test_splits(
         hardness_scores: Per-sample hardness scores aligned with the rows of ``clusters_df``.
         split_ratios: Desired ``(train, val, test)`` fractions of the full dataset. Elements should sum to 1.0.
             Defaults to ``(0.70, 0.10, 0.20)``.
-        rng: NumPy random generator for reproducible shuffling of non-test scenarios. If None, an unseeded
-            (non-reproducible) generator is used.
+        rng: Used for reproducible shuffling of non-test scenarios. If None, an unseeded (non-reproducible)
+            generator is used.
         hardness_ascending: If True, clusters with lower mean scores are harder (silhouette convention). If False,
             clusters with higher mean scores are harder (DBI convention). Defaults to True.
 
@@ -318,7 +315,6 @@ def select_train_test_splits(
     total = len(df)
     target_test_count = int(total * split_ratios[2])
 
-    # Rank clusters by mean hardness and greedily assign to test set until target count is reached.
     cluster_stats = (
         df.groupby("cluster")
         .agg(mean_hardness=("hardness_score", "mean"), size=("hardness_score", "count"))
@@ -326,8 +322,6 @@ def select_train_test_splits(
         .sort_values("mean_hardness", ascending=hardness_ascending)
     )
 
-    # Add whole clusters in hardness order; when the next cluster would exceed the target, sample only what is needed
-    # from it so the test set stays at exactly target_test_count scenarios.
     test_indices: set[int] = set()
     accumulated = 0
     for _, row in cluster_stats.iterrows():
@@ -340,7 +334,6 @@ def select_train_test_splits(
             test_indices.update(cluster_indices)
             accumulated += len(cluster_indices)
         else:
-            # Partial cluster: pick the hardest scenarios within this cluster to fill up to the target.
             cluster_rows = df.loc[cluster_indices].sort_values("hardness_score", ascending=hardness_ascending)
             test_indices.update(cluster_rows.index[:remaining].tolist())
             accumulated += remaining
@@ -596,7 +589,7 @@ def _fit_clustering_model(
             ``'hdbscan'``. For ``'hdbscan'``, ``min_cluster_size`` (default 5) and optionally ``min_samples`` are read.
 
     Returns:
-        ``(model, labels)`` where *model* is the fitted estimator and *labels* are integer cluster assignments of
+        ``(model, labels)`` where *model* is the fitted estimator and *labels* are the cluster assignments,
         shape (N,).
 
     Raises:
@@ -648,7 +641,6 @@ def _assign_clusters(
     if hasattr(model, "predict") and callable(model.predict):
         return model.predict(new_data).astype(np.int32)  # pyright: ignore[reportAttributeAccessIssue]
 
-    # Nearest-centroid fallback for transductive algorithms.
     valid_ids = np.unique(sample_labels)
     valid_ids = valid_ids[valid_ids >= 0]  # exclude HDBSCAN noise label -1
     centroids = np.stack([sample_scaled[sample_labels == c].mean(axis=0) for c in valid_ids])

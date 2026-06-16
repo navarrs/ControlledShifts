@@ -140,7 +140,7 @@ def decode_tracks_from_proto(tracks: Iterable[scenario_pb2.Track]) -> TrackInfos
         dict: Dictionary with keys 'object_id', 'object_type', and 'trajs' containing
             agent IDs, types, and trajectories as numpy arrays.
     """
-    object_ids: list[int] = []  # {0: unset, 1: vehicle, 2: pedestrian, 3: cyclist, 4: others}
+    object_ids: list[int] = []
     object_types: list[str] = []
     trajs: list[np.ndarray] = []
     for cur_data in tracks:  # number of objects
@@ -228,7 +228,7 @@ def decode_map_features_from_proto(map_features: Iterable[scenario_pb2.MapFeatur
                     "start_index": x.lane_start_index,
                     "end_index": x.lane_end_index,
                     "feature_id": x.boundary_feature_id,
-                    "boundary_type": x.boundary_type,  # roadline type
+                    "boundary_type": x.boundary_type,
                 }
                 for x in cur_data.lane.left_boundaries
             ]
@@ -237,7 +237,7 @@ def decode_map_features_from_proto(map_features: Iterable[scenario_pb2.MapFeatur
                     "start_index": x.lane_start_index,
                     "end_index": x.lane_end_index,
                     "feature_id": x.boundary_feature_id,
-                    "boundary_type": road_line_type[x.boundary_type],  # roadline type
+                    "boundary_type": road_line_type[x.boundary_type],
                 }
                 for x in cur_data.lane.right_boundaries
             ]

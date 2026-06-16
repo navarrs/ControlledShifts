@@ -217,9 +217,9 @@ def plot_sample_selection_sweep_lineplot(config: DictConfig, log: Logger, output
     best strategy, auto-scales y-axis, and adds confidence bands when available.
 
     Args:
-        config (DictConfig): encapsulates model analysis configuration parameters.
-        log (Logger): Logger for logging analysis information.
-        output_path (Path): Directory to save the generated plots.
+        config: Model analysis configuration.
+        log: Logger.
+        output_path: Directory to save the generated plots.
     """
     plt.style.use("seaborn-v0_8-whitegrid")
 
@@ -304,10 +304,10 @@ def _plot_sample_selection_sweep_heatmap(  # noqa: PLR0912, PLR0915
     with a disambiguating label such as ``KMeans-SC (WF)`` and ``KMeans-SC (SafeST)``.
 
     Args:
-        config (DictConfig): encapsulates model analysis configuration parameters.
-        log (Logger): Logger for logging analysis information.
-        output_path (Path): Directory to save the generated plots.
-        metrics_dfs (dict[str, pd.DataFrame]): DataFrames keyed by ``"parent/stem"`` (e.g. ``"wayformer/kmeans"``).
+        config: Model analysis configuration.
+        log: Logger.
+        output_path: Directory to save the generated plots.
+        metrics_dfs: DataFrames keyed by ``"parent/stem"`` (e.g. ``"wayformer/kmeans"``).
         suffix (str): Suffix to append to output filenames.
 
     Returns:
@@ -511,10 +511,10 @@ def _plot_sample_selection_sweep_heatmap_baseline_gap(  # noqa: PLR0912, PLR0915
     same strategy each gets its own column with a disambiguating label.
 
     Args:
-        config (DictConfig): encapsulates model analysis configuration parameters.
-        log (Logger): Logger for logging analysis information.
-        output_path (Path): Directory to save the generated plots.
-        metrics_dfs (dict[str, pd.DataFrame]): Dictionary of DataFrames keyed by ``"parent/stem"``.
+        config: Model analysis configuration.
+        log: Logger.
+        output_path: Directory to save the generated plots.
+        metrics_dfs: DataFrames keyed by ``"parent/stem"``.
 
     Returns:
         Nested dict ``metric → pct → strategy_label → {black, blue}`` with star occurrence counts.
@@ -679,10 +679,10 @@ def _plot_sample_selection_sweep_distribution_gap(  # noqa: PLR0912, PLR0915
     same strategy each gets its own column with a disambiguating label.
 
     Args:
-        config (DictConfig): encapsulates model analysis configuration parameters.
-        log (Logger): Logger for logging analysis information.
-        output_path (Path): Directory to save the generated plots.
-        metrics_dfs (dict[str, pd.DataFrame]): Dictionary of DataFrames keyed by ``"parent/stem"``.
+        config: Model analysis configuration.
+        log: Logger.
+        output_path: Directory to save the generated plots.
+        metrics_dfs: DataFrames keyed by ``"parent/stem"``.
 
     Returns:
         Nested dict ``metric → pct → strategy_label → {black, blue, magenta}`` with star occurrence counts.
@@ -1108,9 +1108,9 @@ def plot_sample_selection_sweep_heatmap(
     holistically.
 
     Args:
-        config (DictConfig): encapsulates model analysis configuration parameters.
-        log (Logger): Logger for logging analysis information.
-        output_path (Path): Directory to save the generated plots.
+        config: Model analysis configuration.
+        log: Logger.
+        output_path: Directory to save the generated plots.
 
     Returns:
         Combined ``metric → pct → strategy_label → {best_in_group, black, lightgray, blue, magenta}`` star counts.

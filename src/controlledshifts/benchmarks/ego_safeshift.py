@@ -35,11 +35,11 @@ def create_ego_safeshift_benchmark(config: DictConfig) -> BenchmarkSplit:
     input directory are recorded as invalid.
 
     Args:
-        config: Hydra config.
-            Expected keys: input_data_path, scenario_score_mapping_filepath, score_type, split_ratios, seed.
+        config: Hydra config with keys: input_data_path, scenario_score_mapping_filepath, score_type,
+            split_ratios, seed.
 
     Returns:
-        The BenchmarkSplit.
+        The train/val/test benchmark split.
     """
     input_data_path = Path(config.input_data_path)
     random_generator: Generator = default_rng(config.seed)

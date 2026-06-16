@@ -38,7 +38,7 @@ class BaseDataset(Dataset):
         """Dataset constructor.
 
         Args:
-            config (DictConfig): Configuration object containing dataset parameters.
+            config: Configuration object containing dataset parameters.
         """
         super().__init__()
 
@@ -154,8 +154,7 @@ class BaseDataset(Dataset):
                 num_empty,
             )
 
-        # Remove blacklisted scenarios. Needed for sample-selection experiments so a single cache serves every
-        # selection variant without rebuilding.
+        # Blacklisting lets a single cache serve every sample-selection variant without rebuilding.
         if self.blacklist:
             blacklist = set(self.blacklist)
             self.data_loaded = {k: v for k, v in self.data_loaded.items() if v["scenario_id"] not in blacklist}
@@ -186,10 +185,10 @@ class BaseDataset(Dataset):
         """Collate a list of scenario samples into a batch dictionary.
 
         Args:
-            data_list (list): List of per-sample dictionaries.
+            data_list: List of per-sample dictionaries.
 
         Returns:
-            batch (dict): dictionary containing batch information as follows:
+            Batch dictionary containing:
                 'batch_size' (int): size (B) of the input batch.
                 'input_dict' (dict): dictionary containing the following scenario data:
                     TODO: annotate
@@ -244,7 +243,7 @@ class BaseDataset(Dataset):
         return {"batch_size": batch_size, "input_dict": input_dict, "batch_sample_count": batch_size}
 
     def __len__(self) -> int:
-        """Returns the number of samples in the dataset, which is equal to the number of loaded data keys."""
+        """Returns the number of samples in the dataset."""
         return len(self.data_loaded_keys)
 
     @lru_cache(maxsize=128)  # noqa: B019
@@ -255,10 +254,10 @@ class BaseDataset(Dataset):
         scenario file (e.g. multi-record scenarios when ``only_train_on_ego`` is disabled).
 
         Args:
-            file_path (str): path to the per-scenario agent-centric ``.pkl`` file.
+            file_path: path to the per-scenario agent-centric ``.pkl`` file.
 
         Returns:
-            list[dict[str, Any]]: the cached records (one per center agent).
+            The cached records (one per center agent).
         """
         with Path(file_path).open("rb") as f:
             return pickle.load(f)  # nosec B301
@@ -270,10 +269,10 @@ class BaseDataset(Dataset):
         downstream by ``BaseModel.split_by_dataset_name`` to report metrics per evaluation source).
 
         Args:
-            idx (int): index of the data to retrieve.
+            idx: index of the data to retrieve.
 
         Returns:
-            dict[str, Any]: dictionary containing the data for the given index.
+            Dictionary containing the data for the given index.
         """
         entry = self.data_loaded[self.data_loaded_keys[idx]]
         if "record" in entry:

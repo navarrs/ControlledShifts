@@ -30,11 +30,11 @@ class ScenarioVisualizer(BaseVisualizer):
         ``plot_pane``.
 
         Args:
-            scenario (Scenario): encapsulates the scenario to visualize.
-            scores (ScenarioScores | None): encapsulates the scenario and agent scores.
-            model_output (ModelOutput | None): encapsulates model outputs.
-            output_dir: (str): the directory where to save the scenario visualization.
-            causal_gt_ids (NDArray[np.int_] | None): ground-truth causal agent ids for the GT causal pane.
+            scenario: encapsulates the scenario to visualize.
+            scores: encapsulates the scenario and agent scores.
+            model_output: encapsulates model outputs.
+            output_dir: the directory where to save the scenario visualization.
+            causal_gt_ids: ground-truth causal agent ids for the GT causal pane.
         """
         if not isinstance(scenario, Scenario):
             error_message = "Scenario visualization only supported in global frame."
@@ -49,16 +49,13 @@ class ScenarioVisualizer(BaseVisualizer):
         num_windows = len(self.panes_to_plot)
         _, axs = plt.subplots(1, num_windows, figsize=(5 * num_windows, 5 * 1))
 
-        # Plot static and dynamic map information in the scenario
         self.plot_map_data(axs, scenario, num_windows)
 
-        # Plot each requested pane on its own window
         axs_list = np.atleast_1d(axs)
         for ax, pane in zip(axs_list, self.panes_to_plot, strict=True):
             self.plot_pane(ax, pane, scenario, scores, model_output, causal_gt_ids=causal_gt_ids)
             ax.set_title(PANE_TITLES[pane])
 
-        # Prepare and save plot
         self.set_axes(axs, scenario, num_windows)
         plt.suptitle(f"Scenario: {scenario_id}")
         plt.subplots_adjust(wspace=0.05)
