@@ -25,8 +25,10 @@ benchmarks:
       unseen: "test/waymo-remove-noncausal-hard-testing"
   - ego_safeshift:
       name: EgoSafeShift
-      seen: "test/waymo-causal-ego-safeshift-id"
-      unseen: "test/waymo-causal-ego-safeshift-ood"
+    #   seen: "test/waymo-causal-ego-safeshift-id"
+      seen: "test/waymo-ego-safeshift-id"
+    #   unseen: "test/waymo-causal-ego-safeshift-ood"
+      unseen: "test/waymo-ego-safeshift-ood"
   - environments:
       name: Environments
       seen: "test/waymo-environments-id"

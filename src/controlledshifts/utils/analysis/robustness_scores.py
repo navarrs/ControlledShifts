@@ -57,10 +57,27 @@ COMBINED_TERM = "combined"
 RADAR_TERM_STEMS = {SEEN_TERM: "seen_robustness", SHIFT_TERM: "shift_robustness"}
 RADAR_TERM_TITLES = {SEEN_TERM: "Seen (ID-level) Robustness", SHIFT_TERM: "Shift Robustness"}
 COMBINED_FILE_STEM = "combined_robustness"
-COMBINED_TITLE = "Combined Robustness Score (standardized z-sum)"
+COMBINED_TITLE = "Combined Robustness Score"
 
 # Cosine/sine deadband for deciding radar label alignment (center vs left/right, top/bottom).
 _LABEL_ALIGN_THRESHOLD = 0.1
+
+
+def _reference_label(reference_mode: str) -> str:
+    """Human-readable form of a reference mode for plot subtitles, e.g. ``naive_relative`` -> ``Naive-Relative``."""
+    return reference_mode.replace("_", "-").title()
+
+
+def _set_titles(fig: plt.Figure, title: str, subtitle: str) -> None:
+    """Set a large bold main title with a smaller subtitle just beneath it, centered over the figure.
+
+    Args:
+        fig: Figure to title.
+        title: Large bold main title.
+        subtitle: Smaller subtitle rendered immediately below the main title.
+    """
+    fig.suptitle(title, fontsize=16, fontweight="bold")
+    fig.text(0.5, 0.945, subtitle, ha="center", va="top", fontsize=11, color="dimgray")
 
 
 def _model_colors(models: pd.Index, colormap: str) -> list[str | tuple[float, float, float]]:
@@ -318,7 +335,9 @@ def _radial_ticks(values: list[float], *, n_target: int = 5) -> tuple[float, flo
     return r_lower, r_upper, step, ticks
 
 
-def _plot_score_radar(scores_df: pd.DataFrame, output_path: Path, colormap: str, title: str, filename: str) -> None:
+def _plot_score_radar(  # noqa: PLR0913
+    scores_df: pd.DataFrame, output_path: Path, colormap: str, title: str, subtitle: str, filename: str
+) -> None:
     """Render a radar/spider plot of per-model sensitivity scores across the metric axes.
 
     One closed polygon (with light fill) per model spans the metric axes; the per-model ``Combined`` score is annotated
@@ -328,7 +347,8 @@ def _plot_score_radar(scores_df: pd.DataFrame, output_path: Path, colormap: str,
         scores_df: Frame indexed by ``Model`` with metric columns plus a ``Combined`` column.
         output_path: Directory to save the plot.
         colormap: Seaborn/matplotlib palette name.
-        title: Figure title.
+        title: Large bold main title.
+        subtitle: Smaller subtitle beneath the title (the reference mode).
         filename: Output file stem (``.png`` appended).
     """
     metrics = [column for column in scores_df.columns if column != COMBINED_COLUMN]
@@ -402,15 +422,21 @@ def _plot_score_radar(scores_df: pd.DataFrame, output_path: Path, colormap: str,
     ax.grid(color="gray", alpha=0.25, linewidth=0.8)
     ax.spines["polar"].set_alpha(0.3)
 
-    ax.set_title(title, fontsize=16, fontweight="bold", pad=55)
-    ax.legend(
-        loc="upper left",
-        bbox_to_anchor=(1.08, 1.05),
+    # Compress the polar axes so the title band clears the top rim label and the legend has room at the bottom.
+    fig.subplots_adjust(top=0.84, bottom=0.12)
+    _set_titles(fig, title, subtitle)
+    handles, labels = ax.get_legend_handles_labels()
+    fig.legend(
+        handles,
+        labels,
+        loc="lower center",
+        ncol=min(len(labels), 5),
         fontsize=10,
         title="Model (Σ = mean score)",
         title_fontsize=11,
         frameon=True,
         framealpha=0.9,
+        bbox_to_anchor=(0.5, -0.02),
     )
 
     output_path.mkdir(parents=True, exist_ok=True)
@@ -475,7 +501,13 @@ def _write_scores_tex(scores_df: pd.DataFrame, output_path: Path, filename: str,
 
 
 def _plot_robustness_decomposition(  # noqa: PLR0913
-    seen_df: pd.DataFrame, shift_df: pd.DataFrame, output_path: Path, colormap: str, title: str, filename: str
+    seen_df: pd.DataFrame,
+    shift_df: pd.DataFrame,
+    output_path: Path,
+    colormap: str,
+    title: str,
+    subtitle: str,
+    filename: str,
 ) -> None:
     """Scatter the seen/shift robustness decomposition: one panel per metric (plus ``Combined``).
 
@@ -488,7 +520,8 @@ def _plot_robustness_decomposition(  # noqa: PLR0913
         shift_df: ``shift`` term frame, same shape/index as ``seen_df``.
         output_path: Directory to save the plot.
         colormap: Seaborn/matplotlib palette name.
-        title: Figure title.
+        title: Large bold main title.
+        subtitle: Smaller subtitle beneath the title (the reference mode).
         filename: Output file stem (``.png`` appended).
     """
     panels = list(seen_df.columns)  # metric columns followed by COMBINED_COLUMN
@@ -548,8 +581,8 @@ def _plot_robustness_decomposition(  # noqa: PLR0913
         bbox_to_anchor=(0.5, -0.02),
     )
 
-    fig.suptitle(title, fontsize=16, fontweight="bold")
-    fig.tight_layout(rect=(0, 0.04, 1, 1))
+    _set_titles(fig, title, subtitle)
+    fig.tight_layout(rect=(0, 0.04, 1, 0.95))
     output_path.mkdir(parents=True, exist_ok=True)
     output_file = output_path / f"{filename}.png"
     fig.savefig(output_file, dpi=300, bbox_inches="tight")
@@ -557,8 +590,8 @@ def _plot_robustness_decomposition(  # noqa: PLR0913
     print(f"✓ Plot saved as '{output_file}'")
 
 
-def _plot_combined_ranking(
-    combined_df: pd.DataFrame, output_path: Path, colormap: str, title: str, filename: str
+def _plot_combined_ranking(  # noqa: PLR0913
+    combined_df: pd.DataFrame, output_path: Path, colormap: str, title: str, subtitle: str, filename: str
 ) -> None:
     """Sorted horizontal bar chart of the combined ranking score (the ``Combined`` column), best at the top.
 
@@ -569,7 +602,8 @@ def _plot_combined_ranking(
         combined_df: Combined frame (indexed by ``Model``) whose ``Combined`` column is the ranking score.
         output_path: Directory to save the plot.
         colormap: Seaborn/matplotlib palette name (fallback for models without a fixed color).
-        title: Figure title.
+        title: Large bold main title.
+        subtitle: Smaller subtitle beneath the title (the reference mode).
         filename: Output file stem (``.png`` appended).
     """
     ranking = combined_df[COMBINED_COLUMN].dropna().sort_values(ascending=True)  # ascending -> best ends up on top
@@ -593,15 +627,24 @@ def _plot_combined_ranking(
     )
 
     for model, value in ranking.items():
-        ax.text(value, model, f"  {value:+.2f}", va="center", ha="left" if value >= 0 else "right", fontsize=9)
+        # Pad on the bar-facing side so the value never butts against the bar
+        # (leading for positive, trailing for negative).
+        label = f"  {value:+.2f}" if value >= 0 else f"{value:+.2f}  "
+        ax.text(value, model, label, va="center", ha="left" if value >= 0 else "right", fontsize=9)
 
-    ax.set_xlabel("Combined robustness score (standardized z-sum)", fontsize=11, fontweight="bold")
-    ax.set_title(title, fontsize=15, fontweight="bold")
+    # Widen the x-range 10% on both ends so the left-most value labels don't overlap the y-axis.
+    lo, hi = ax.get_xlim()
+    pad = 0.1 * (hi - lo)
+    ax.set_xlim(lo - pad, hi + pad)
+
+    ax.set_xlabel("Combined robustness score", fontsize=13, fontweight="bold")
+    ax.tick_params(axis="x", labelsize=8)
+    _set_titles(fig, title, subtitle)
     ax.grid(visible=True, axis="x", alpha=0.25, linewidth=0.6)
     ax.set_axisbelow(True)
     sns.despine(ax=ax)
 
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
     output_path.mkdir(parents=True, exist_ok=True)
     output_file = output_path / f"{filename}.png"
     fig.savefig(output_file, dpi=300, bbox_inches="tight")
@@ -609,7 +652,7 @@ def _plot_combined_ranking(
     print(f"✓ Plot saved as '{output_file}'")
 
 
-def run_score_analysis(config: DictConfig, log: Logger, output_path: Path) -> None:
+def run_robustness_scores_analysis(config: DictConfig, log: Logger, output_path: Path) -> None:
     """Run robustness-score analysis for each configured reference mode.
 
     For each ``config.score.reference_modes`` entry, computes per-model per-metric seen/shift robustness scores from
@@ -664,13 +707,14 @@ def run_score_analysis(config: DictConfig, log: Logger, output_path: Path) -> No
             continue
 
         mode_output = output_path / reference_mode
+        reference_label = _reference_label(reference_mode)  # plot subtitle, e.g. "Naive-Relative"
         print(f"\n=== Robustness scores: {reference_mode} ({len(scores[COMBINED_TERM])} models) ===")
 
         # Two robustness axes: radar + CSV + LaTeX each.
         for term, stem in RADAR_TERM_STEMS.items():
             term_df = scores[term]
             term_title = f"{RADAR_TERM_TITLES[term]} ({reference_mode})"
-            _plot_score_radar(term_df, mode_output, colormap, term_title, f"{stem}_radar")
+            _plot_score_radar(term_df, mode_output, colormap, RADAR_TERM_TITLES[term], reference_label, f"{stem}_radar")
             _write_scores_csv(term_df, mode_output, f"{stem}_scores", label=RADAR_TERM_TITLES[term])
             _write_scores_tex(term_df, mode_output, f"{stem}_scores", caption=term_title)
 
@@ -679,7 +723,8 @@ def run_score_analysis(config: DictConfig, log: Logger, output_path: Path) -> No
             scores[SHIFT_TERM],
             mode_output,
             colormap,
-            f"Robustness Decomposition ({reference_mode})",
+            "Robustness Decomposition",
+            reference_label,
             "robustness_decomposition",
         )
 
@@ -687,7 +732,12 @@ def run_score_analysis(config: DictConfig, log: Logger, output_path: Path) -> No
         combined_title = f"{COMBINED_TITLE} ({reference_mode})"
         combined_sorted = scores[COMBINED_TERM].sort_values(COMBINED_COLUMN, ascending=False)
         _plot_combined_ranking(
-            scores[COMBINED_TERM], mode_output, colormap, combined_title, f"{COMBINED_FILE_STEM}_ranking"
+            scores[COMBINED_TERM],
+            mode_output,
+            colormap,
+            COMBINED_TITLE,
+            reference_label,
+            f"{COMBINED_FILE_STEM}_ranking",
         )
         _write_scores_csv(combined_sorted, mode_output, f"{COMBINED_FILE_STEM}_scores", label=COMBINED_TITLE)
         _write_scores_tex(combined_sorted, mode_output, f"{COMBINED_FILE_STEM}_scores", caption=combined_title)

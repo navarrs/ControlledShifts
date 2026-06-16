@@ -2,7 +2,7 @@
 defaults:
   - default.yaml
 
-analysis_name: sensitivity_score
+analysis_name: robustness
 
 # Combined results file holding every benchmark's metrics (same source as the distribution-shift analysis).
 benchmarks_filepath: ./meta/runs/distribution_shift_results.csv
