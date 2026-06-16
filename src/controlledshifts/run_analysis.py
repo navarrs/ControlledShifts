@@ -28,8 +28,6 @@ import pyrootutils
 from omegaconf import DictConfig
 
 from controlledshifts import utils
-from controlledshifts.utils.analysis.causal_distribution import run_causal_distribution_analysis
-from controlledshifts.utils.analysis.score_distribution import run_score_distribution_analysis
 from controlledshifts.utils.plotting import configure_fonts
 
 
@@ -42,8 +40,8 @@ pyrootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 _ANALYSES: dict[str, Callable[[DictConfig, Logger, Path], None]] = {
     "distribution_shift": utils.run_distribution_shift_analysis,
     "robustness": utils.run_robustness_scores_analysis,
-    "causal_distribution": run_causal_distribution_analysis,
-    "score_distribution": run_score_distribution_analysis,
+    "causal_distribution": utils.run_causal_distribution_analysis,
+    "score_distribution": utils.run_score_distribution_analysis,
 }
 
 

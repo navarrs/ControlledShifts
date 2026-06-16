@@ -32,7 +32,6 @@ from numpy.random import Generator, default_rng
 from omegaconf import DictConfig
 from tqdm import tqdm
 
-from controlledshifts import utils
 from controlledshifts.benchmarks.causal_agents import remove_noncausal
 from controlledshifts.benchmarks.common import (
     BenchmarkSplit,
@@ -41,9 +40,10 @@ from controlledshifts.benchmarks.common import (
     split_ids_by_score,
     split_mapping_to_lists,
 )
+from controlledshifts.utils.pylogger import get_pylogger
 
 
-_LOGGER = utils.get_pylogger(__name__)
+_LOGGER = get_pylogger(__name__)
 
 
 def _count_noncausal(input_filepath: Path, causal_labels_path: Path) -> tuple[str, int] | None:
