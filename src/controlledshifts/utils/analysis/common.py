@@ -33,6 +33,15 @@ MODEL_COLOR_MAP = {
     "MTR": "#9370DB",
 }
 
+# Fixed colors for the dataset splits (Okabe-Ito, colorblind-safe), keyed by split name. Reused across analyses so
+# training/validation/testing keep consistent colors instead of a generic palette. Edit these to recolor every split
+# plot at once.
+SPLIT_COLOR_MAP = {
+    "training": "#355070",
+    "validation": "#6d597a",
+    "testing": "#b56576",
+}
+
 METRIC_NAME_MAP = {
     "brierFDE": "BrierFDE",
     "minFDE6": "MinFDE",

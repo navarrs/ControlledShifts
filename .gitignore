@@ -231,3 +231,7 @@ temp/
 
 # One-off model_cache layout migration script
 src/scripts/migrate_model_cache_layout.py
+docs/DATA_PREPARATION_DEPRECATED.md
+
+# One-off mini variant build script
+src/controlledshifts/build_mini_variant.py
