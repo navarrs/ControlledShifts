@@ -7,27 +7,20 @@ def compute_binary_confusion_matrix(labels: torch.Tensor, predictions: torch.Ten
     """Calculates the confusion matrix between predictions and labels.
 
     Args:
-        labels (torch.Tensor(B, N)): Tensor of target values.
-        predictions (torch.Tensor(B, N)): Tensor of predicted values.
+        labels: target values, shape (B, N).
+        predictions: predicted values, shape (B, N).
 
     Returns:
-        true_positives (torch.Tensor(B)): True postive counts per sample.
-        true_negatives (torch.Tensor(B)): True negative counts per sample.
-        false_positives (torch.Tensor(B)): False positive counts per sample.
-        false_negatives (torch.Tensor(B)): False negative counts per sample.
+        true_positives: true-positive counts per sample, shape (B).
+        true_negatives: true-negative counts per sample, shape (B).
+        false_positives: false-positive counts per sample, shape (B).
+        false_negatives: false-negative counts per sample, shape (B).
     """
     assert predictions.shape == labels.shape, "Shapes of predictions and labels must be the same."
 
-    # Calculating True Positives
     true_positives = ((predictions == 1) & (labels == 1)).sum(dim=-1).float()
-
-    # Calculating True Negatives
     true_negatives = ((predictions == 0) & (labels == 0)).sum(dim=-1).float()
-
-    # Calculating False Positives
     false_positives = ((predictions == 1) & (labels == 0)).sum(dim=-1).float()
-
-    # Calculating False Negatives
     false_negatives = ((predictions == 0) & (labels == 1)).sum(dim=-1).float()
 
     return true_positives, true_negatives, false_positives, false_negatives
@@ -39,14 +32,14 @@ def compute_multiclass_accuracy(
     """Computes the precision, recall and F1 scores for multiclass classification.
 
     Args:
-        labels (torch.Tensor(B, N)): Tensor of target values.
-        predictions (torch.Tensor(B, N)): Tensor of predicted values.
-        num_classes (int): number of classes.
+        labels: target values, shape (B, N).
+        predictions: predicted values, shape (B, N).
+        num_classes: number of classes.
 
     Returns:
-        precision (torch.Tensor(B)): Accuracy of positive predictions.
-        recall (torch.Tensor(B)): Sensitivity of possitive predictions.
-        f1_score (torch.Tensor(B)): Balance between precision and recall.
+        precision: accuracy of positive predictions, shape (B).
+        recall: sensitivity of positive predictions, shape (B).
+        f1_score: balance between precision and recall, shape (B).
     """
     assert predictions.shape == labels.shape, "Shapes of predictions and labels must be the same."
 
@@ -71,22 +64,17 @@ def compute_accuracy(labels: torch.Tensor, predictions: torch.Tensor) -> tuple[t
     """Computes the precision, recall and F1 scores.
 
     Args:
-        labels (torch.Tensor(B, N)): Tensor of target values.
-        predictions (torch.Tensor(B, N)): Tensor of predicted values.
+        labels: target values, shape (B, N).
+        predictions: predicted values, shape (B, N).
 
     Returns:
-        precision (torch.Tensor(B)): Accuracy of positive predictions.
-        recall (torch.Tensor(B)): Sensitivity of possitive predictions.
-        f1_score (torch.Tensor(B)): Balance between precision and recall.
+        precision: accuracy of positive predictions, shape (B).
+        recall: sensitivity of positive predictions, shape (B).
+        f1_score: balance between precision and recall, shape (B).
     """
     true_positives, _, false_positives, false_negatives = compute_binary_confusion_matrix(labels, predictions)
 
-    # Precision
     precision = true_positives / (true_positives + false_positives + EPSILON)
-
-    # Recall
     recall = true_positives / (true_positives + false_negatives + EPSILON)
-
-    # F1 score
     f1_score = 2 * (precision * recall) / (precision + recall + EPSILON)
     return precision, recall, f1_score

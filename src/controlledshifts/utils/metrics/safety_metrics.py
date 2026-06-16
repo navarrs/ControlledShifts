@@ -25,18 +25,18 @@ def compute_collision_rate(  # noqa: PLR0913
         N: number of other agents in the scene
 
     Args:
-        ego_pred_traj (torch.Tensor(B, M, T, D)): predicted trajectory of the ego agent.
-        ego_pred_prob (torch.Tensor(B, M)): predicted probability of each mode for the ego agent.
-        ego_index (torch.Tensor(B)): index of the ego agent in the others_gt_trajs tensor.
-        others_gt_trajs (torch.Tensor(B, N, T, D)): ground truth trajectories of other agents.
-        others_gt_trajs_mask (torch.Tensor(B, N, T)): mask for valid trajectory points of other agents.
-        collision_thresholds (Sequence[float] | None): list of distance thresholds to consider for collision
-            calculation. If None, defaults to DEFAULT_COLLISION_THRESHOLDs = (0.1, 0.25, 0.5, 1.0).
-        best_mode_only (bool): if True, only considers the best mode for collision calculation. Here, best mode is
-            defined as the mode with the highest predicted probability. If False, considers all modes for calculation.
+        ego_pred_traj: predicted trajectory of the ego agent, shape (B, M, T, D).
+        ego_pred_prob: predicted probability of each mode for the ego agent, shape (B, M).
+        ego_index: index of the ego agent in the others_gt_trajs tensor, shape (B).
+        others_gt_trajs: ground truth trajectories of other agents, shape (B, N, T, D).
+        others_gt_trajs_mask: mask for valid trajectory points of other agents, shape (B, N, T).
+        collision_thresholds: distance thresholds to consider for collision calculation. If None, defaults to
+            DEFAULT_COLLISION_THRESHOLDS = (0.1, 0.25, 0.5, 1.0).
+        best_mode_only: if True, only considers the best mode (highest predicted probability) for collision
+            calculation. If False, considers all modes.
 
     Returns:
-        collision_rate (dict[str, torch.Tensor]): dictionary containing the collision rate for each threshold.
+        collision_rate: collision rate per threshold.
     """
     if collision_thresholds is None:
         collision_thresholds = DEFAULT_COLLISION_THRESHOLDS

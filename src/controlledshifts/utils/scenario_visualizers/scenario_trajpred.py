@@ -71,11 +71,11 @@ class ScenarioTrajpredVisualizer(BaseVisualizer):
             window 2: displays the scene with relevant agents in different colors.
 
         Args:
-            scenario (Scenario): encapsulates the scenario to visualize.
-            scores (ScenarioScores | None): encapsulates the scenario and agent scores.
-            model_output (ModelOutput | None): encapsulates model outputs.
-            output_dir: (str): the directory where to save the scenario visualization.
-            causal_gt_ids (NDArray[np.int_] | None): unused; trajpred does not render causal panes.
+            scenario: encapsulates the scenario to visualize.
+            scores: encapsulates the scenario and agent scores.
+            model_output: encapsulates model outputs.
+            output_dir: the directory where to save the scenario visualization.
+            causal_gt_ids: unused; trajpred does not render causal panes.
         """
         del causal_gt_ids
         if not isinstance(scenario, AgentCentricScenario):
@@ -94,14 +94,11 @@ class ScenarioTrajpredVisualizer(BaseVisualizer):
 
         _, ax = plt.subplots(1, 1, figsize=(5, 5))
 
-        # draw map
         map_xy, map_type = self._decode_map(scenario.map_polylines)
         map_mask = scenario.map_polylines_mask
 
-        # Plot the map with mask check
         for idx, lane in enumerate(map_xy):
             lane_type = map_type[idx]
-            # convert onehot to index
             lane_type = np.argmax(lane_type)
             if lane_type in [1, 2, 3]:
                 continue
@@ -109,19 +106,16 @@ class ScenarioTrajpredVisualizer(BaseVisualizer):
                 if map_mask[idx, i] and map_mask[idx, i + 1]:
                     self._draw_line_with_mask(lane[i], lane[i + 1], color="grey", line_width=1.5)
 
-        # draw past trajectory
         for traj in scenario.obj_trajs:
             self._draw_trajectory(traj, line_width=2)
 
-        # draw future trajectory
         for traj in scenario.obj_trajs_future_state:
             self._draw_trajectory(traj, line_width=2)
 
-        # predicted future trajectory is (n,future_len,2) with n possible future trajectories, visualize all of the
+        # predicted future trajectory is (n, future_len, 2): n possible futures, visualize all of them
         pred_future_traj = model_output.trajectory_decoder_output.decoded_trajectories.value.detach().cpu().numpy()
         pred_future_prob = model_output.trajectory_decoder_output.mode_probabilities.value.detach().cpu().numpy()
         for idx, traj in enumerate(pred_future_traj):
-            # calculate color based on probability
             color = cm.hot(pred_future_prob[idx])
             for i in range(len(traj) - 1):
                 self._draw_line_with_mask(traj[i], traj[i + 1], color=color, line_width=2)

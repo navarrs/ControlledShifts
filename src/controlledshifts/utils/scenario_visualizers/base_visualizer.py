@@ -19,7 +19,6 @@ from controlledshifts.utils.constants import INVALID_AGENT_ID, MIN_VALID_POINTS,
 
 logger = get_logger(__name__)
 
-# Title displayed above each pane in a scenario visualization.
 PANE_TITLES: dict[SupportedPanes, str] = {
     SupportedPanes.ALL_AGENTS: "All Agents Trajectories",
     SupportedPanes.HIGHLIGHT_RELEVANT: "Highlighted Relevant and SDC Agent Trajectories",
@@ -38,7 +37,7 @@ class BaseVisualizer(ABC):
         logic.
 
         Args:
-            config (DictConfig): Configuration for the visualizer, including scenario type, map/agent keys, colors, and
+            config: Configuration for the visualizer, including scenario type, map/agent keys, colors, and
                 alpha values.
 
         Raises:
@@ -84,17 +83,15 @@ class BaseVisualizer(ABC):
         self.buffer_distance = config.get("distance_to_ego_zoom_in", 5.0)  # in meters
         self.distance_to_ego_zoom_in = config.get("distance_to_ego_zoom_in", 50.0)  # in meters
 
-        # Opacity for non-causal agents in the ground-truth causal pane (causal agents and ego are drawn fully opaque).
         self.non_causal_alpha = config.get("non_causal_alpha", 0.2)
 
     @property
     def is_ego_centric(self) -> bool:
-        # By default, we visualize scenarios in global frame.
         return self.config.get("is_ego_centric", False)
 
     @property
     def is_animated(self) -> bool:
-        # By default, visualizers render a single static figure. Animated subclasses override this.
+        # Animated subclasses override this to return True.
         return False
 
     @staticmethod
@@ -102,10 +99,10 @@ class BaseVisualizer(ABC):
         """Gets the scene score from the ScenarioScores.
 
         Args:
-            scores (ScenarioScores | None): encapsulates the scenario and agent scores.
+            scores: encapsulates the scenario and agent scores.
 
-        Return:
-            float | None: the scene score if available, otherwise None.
+        Returns:
+            The scene score if available, otherwise None.
         """
         return (
             None
@@ -117,16 +114,15 @@ class BaseVisualizer(ABC):
         """Plots the map data.
 
         Args:
-            ax (Axes): Axes to plot on.
-            scenario (Scenario): encapsulates the scenario to visualize.
-            num_windows (int, optional): Number of subplot windows. Defaults to 0.
+            ax: Axes to plot on.
+            scenario: encapsulates the scenario to visualize.
+            num_windows: Number of subplot windows. Defaults to 1.
         """
         if scenario.static_map_data is None:
             logger.warning("Scenario does not contain map_polylines, skipping static map visualization.")
         else:
             self.plot_static_map_data(ax, static_map_data=scenario.static_map_data, num_windows=num_windows)
 
-        # Plot dynamic map information
         if scenario.dynamic_map_data is None:
             logger.warning("Scenario does not contain dynamic_map_info, skipping dynamic map visualization.")
         else:
@@ -145,29 +141,26 @@ class BaseVisualizer(ABC):
         """Plots agent trajectories for a scenario, with optional highlighting and score-based transparency.
 
         Args:
-            ax (matplotlib.axes.Axes): Axes to plot on.
-            scenario (Scenario): encapsulates the scenario to visualize.
-            scores (ScenarioScores | None): encapsulates the scenario and agent scores.
-            show_relevant (bool, optional): if True, highlights relevant and SDC agents. Defaults to False.
-            start_timestep (int): starting timestep to plot the sequences.
-            end_timestep (int): ending timestep to plot the sequences.
+            ax: Axes to plot on.
+            scenario: encapsulates the scenario to visualize.
+            scores: encapsulates the scenario and agent scores.
+            show_relevant: if True, highlights relevant and SDC agents. Defaults to False.
+            start_timestep: starting timestep to plot the sequences.
+            end_timestep: ending timestep to plot the sequences.
         """
         agent_data = scenario.agent_data
         agent_relevance = agent_data.agent_relevance
         agent_types = np.asarray([atype.name for atype in agent_data.agent_types])
         ego_index = scenario.metadata.ego_vehicle_index
 
-        # Get the agents normalized scores
         agent_scores = np.ones(agent_data.num_agents, float) if scores is None else scores.safeshift_scores.agent_scores
         agent_scores = BaseVisualizer.get_normalized_agent_scores(agent_scores, ego_index)
 
-        # Mark any agents with a relevance score > 0 as "TYPE_RELEVANT"
         if show_relevant and agent_relevance is not None:
             relevant_indeces = np.where(agent_relevance > 0.0)[0]
             agent_types[relevant_indeces] = "TYPE_RELEVANT"
-        agent_types[ego_index] = "TYPE_SDC"  # Mark ego agent for visualization
+        agent_types[ego_index] = "TYPE_SDC"
 
-        # Zip information to plot
         agent_trajectories = AgentTrajectoryMasker(agent_data.agent_trajectories)
         zipped = zip(
             agent_trajectories.agent_xy_pos,
@@ -180,7 +173,6 @@ class BaseVisualizer(ABC):
             strict=False,
         )
         for apos, alen, awid, ahead, amask, atype, score in zipped:
-            # Skip if there are less than 2 valid points.
             mask = amask[start_timestep:end_timestep]
             if not mask.any() or mask.sum() < MIN_VALID_POINTS:
                 continue
@@ -190,9 +182,7 @@ class BaseVisualizer(ABC):
             length = alen[end_timestep].item()
             width = awid[end_timestep].item()
             color = self.agent_colors[atype]
-            # Plot the trajectory
             ax.plot(pos[:, 0], pos[:, 1], color=color, linewidth=2, alpha=score)
-            # Plot the agent
             self.plot_agent(ax, pos[-1, 0], pos[-1, 1], heading, length, width, score, color, plot_rectangle=True)
 
     def plot_pane(  # noqa: PLR0913
@@ -210,16 +200,16 @@ class BaseVisualizer(ABC):
         """Plots a single pane of a scenario visualization based on the requested pane type.
 
         Args:
-            ax (matplotlib.axes.Axes): Axes to plot on.
-            pane (SupportedPanes): the pane to plot.
-            scenario (Scenario): encapsulates the scenario to visualize.
-            scores (ScenarioScores | None): encapsulates the scenario and agent scores.
-            model_output (ModelOutput | None): encapsulates model outputs. Required for the predicted causal pane and
+            ax: Axes to plot on.
+            pane: the pane to plot.
+            scenario: encapsulates the scenario to visualize.
+            scores: encapsulates the scenario and agent scores.
+            model_output: encapsulates model outputs. Required for the predicted causal pane and
                 for the GT causal pane when ``causal_gt_ids`` is not provided.
-            causal_gt_ids (NDArray[np.int_] | None): ground-truth causal agent ids loaded from the causal-label files.
+            causal_gt_ids: ground-truth causal agent ids loaded from the causal-label files.
                 When provided, the GT causal pane is rendered from these instead of from model outputs.
-            start_timestep (int): starting timestep to plot the sequences.
-            end_timestep (int): ending timestep to plot the sequences.
+            start_timestep: starting timestep to plot the sequences.
+            end_timestep: ending timestep to plot the sequences.
 
         Raises:
             ValueError: if a causal pane is requested without a usable source, or if the pane is not supported.
@@ -276,12 +266,12 @@ class BaseVisualizer(ABC):
         """Plots agent trajectories for a scenario, marking causal agents with score-based transparency.
 
         Args:
-            ax (matplotlib.axes.Axes): Axes to plot on.
-            scenario (Scenario): Scenario data with agent positions, types, and relevance.
-            model_output (ModelOutput): encapsulates model outputs.
-            show_causal (CausalOutputType): Source in (GROUND_TRUTH, PREDICTION) to show agent causality.
-            start_timestep (int): starting timestep to plot the sequences.
-            end_timestep (int): ending timestep to plot the sequences.
+            ax: Axes to plot on.
+            scenario: Scenario data with agent positions, types, and relevance.
+            model_output: encapsulates model outputs.
+            show_causal: Source in (GROUND_TRUTH, PREDICTION) to show agent causality.
+            start_timestep: starting timestep to plot the sequences.
+            end_timestep: ending timestep to plot the sequences.
 
         Raises:
             ValueError: if the model output does not contain a causal output.
@@ -299,7 +289,6 @@ class BaseVisualizer(ABC):
         # Non-causal agents are rendered fully transparent; causal agents get a score-based alpha.
         agent_scores = np.zeros(agent_data.num_agents, float)
 
-        # Mark causal agents as 'TYPE_RELEVANT'
         modeled_agent_ids = model_output.agent_ids.value.detach().cpu().numpy()
         mask = modeled_agent_ids != INVALID_AGENT_ID
         modeled_agent_ids = modeled_agent_ids[mask]
@@ -320,7 +309,7 @@ class BaseVisualizer(ABC):
                     if pred == 1:
                         agent_types[idx] = "TYPE_RELEVANT"
                     agent_scores[idx] = prob[pred]
-        agent_types[ego_index] = "TYPE_SDC"  # Mark ego agent for visualization
+        agent_types[ego_index] = "TYPE_SDC"
 
         self._draw_causal_agents(
             ax, scenario, agent_types, agent_scores, start_timestep=start_timestep, end_timestep=end_timestep
@@ -341,11 +330,11 @@ class BaseVisualizer(ABC):
         This mirrors the GROUND_TRUTH branch of ``plot_causal`` but sources the labels from disk.
 
         Args:
-            ax (matplotlib.axes.Axes): Axes to plot on.
-            scenario (Scenario): Scenario data with agent positions, types, and ids.
-            causal_agent_ids (NDArray[np.int_]): the ids of the ground-truth causal agents (including the ego agent).
-            start_timestep (int): starting timestep to plot the sequences.
-            end_timestep (int): ending timestep to plot the sequences.
+            ax: Axes to plot on.
+            scenario: Scenario data with agent positions, types, and ids.
+            causal_agent_ids: the ids of the ground-truth causal agents (including the ego agent).
+            start_timestep: starting timestep to plot the sequences.
+            end_timestep: ending timestep to plot the sequences.
         """
         agent_data = scenario.agent_data
         agent_ids = agent_data.agent_ids
@@ -357,8 +346,8 @@ class BaseVisualizer(ABC):
         causal_idxs = np.isin(agent_ids, causal_agent_ids)
         agent_types[causal_idxs] = "TYPE_RELEVANT"
         agent_scores[causal_idxs] = 1.0
-        agent_types[ego_index] = "TYPE_SDC"  # Mark ego agent for visualization
-        agent_scores[ego_index] = 1.0  # Always render the ego at full opacity
+        agent_types[ego_index] = "TYPE_SDC"
+        agent_scores[ego_index] = 1.0
 
         self._draw_causal_agents(
             ax, scenario, agent_types, agent_scores, start_timestep=start_timestep, end_timestep=end_timestep
@@ -380,12 +369,12 @@ class BaseVisualizer(ABC):
         score. Shared by the model-output (``plot_causal``) and ground-truth (``plot_causal_gt``) causal panes.
 
         Args:
-            ax (matplotlib.axes.Axes): Axes to plot on.
-            scenario (Scenario): encapsulates the scenario to visualize.
-            agent_types (np.ndarray): per-agent type names used to look up colors (e.g. "TYPE_RELEVANT", "TYPE_SDC").
-            agent_scores (np.ndarray): per-agent alpha values; 0.0 hides an agent, positive values highlight it.
-            start_timestep (int): starting timestep to plot the sequences.
-            end_timestep (int): ending timestep to plot the sequences.
+            ax: Axes to plot on.
+            scenario: encapsulates the scenario to visualize.
+            agent_types: per-agent type names used to look up colors (e.g. "TYPE_RELEVANT", "TYPE_SDC").
+            agent_scores: per-agent alpha values; 0.0 hides an agent, positive values highlight it.
+            start_timestep: starting timestep to plot the sequences.
+            end_timestep: ending timestep to plot the sequences.
         """
         agent_trajectories = AgentTrajectoryMasker(scenario.agent_data.agent_trajectories)
         zipped = zip(
@@ -411,7 +400,6 @@ class BaseVisualizer(ABC):
             color = self.agent_colors[atype]
             zorder = 1000 if atype == "TYPE_SDC" else 100
             ax.plot(pos[:, 0], pos[:, 1], color=color, linewidth=2, alpha=score, zorder=zorder)
-            # Plot the agent
             self.plot_agent(
                 ax, pos[-1, 0], pos[-1, 1], heading, length, width, score, color, plot_rectangle=True, zorder=zorder
             )
@@ -437,23 +425,22 @@ class BaseVisualizer(ABC):
         """Plots a single agent as a point (optionally as a rectangle) on the axes.
 
         Args:
-            ax (matplotlib.axes.Axes): axes to plot on.
-            x (float): x position of the agent.
-            y (float): y position of the agent.
-            heading (float): heading angle of the agent.
-            width (float): width of the agent.
-            height (float): height of the agent.
-            alpha (float): transparency for the agent marker.
-            color (str): color of the agent marker.
-            plot_rectangle (bool): if True it will plot the agent as rectangle, otherwise it will plot it as 'marker'.
-            edgecolor (str): color of the agent's edge if 'plot_rectangle' is True.
-            linewidth (floa): width of the agent's border if 'plot_rectangle' is True.
-            zorder (int): z order of agent to plot.
-            marker (str): marker type to plot the agentas, if 'plot_rectangle' is False.
-            marker_size (int): size of the marker if to plot the agent.
+            ax: axes to plot on.
+            x: x position of the agent.
+            y: y position of the agent.
+            heading: heading angle of the agent.
+            width: width of the agent.
+            height: height of the agent.
+            alpha: transparency for the agent marker.
+            color: color of the agent marker.
+            plot_rectangle: if True it will plot the agent as rectangle, otherwise it will plot it as 'marker'.
+            edgecolor: color of the agent's edge if 'plot_rectangle' is True.
+            linewidth: width of the agent's border if 'plot_rectangle' is True.
+            zorder: z order of agent to plot.
+            marker: marker type to plot the agent as, if 'plot_rectangle' is False.
+            marker_size: size of the marker if to plot the agent.
         """
         if plot_rectangle:
-            # Compute the agents orientation
             angle_deg = np.rad2deg(heading)
             cx, cy = -width / 2.0, -height / 2.0
             x_offset = cx * np.cos(heading) - cy * np.sin(heading)
@@ -479,10 +466,10 @@ class BaseVisualizer(ABC):
         """Plots static map features (lanes, road lines, crosswalks, etc.) for a scenario.
 
         Args:
-            ax (matplotlib.axes.Axes): Axes to plot on.
-            static_map_data (StaticMapData): static map information.
-            num_windows (int, optional): Number of subplot windows. Defaults to 0.
-            dim (int, optional): Number of dimensions to plot. Defaults to 2.
+            ax: Axes to plot on.
+            static_map_data: static map information.
+            num_windows: Number of subplot windows. Defaults to 1.
+            dim: Number of dimensions to plot. Defaults to 2.
         """
         road_graph = static_map_data.map_polylines
         if road_graph is None:
@@ -524,9 +511,9 @@ class BaseVisualizer(ABC):
         """Plots dynamic map features (e.g., stop points) for a scenario.
 
         Args:
-            ax (matplotlib.axes.Axes): Axes to plot on.
-            dynamic_map_data (DynamicMapData): Dynamic map information.
-            num_windows (int, optional): Number of subplot windows. Defaults to 0.
+            ax: Axes to plot on.
+            dynamic_map_data: Dynamic map information.
+            num_windows: Number of subplot windows. Defaults to 0.
         """
         stop_points = dynamic_map_data.stop_points
         if stop_points is None:
@@ -538,7 +525,6 @@ class BaseVisualizer(ABC):
         if num_windows == 1:
             ax.scatter(x_pos, y_pos, s=6, c=color, marker="s", alpha=alpha)
         else:
-            # If there are multiple windows, propagate the polyline visualization.
             for a in ax.reshape(-1):  # pyright: ignore[reportAttributeAccessIssue]
                 a.scatter(x_pos, y_pos, s=6, c=color, marker="s", alpha=alpha)
 
@@ -554,12 +540,12 @@ class BaseVisualizer(ABC):
         """Plots stop signs on the axes for a scenario using polyline indices.
 
         Args:
-            ax (matplotlib.axes.Axes): Axes to plot on.
-            road_graph (np.ndarray): Road graph points.
-            polyline_idxs (np.ndarray): Indices for stop sign polylines.
-            num_windows (int, optional): Number of subplot windows. Defaults to 0.
-            color (str, optional): Color for stop signs. Defaults to "red".
-            dim (int, optional): Number of dimensions to plot. Defaults to 2.
+            ax: Axes to plot on.
+            road_graph: Road graph points.
+            polyline_idxs: Indices for stop sign polylines.
+            num_windows: Number of subplot windows. Defaults to 0.
+            color: Color for stop signs. Defaults to "red".
+            dim: Number of dimensions to plot. Defaults to 2.
         """
         for polyline in polyline_idxs:
             start_idx, end_idx = polyline
@@ -567,7 +553,6 @@ class BaseVisualizer(ABC):
             if num_windows == 1:
                 ax.scatter(pos[:, 0], pos[:, 1], s=16, c=color, marker="H", alpha=1.0)
             else:
-                # If there are multiple windows, propagate the polyline visualization.
                 for a in ax.reshape(-1):  # pyright: ignore[reportAttributeAccessIssue]
                     a.scatter(pos[:, 0], pos[:, 1], s=16, c=color, marker="H", alpha=1.0)
 
@@ -584,13 +569,13 @@ class BaseVisualizer(ABC):
         """Plots polylines (e.g., lanes, crosswalks) on the axes for a scenario.
 
         Args:
-            ax (matplotlib.axes.Axes): Axes to plot on.
-            road_graph (np.ndarray): Road graph points.
-            polyline_idxs (np.ndarray): Indices for polylines to plot.
-            num_windows (int, optional): Number of subplot windows. Defaults to 0.
-            color (str, optional): Color for polylines. Defaults to "k".
-            alpha (float, optional): Alpha transparency. Defaults to 1.0.
-            linewidth (float, optional): Line width. Defaults to 0.5.
+            ax: Axes to plot on.
+            road_graph: Road graph points.
+            polyline_idxs: Indices for polylines to plot.
+            num_windows: Number of subplot windows. Defaults to 0.
+            color: Color for polylines. Defaults to "k".
+            alpha: Alpha transparency. Defaults to 1.0.
+            linewidth: Line width. Defaults to 0.5.
         """
         for polyline in polyline_idxs:
             start_idx, end_idx = polyline
@@ -598,7 +583,6 @@ class BaseVisualizer(ABC):
             if num_windows == 1:
                 ax.plot(pos[:, 0], pos[:, 1], color, alpha=alpha, linewidth=linewidth)
             else:
-                # If there are multiple windows, propagate the polyline visualization.
                 for a in ax.reshape(-1):  # pyright: ignore[reportAttributeAccessIssue]
                     a.plot(pos[:, 0], pos[:, 1], color, alpha=alpha, linewidth=linewidth)
 
@@ -614,18 +598,16 @@ class BaseVisualizer(ABC):
         """Saves scenario as a GIF.
 
         Args:
-            output_dir (str): directory where temporary scenario files have been saved.
-            output_filepath (str): output filepath to save the GIF.
-            duration (int): duration of each frame.
-            disposal (int): specifies how the previous frame should be treated before displaying the next frame.
+            output_dir: directory where temporary scenario files have been saved.
+            output_filepath: output filepath to save the GIF.
+            duration: duration of each frame.
+            disposal: specifies how the previous frame should be treated before displaying the next frame.
                 (Default value is 2 (restores background color, clear the previous frame))
-            loop (int): number of times the GIF should loop.
+            loop: number of times the GIF should loop.
         """
-        # Load all the temporary files
         files = glob(f"{output_dir}/temp_*.png")  # noqa: PTH207
         imgs = [Image.open(f) for f in natsorted(files)]
 
-        # Saves them into a GIF
         imgs[0].save(
             output_filepath,
             format="GIF",
@@ -636,7 +618,6 @@ class BaseVisualizer(ABC):
             loop=loop,
         )
 
-        # Removes the temporary files
         for f in files:
             os.remove(f)  # noqa: PTH107
 
@@ -647,10 +628,10 @@ class BaseVisualizer(ABC):
         """Gets the agent scores and returns a normalized score.
 
         Args:
-            agent_scores (np.ndarray): array containing the agent scores.
-            ego_index (int): index of the ego agent.
-            amin (float): minimum value to clip the array.
-            amax (float): maximum value to clip the array.
+            agent_scores: array containing the agent scores.
+            ego_index: index of the ego agent.
+            amin: minimum value to clip the array.
+            amax: maximum value to clip the array.
         """
         min_score = np.nanmin(agent_scores)
         max_score = np.nanmax(agent_scores)
@@ -662,12 +643,12 @@ class BaseVisualizer(ABC):
         return agent_scores
 
     def set_axes(self, ax: Axes, scenario: Scenario, num_windows: int = 1) -> None:
-        """Plots dynamic map features (e.g., stop points) for a scenario.
+        """Sets axis limits to zoom in around the ego agent, hiding ticks.
 
         Args:
-            ax (Axes): Axes to plot on.
-            scenario (Scenario): encapsulates the scenario to visualize.
-            num_windows (int, optional): Number of subplot windows. Defaults to 0.
+            ax: Axes to plot on.
+            scenario: encapsulates the scenario to visualize.
+            num_windows: Number of subplot windows. Defaults to 1.
         """
         ego_index = scenario.metadata.ego_vehicle_index
         agent_positions = AgentTrajectoryMasker(scenario.agent_data.agent_trajectories).agent_xy_pos
@@ -709,10 +690,10 @@ class BaseVisualizer(ABC):
         trajectories and attributes.
 
         Args:
-            scenario (Scenario | AgentCentricScenario): encapsulates the scenario to visualize.
-            scores (ScenarioScores | None): encapsulates the scenario and agent scores.
-            model_output (ModelOutput | None): encapsulates model outputs.
-            output_dir: (str): the directory where to save the scenario visualization.
-            causal_gt_ids (NDArray[np.int_] | None): ground-truth causal agent ids for the GT causal pane, loaded from
+            scenario: encapsulates the scenario to visualize.
+            scores: encapsulates the scenario and agent scores.
+            model_output: encapsulates model outputs.
+            output_dir: the directory where to save the scenario visualization.
+            causal_gt_ids: ground-truth causal agent ids for the GT causal pane, loaded from
                 the causal-label files; used when no model output is available.
         """
