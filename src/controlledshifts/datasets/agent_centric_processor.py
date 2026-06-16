@@ -156,12 +156,12 @@ class AgentCentricProcessor:
         """Shapes a ``Scenario`` and transforms it into agent-centric records (or ``None`` if it cannot be processed).
 
         Args:
-            scenario (Scenario): The canonical open scenario to process.
-            scenario_scores (ScenarioScores | None): Precomputed scores (e.g. from the visualizer); when ``None`` and
+            scenario: The canonical open scenario to process.
+            scenario_scores: Precomputed scores (e.g. from the visualizer); when ``None`` and
                 ``autolabel_agents`` is enabled, scores are computed here.
 
         Returns:
-            list[dict[str, Any]] | None: One record per center agent, or ``None`` on failure / no valid center agents.
+            One record per center agent, or ``None`` on failure / no valid center agents.
         """
         # TODO: Resolve bare except inherited from UniTraj.
         try:
@@ -186,12 +186,11 @@ class AgentCentricProcessor:
         """Computes map-related metadata for the scenario, such as conflict points and closest lanes.
 
         Args:
-            scenario (Scenario): The input scenario for which to compute map metadata.
+            scenario: The input scenario for which to compute map metadata.
 
         Returns:
-            Scenario: The scenario with updated map metadata.
+            The scenario with updated map metadata.
         """
-        # Compute conflict point information from static map data
         conflict_points_info = find_conflict_points(
             scenario,
             resample_factor=self.conflict_points_config.get("resample_factor", 1),
@@ -215,7 +214,6 @@ class AgentCentricProcessor:
             scenario.static_map_data.map_conflict_points = conflict_points
             scenario.static_map_data.agent_distances_to_conflict_points = agent_distances_to_conflict_points
 
-        # Compute closest lane information
         closest_lanes_info = find_closest_lanes(
             scenario,
             k_closest=self.closest_lanes_config.get("num_lanes", 16),
@@ -234,25 +232,23 @@ class AgentCentricProcessor:
         """Processes a scenario from an internal format into an agent-centric format.
 
         Args:
-            scenario (Scenario): The input scenario in internal format to be transformed into agent-centric format.
-            scenario_scores (ScenarioScores | None): optional scenario scores to be added to the agent-centric format.
+            scenario: The input scenario in internal format to be transformed into agent-centric format.
+            scenario_scores: optional scenario scores to be added to the agent-centric format.
 
         Returns:
-            list[dict[str, Any]] | None: A list of dictionaries containing the processed scenario data in agent-centric
-                format, or None if processing fails.
+            A list of dictionaries containing the processed scenario data in agent-centric format, or None if
+            processing fails.
         """
         agent_data = scenario.agent_data
         tracks_to_predict = scenario.tracks_to_predict
         metadata = scenario.metadata
 
-        # Process the trajectory information
         center_objects, track_index_to_predict = self.get_agents_of_interest_center_points(
             agent_data=agent_data, tracks_to_predict=tracks_to_predict, metadata=metadata
         )
         if center_objects is None:
             return None
 
-        # Create return dict with agent data
         ret_dict = self.get_centered_agent_data(
             agent_data=agent_data,
             center_objects=center_objects,
@@ -261,7 +257,6 @@ class AgentCentricProcessor:
             scenario_scores=scenario_scores,
         )
 
-        # Add center objects and scenario information
         scenario_id = metadata.scenario_id
         ret_dict["scenario_id"] = np.array([scenario_id] * len(track_index_to_predict))
         ret_dict["center_objects_world"] = center_objects
@@ -270,7 +265,6 @@ class AgentCentricProcessor:
         ret_dict["center_objects_type"] = np.array(agent_types_int)[track_index_to_predict]
         ret_dict["center_gt_trajs_src"] = agent_data.agent_trajectories[track_index_to_predict]
 
-        # Process the map information
         if self.config.get("manually_split_lane", False):
             map_dict = self.get_manually_split_centered_map_data(
                 map_data=scenario.static_map_data, center_objects=center_objects, metadata=metadata
@@ -281,16 +275,12 @@ class AgentCentricProcessor:
             )
         ret_dict.update(map_dict)
 
-        # Mask out unused attributes.
         AgentCentricProcessor._mask_out_attributes(ret_dict, self.config.masked_attributes)
-        # Cast NumPy arrays.
         AgentCentricProcessor._cast_dictionary(ret_dict)
 
-        # Propagate the dataset name to each of the centered scenarios
         sample_num = center_objects.shape[0]
         ret_dict["dataset_name"] = [scenario.metadata.dataset] * sample_num
 
-        # Batch
         scenario_list = []
         for i in range(sample_num):
             ret_dict_i = {}
@@ -305,8 +295,8 @@ class AgentCentricProcessor:
         """Masks out specified attributes in the scenario dictionary by setting them to zero.
 
         Args:
-            scenario_dict (dict): The dictionary containing scenario data, which will be modified in-place.
-            attributes_to_mask (list[str]): A list of attribute names to be masked out in the scenario dictionary.
+            scenario_dict: The dictionary containing scenario data, which will be modified in-place.
+            attributes_to_mask: A list of attribute names to be masked out in the scenario dictionary.
         """
         if "z_axis" in attributes_to_mask:
             scenario_dict["obj_trajs"][..., 2] = 0
@@ -327,9 +317,9 @@ class AgentCentricProcessor:
         """Casts all NumPy arrays in the scenario dictionary from one data type to another in-place.
 
         Args:
-            scenario_dict (dict): The dictionary containing scenario data, which will be modified in-place.
-            from_dtype (np.dtype): The original data type of the arrays.
-            to_dtype (np.dtype): The target data type of the arrays.
+            scenario_dict: The dictionary containing scenario data, which will be modified in-place.
+            from_dtype: The original data type of the arrays.
+            to_dtype: The target data type of the arrays.
         """
         for k, v in scenario_dict.items():
             if isinstance(v, np.ndarray) and v.dtype == from_dtype:
@@ -345,14 +335,13 @@ class AgentCentricProcessor:
             D: agent attributes
 
         Args:
-            agent_data (AgentData): Object containing agent trajectory data obtained in
-                `self.preprocess_scenario()`.
-            tracks_to_predict (TracksToPredict | None): Object containing tracks in `agent_data` to predict.
-            metadata (ScenarioMetadata): Object containing scenario metadata.
+            agent_data: Object containing agent trajectory data obtained in `self.preprocess_scenario()`.
+            tracks_to_predict: Object containing tracks in `agent_data` to predict.
+            metadata: Object containing scenario metadata.
 
         Returns:
-            agent_centerpoints (np.ndarray[N, D]): NumPy array with center points for agents of interest.
-            agent_idxs (np.ndarray[N]): NumPy array with indices of agents of interest.
+            agent_centerpoints: center points for agents of interest, shape (N, D).
+            agent_idxs: indices of agents of interest, shape (N,).
         """
         if not tracks_to_predict:
             return None, []
@@ -367,13 +356,10 @@ class AgentCentricProcessor:
         agents_types = agent_data.agent_types
         agents_to_predict_idxs = tracks_to_predict.track_index
 
-        # Get the agents of interest (agents to predict) center points
         for agent_idx in agents_to_predict_idxs:
-            # Check if the agent of interest is valid at the last observation index.
             if not agent_valid[agent_idx, self.current_time_idx]:
                 print(f"Warning: agent={agent_idx} of scene={scenario_id} is not valid at time {self.current_time_idx}")
                 continue
-            # Check if the agent type is in the expected training types.
             if agents_types[agent_idx] not in selected_type:
                 continue
 
@@ -403,19 +389,17 @@ class AgentCentricProcessor:
             Dpost: number of attributes in the centered agent trajectories after processing
 
         Args:
-            agent_data (AgentData): Object containing agent trajectory data obtained in `self.preprocess_scenario()`.
-            center_objects (np.ndarray): NumPy array containing the center points of the agents of interest.
-            track_index_to_predict (np.ndarray): NumPy array containing the indices of the agents of interest.
-            metadata (ScenarioMetadata): Object containing scenario metadata.
-            scenario_scores (ScenarioScores | None): optional scenario scores to be added to the agent-centric format.
+            agent_data: Object containing agent trajectory data obtained in `self.preprocess_scenario()`.
+            center_objects: center points of the agents of interest.
+            track_index_to_predict: indices of the agents of interest.
+            metadata: Object containing scenario metadata.
+            scenario_scores: optional scenario scores to be added to the agent-centric format.
 
         Returns:
-            dict[str, Any]: A dictionary containing the processed agent-centric data for the scenario.
+            A dictionary containing the processed agent-centric data for the scenario.
         """
-        # Transform the agent trajectories
         center_points = AgentTrajectoryMasker(center_objects)
 
-        # Transform the histories
         agent_trajectories = agent_data.agent_trajectories
         agent_histories_pre = AgentTrajectoryMasker(agent_trajectories[:, : self.current_time_idx + 1])
         centered_histories = AgentCentricProcessor.transform_trajectories_wrt_center_points(
@@ -423,11 +407,11 @@ class AgentCentricProcessor:
         )
 
         num_center_points, num_agents, num_timesteps, num_dims = centered_histories.agent_trajectories.shape
-        # Tile the agent ids to be of shape (C, N)
+        # agent ids (C, N)
         agent_ids = np.array(agent_data.agent_ids)
         agent_ids = np.tile(agent_ids[None, :], (num_center_points, 1))
 
-        # Create agent type mask (C, N, T, 5)
+        # agent type mask (C, N, T, 5)
         agent_types = np.array(agent_data.agent_types)
         agents_onehot_type_mask = np.zeros((num_center_points, num_agents, num_timesteps, 5))
         agents_onehot_type_mask[:, agent_types == AgentType.TYPE_VEHICLE, :, 0] = 1
@@ -436,20 +420,20 @@ class AgentCentricProcessor:
         agents_onehot_type_mask[np.arange(num_center_points), track_index_to_predict, :, 3] = 1
         agents_onehot_type_mask[:, metadata.ego_vehicle_index, :, 4] = 1
 
-        # Create temporal embedding (C, N, Th, Th+1)
+        # temporal embedding (C, N, Th, Th+1)
         history_timestamps = np.array(metadata.timestamps_seconds[: self.current_time_idx + 1], dtype=np.float32)
         agents_time_embeddings = np.zeros((num_center_points, num_agents, num_timesteps, num_timesteps + 1))
         for i in range(num_timesteps):
             agents_time_embeddings[:, :, i, i] = 1
         agents_time_embeddings[:, :, :, -1] = history_timestamps
 
-        # Create heading embedding (C, N, Th, 2)
+        # heading embedding (C, N, Th, 2)
         centered_headings = centered_histories.agent_headings.squeeze(-1)
         agent_heading_embedding = np.zeros((num_center_points, num_agents, num_timesteps, 2))
         agent_heading_embedding[:, :, :, 0] = np.sin(centered_headings)
         agent_heading_embedding[:, :, :, 1] = np.cos(centered_headings)
 
-        # Calculate accelerations (C, N, Th, 2)
+        # accelerations (C, N, Th, 2)
         centered_velocities = centered_histories.agent_xy_vel
         centered_velocities_pre = np.roll(centered_velocities, shift=1, axis=2)
         dt = np.pad(history_timestamps[1:] - history_timestamps[:-1], (0, 1), "mean")
@@ -469,38 +453,36 @@ class AgentCentricProcessor:
             ],
             axis=-1,
         )
-        # Agent history mask (C, N, Th)
+        # agent history mask (C, N, Th)
         agent_histories_mask = centered_histories.agent_valid.squeeze(-1)
         agent_histories[agent_histories_mask == 0] = 0
         assert agent_trajectories.__len__() == agent_histories.shape[1]
 
-        # Transform the futures
         agent_futures = AgentTrajectoryMasker(agent_trajectories[:, self.current_time_idx + 1 :])
         centered_futures = AgentCentricProcessor.transform_trajectories_wrt_center_points(agent_futures, center_points)
 
-        # Agent futures (C, N, Tf, S)
+        # agent futures (C, N, Tf, S)
         agent_futures = centered_futures.agent_state  # S=(x, y, vx, vy)
         agent_futures_mask = centered_futures.agent_valid.squeeze(-1)
         agent_futures[agent_futures_mask == 0] = 0
 
-        # Only get the GT trajectories of the agents to predict (C, F, S)
+        # GT trajectories of the agents to predict (C, F, S)
         center_obj_idxs = np.arange(len(track_index_to_predict))
         center_gt_trajs = agent_futures[center_obj_idxs, track_index_to_predict]
         center_gt_trajs_mask = agent_futures_mask[center_obj_idxs, track_index_to_predict]
         center_gt_trajs[center_gt_trajs_mask == 0] = 0
 
-        # Get mask of valid agents shape: (N)
+        # valid-agent mask (N,)
         valid_past_mask = np.logical_not(agent_histories_pre.agent_valid.squeeze(-1).sum(axis=-1) == 0)
-        # agent histories shape (C, M, Th, Dpost) # M = N - invalid
+        # agent histories (C, M, Th, Dpost), M = N - invalid
         agent_histories_mask = agent_histories_mask[:, valid_past_mask]
         agent_histories = agent_histories[:, valid_past_mask]
-        # agent futures shape (C, M, Tf, 4)
+        # agent futures (C, M, Tf, 4)
         agent_futures = agent_futures[:, valid_past_mask]
         agent_futures_mask = agent_futures_mask[:, valid_past_mask]
-        # agent ids shape (C, M)
+        # agent ids (C, M)
         agent_ids = agent_ids[:, valid_past_mask]
 
-        # Get the history's last valid position
         agent_histories_pos = agent_histories[:, :, :, 0:3]
         num_center_objects, num_agents, num_timestamps, _ = agent_histories_pos.shape
         agent_histories_last_pos = np.zeros((num_center_objects, num_agents, 3), dtype=np.float32)
@@ -516,13 +498,12 @@ class AgentCentricProcessor:
         # Get the context agents. Here, context agents are the agents closest to the ego-vehicle at the last observed
         # timestep
         max_num_agents = self.config.max_num_agents
-        # shape: (C, M)
+        # (C, M)
         agent_dists_to_center_points = np.linalg.norm(agent_histories[..., -1, 0:2], axis=-1)
         agent_dists_to_center_points[agent_histories_mask[..., -1] == 0] = LARGE_FLOAT
-        # shape: (C, max_num_agents, 1, 1)
+        # (C, max_num_agents, 1, 1)
         topk_idxs = np.argsort(agent_dists_to_center_points, axis=-1)[:, :max_num_agents, None, None]
 
-        # Get the information from the topk_idxs
         agent_ids = np.take_along_axis(agent_ids[..., None, None], topk_idxs, axis=1)
         agent_histories = np.take_along_axis(agent_histories, topk_idxs, axis=1)
         agent_histories_mask = np.take_along_axis(agent_histories_mask, topk_idxs[..., 0], axis=1)
@@ -532,7 +513,7 @@ class AgentCentricProcessor:
         agent_futures_mask = np.take_along_axis(agent_futures_mask, topk_idxs[..., 0], axis=1)
         track_index_to_predict_new = np.zeros(len(track_index_to_predict), dtype=np.int64)
 
-        # Pad information if the scene has fewer agents than the maximum.
+        # Pad up to max_num_agents when the scene has fewer agents.
         size_to_pad = max_num_agents - agent_histories_pos.shape[1]
         agent_ids = np.pad(agent_ids, ((0, 0), (0, size_to_pad), (0, 0), (0, 0)), constant_values=-1)
         agent_histories = np.pad(agent_histories, ((0, 0), (0, size_to_pad), (0, 0), (0, 0)))
@@ -542,7 +523,6 @@ class AgentCentricProcessor:
         agent_futures = np.pad(agent_futures, ((0, 0), (0, size_to_pad), (0, 0), (0, 0)))
         agent_futures_mask = np.pad(agent_futures_mask, ((0, 0), (0, size_to_pad), (0, 0)))
 
-        # Extract score information if available
         individual_agent_scores, individual_scene_scores = None, None
         interaction_agent_scores, interaction_scene_scores = None, None
         individual_agent_scores_mask, interaction_agent_scores_mask = None, None
@@ -564,7 +544,6 @@ class AgentCentricProcessor:
             individual_agent_scores_mask = np.tile(individual_agent_scores_valid[None, :], (num_center_points, 1))
             interaction_agent_scores_mask = np.tile(interaction_agent_scores_valid[None, :], (num_center_points, 1))
 
-            # Take only the top-k agents
             individual_agent_scores = np.take_along_axis(individual_agent_scores[..., None, None], topk_idxs, axis=1)
             interaction_agent_scores = np.take_along_axis(interaction_agent_scores[..., None, None], topk_idxs, axis=1)
             individual_agent_scores_mask = np.take_along_axis(
@@ -584,7 +563,6 @@ class AgentCentricProcessor:
                 interaction_agent_scores_mask, ((0, 0), (0, size_to_pad), (0, 0), (0, 0))
             )
 
-            # Extract scene scores
             individual_scene_scores = [scenario_scores.individual_scores.scene_score] * num_center_objects
             interaction_scene_scores = [scenario_scores.interaction_scores.scene_score] * num_center_objects
 
@@ -622,11 +600,11 @@ class AgentCentricProcessor:
             D: number of features
 
         Args:
-            agent_tracks (AgentTrajectoryMasker): Object containing agent track information.
-            center_points (AgentTrajectoryMasker): Object containing center-point track information.
+            agent_tracks: Object containing agent track information.
+            center_points: Object containing center-point track information.
 
         Returns:
-            AgentTrajectoryMasker: Object containing transformed track information.
+            Object containing transformed track information.
         """
         trajectories = agent_tracks.agent_trajectories
         num_objects, num_timestamps, _ = trajectories.shape
@@ -637,21 +615,18 @@ class AgentCentricProcessor:
         assert center_position.shape[0] == center_heading.shape[0]
 
         # TODO: refactor this method.
-        # Tile the agent trajectories to be of shape (C, N, T, D)
+        # (C, N, T, D)
         trajectories = np.tile(trajectories[None, :, :, :], (num_center_objects, 1, 1, 1))
         masker = AgentTrajectoryMasker(trajectories)
 
-        # Shift the points to the center
         trajectories[..., masker.xyz_pos_mask] -= center_position[:, None, None, :]  # (1, 1, 1, D=XYZ)
 
-        # Rotate the positions
         trajectories[:, :, :, masker.xy_pos_mask] = data_utils.rotate_points_along_z(
             points=masker.agent_xy_pos.reshape(num_center_objects, -1, 2),  # (C, N, T, D=XY) -> (C, N*T, D=XY)
             angle=-center_heading,
         ).reshape(num_center_objects, num_objects, num_timestamps, 2)  # (C, N * T, D=XY) -> (C, N, T, D=XY)
         trajectories[:, :, :, masker.heading_mask] -= center_heading[:, None, None]
 
-        # Rotate the velocities
         trajectories[:, :, :, masker.xy_vel_mask] = data_utils.rotate_points_along_z(
             points=masker.agent_xy_vel.reshape(num_center_objects, -1, 2),
             angle=-center_heading,
@@ -672,11 +647,11 @@ class AgentCentricProcessor:
             D: number of features
 
         Args:
-            polylines (np.ndarray): NumPy array containing map polyline information of shape (C, P, M, D)
-            center_points (AgentTrajectoryMasker): Object containing center-point track information.
+            polylines: map polyline information, shape (C, P, M, D).
+            center_points: Object containing center-point track information.
 
         Returns:
-            np.ndarray: Transformed map polyline information of shape (C, P, M, D).
+            Transformed map polyline information, shape (C, P, M, D).
         """
         center_position = center_points.agent_xyz_pos
         center_heading = center_points.agent_headings
@@ -701,25 +676,24 @@ class AgentCentricProcessor:
             Dm: map output dimension
 
         Args:
-            map_data (StaticMapData): Object containing all map information.
-            center_objects (np.ndarray(C, Dt)): NumPy array containing center points.
-            metadata (ScenarioMetadata): Object containing scenario metadata.
+            map_data: Object containing all map information.
+            center_objects: center points, shape (C, Dt).
+            metadata: Object containing scenario metadata.
 
         Returns:
-            map_data_dict (dict): Dictionary containing centered map information:
-                map_polylines (np.ndarray(C, M, N, Dm)): Centered map information.
-                map_polylines_mask (np.ndarray(C, M, N)): Centered map mask information.
-                map_polylines_center (np.ndarray(C, M, 3)): Map center XYZ positions.
+            Dictionary containing centered map information:
+                map_polylines: Centered map information, shape (C, M, N, Dm).
+                map_polylines_mask: Centered map mask information, shape (C, M, N).
+                map_polylines_center: Map center XYZ positions, shape (C, M, 3).
         """
         if len(map_data.map_polylines) == 0:
             print(f"Warning: empty HDMap {metadata.scenario_id}")
             map_data.map_polylines = np.zeros((2, 7), dtype=np.float32)
 
         num_center_agents = center_objects.shape[0]
-        # Expand the polylines to the number of center objects polylines: (C, M, D=7)
+        # (C, M, D=7)
         polylines = np.expand_dims(map_data.map_polylines.copy(), axis=0).repeat(num_center_agents, axis=0)
 
-        # Transform the polylines w.r.t the center objects
         center_points = AgentTrajectoryMasker(center_objects)
         centered_polylines = AgentCentricProcessor.transform_polylines_wrt_center_points(polylines, center_points)
 
@@ -738,11 +712,8 @@ class AgentCentricProcessor:
             if polyline_idxs is None or not len(polyline_idxs):
                 continue
 
-            # Process each polyline segment
             for start, end in zip(polyline_idxs[:, 0], polyline_idxs[:, 1], strict=False):
-                # Get valid segments within the [start, end]
-                # polyline segment: (1, num_polylines, 7)
-                # segment_list: (1, max_segments, max_points_per_segment, 7)
+                # input (1, num_polylines, 7) -> segments (1, max_segments, max_points_per_segment, 7)
                 segments, segments_mask = self.get_valid_segments(centered_polylines[:, start:end])
                 polyline_list.append(segments)
                 polyline_mask_list.append(segments_mask)
@@ -755,47 +726,42 @@ class AgentCentricProcessor:
             )
             polyline_mask_list.append(np.zeros((num_center_agents, 1, max_points_per_lane), dtype=np.int32))
 
-        # Polylines shape: (C, N, M, 7)
-        # Polylines mask shape: (C, N, M)
+        # polylines (C, N, M, 7), mask (C, N, M)
         polylines = np.concatenate(polyline_list, axis=1)
         polylines_mask = np.concatenate(polyline_mask_list, axis=1)
 
-        # Get the distance of each road/polyline to the center offset shape: (C, N)
+        # distance of each polyline to the center offset (C, N)
         polyline_centered = polylines[..., 0:2] - np.reshape(center_offset, (1, 1, 1, 2))
         mask_sum = polylines_mask.sum(axis=-1)
         num_valid_points = np.clip(mask_sum.astype(float), a_min=1.0, a_max=None)
         polyline_centered_dist = np.linalg.norm(polyline_centered, axis=-1).sum(-1) / num_valid_points
         polyline_centered_dist[mask_sum == 0] = LARGE_FLOAT
 
-        # Get max_num_roads that are closest to the ego
-        # topk_idxs shape: (C, N, 1, 1)
+        # topk_idxs (C, N, 1, 1): the max_num_roads polylines closest to the ego
         max_num_roads = self.config.max_num_roads
         topk_idxs = np.argsort(polyline_centered_dist, axis=-1)[:, :max_num_roads, None, None]
         map_polylines = np.take_along_axis(polylines, topk_idxs, axis=1)
         map_polylines_mask = np.take_along_axis(polylines_mask, topk_idxs[..., 0], axis=1)
 
-        # Pad map_polylines and map_polylines_mask
         size_to_pad = max_num_roads - map_polylines.shape[1]
         map_polylines = np.pad(map_polylines, ((0, 0), (0, size_to_pad), (0, 0), (0, 0)))
         map_polylines_mask = np.pad(map_polylines_mask, ((0, 0), (0, size_to_pad), (0, 0)))
 
-        # Get the polylines center (C, N, 3)
+        # polylines center (C, N, 3)
         temp_sum = (map_polylines[..., 0:3] * map_polylines_mask[..., None].astype(float)).sum(axis=-2)
         denom = np.clip(map_polylines_mask.sum(axis=-1).astype(float)[:, :, None], a_min=1.0, a_max=None)
         map_polylines_center = temp_sum / denom
 
-        # Get final map information
         xy_pos_pre = map_polylines[:, :, :, 0:3]
         xy_pos_pre = np.roll(xy_pos_pre, shift=1, axis=-2)
         xy_pos_pre[:, :, 0, :] = xy_pos_pre[:, :, 1, :]
 
-        # Get one-hot encoding for map types.
         map_types = map_polylines[:, :, :, -1]
         map_types = np.eye(self.config.total_map_types)[map_types.astype(int)]
 
         map_polylines = map_polylines[:, :, :, :-1]
 
-        # map_polylines shape: (C, N, M, Dm)
+        # map_polylines (C, N, M, Dm)
         map_polylines = np.concatenate((map_polylines, xy_pos_pre, map_types), axis=-1)
         map_polylines[map_polylines_mask == 0] = 0
         return {
@@ -821,15 +787,15 @@ class AgentCentricProcessor:
             Dm: map output dimension (6 + 3 + total_map_types)
 
         Args:
-            map_data (StaticMapData): Object containing all map information.
-            center_objects (np.ndarray(C, Dt)): NumPy array containing center agent state vectors.
-            metadata (ScenarioMetadata): Object containing scenario metadata.
+            map_data: Object containing all map information.
+            center_objects: center agent state vectors, shape (C, Dt).
+            metadata: Object containing scenario metadata.
 
         Returns:
-            map_data_dict (dict): Dictionary containing centered map information:
-                map_polylines (np.ndarray(C, max_num_roads, N, Dm)): Centered map information.
-                map_polylines_mask (np.ndarray(C, max_num_roads, N)): Centered map mask.
-                map_polylines_center (np.ndarray(C, max_num_roads, 3)): Map center XYZ positions.
+            Dictionary containing centered map information:
+                map_polylines: Centered map information, shape (C, max_num_roads, N, Dm).
+                map_polylines_mask: Centered map mask, shape (C, max_num_roads, N).
+                map_polylines_center: Map center XYZ positions, shape (C, max_num_roads, 3).
         """
         required_keys = ["point_sampled_interval", "vector_break_dist_thresh", "num_points_each_polyline"]
         missing = [k for k in required_keys if self.config.get(k) is None]
@@ -953,11 +919,11 @@ class AgentCentricProcessor:
             N: max number of points per segment
 
         Args:
-            polyline_segment (np.ndarray(C, P, D)): a numpy array containing all polylines that make a segment.
+            polyline_segment: all polylines that make a segment, shape (C, P, D).
 
         Returns:
-            segments (np.ndarray(C, M, N, D)): a numpy array containing the valid segments within the input array.
-            segments_mask (np.ndarray(C, M, N)): a numpy array containing the segment mask.
+            segments: the valid segments within the input array, shape (C, M, N, D).
+            segments_mask: the segment mask, shape (C, M, N).
         """
         max_points = self.config.max_points_per_lane
         map_range = self.config.map_range
@@ -967,17 +933,14 @@ class AgentCentricProcessor:
 
         polyline_segment_x = polyline_segment[:, :, 0] - center_offset[0]
         polyline_segment_y = polyline_segment[:, :, 1] - center_offset[1]
-        # Check if the polyline segment is within a desired range
         in_range_mask = (abs(polyline_segment_x) < map_range) * (abs(polyline_segment_y) < map_range)
 
-        # For each of the center agents, extract segments of continuous 'True' values in the mask.
         segment_index_list = [data_utils.find_true_segments(in_range_mask[i]) for i in range(num_center_agents)]
         max_segments = max([len(x) for x in segment_index_list])
 
         segments = np.zeros([num_center_agents, max_segments, max_points, num_polyline_dims], dtype=np.float32)
         segments_mask = np.zeros([num_center_agents, max_segments, max_points], dtype=np.int32)
 
-        # For each of the center agents, get the valid segment and corresponding mask
         for i in range(num_center_agents):
             if in_range_mask[i].sum() == 0:
                 continue
@@ -985,11 +948,10 @@ class AgentCentricProcessor:
             for num, seg_index in enumerate(segment_index_list[i]):
                 segment = segment_i[seg_index]
                 segment_size = segment.shape[0]
-                # If there are more points than the maximum allowed, select indices using linspace.
                 if segment_size > max_points:
+                    # Downsample to max_points evenly-spaced indices
                     segments[i, num] = segment[np.linspace(0, segment_size - 1, max_points, dtype=int)]
                     segments_mask[i, num] = 1
-                # Otherwise, fill the segment and mask up to segment_size
                 else:
                     segments[i, num, :segment_size] = segment
                     segments_mask[i, num, :segment_size] = 1
@@ -999,19 +961,14 @@ class AgentCentricProcessor:
         """Add scenario characterization information to the output dictionary.
 
         Args:
-            output (list[dict[str, Any]]): list of dictionaries containing scenario information for each scenario in
-                the batch.
+            output: list of dictionaries containing scenario information for each scenario in the batch.
 
         Returns:
-            output (list[dict[str, Any]]): list of dictionaries containing scenario information for each scenario in
-                the batch, with added scenario characterization information.
+            The same list with added scenario characterization information.
         """
         # TODO: Add SafeShift features here.
-        # Add the trajectory difficulty
         data_utils.get_kalman_difficulty(output)
-        # Add the trajectory type (stationary, straight, right turn...)
         data_utils.get_trajectory_type(output)
-        # Add causal label information
         for out in output:
             scenario_id = out["scenario_id"]
             agent_ids = out["obj_ids"].squeeze(-1).squeeze(-1)

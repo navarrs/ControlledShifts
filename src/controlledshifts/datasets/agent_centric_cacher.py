@@ -31,8 +31,7 @@ from controlledshifts.utils import pylogger
 
 _LOGGER = pylogger.get_pylogger(__name__)
 
-# Per-worker state, initialized once per process by ``_init_worker`` (avoids pickling the processor and its optional
-# SafeShift sub-processors across the pool).
+# Set by ``_init_worker`` to avoid pickling the processor and its optional SafeShift sub-processors across the pool.
 _WORKER: dict[str, Any] = {}
 
 
@@ -103,15 +102,15 @@ def build_variant_cache(  # noqa: PLR0913
     """Builds the agent-centric cache for a single variant and writes its index and profile files.
 
     Args:
-        processor (AgentCentricProcessor): processor providing the processing profile and the agent-centric transform.
-        variant (str): variant name (e.g. ``base``, ``remove_noncausal``).
-        variant_dir (Path): directory of canonical raw scenario ``.pkl`` files (decoded Waymo dicts) for the variant.
-        cache_dir (Path): output cache directory (``ac_cache/<variant>/<profile_hash>``).
-        num_workers (int): number of parallel worker processes.
-        overwrite (bool): if False, reuse already-cached per-scenario files. Defaults to False.
+        processor: processor providing the processing profile and the agent-centric transform.
+        variant: variant name (e.g. ``base``, ``remove_noncausal``).
+        variant_dir: directory of canonical raw scenario ``.pkl`` files (decoded Waymo dicts) for the variant.
+        cache_dir: output cache directory (``ac_cache/<variant>/<profile_hash>``).
+        num_workers: number of parallel worker processes.
+        overwrite: if False, reuse already-cached per-scenario files. Defaults to False.
 
     Returns:
-        dict[str, Any]: the written index.
+        The written index.
 
     Raises:
         FileNotFoundError: if ``variant_dir`` does not exist.
