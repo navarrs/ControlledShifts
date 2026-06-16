@@ -11,6 +11,9 @@ Runs one of the analyses over a single combined results file, selected via the `
     # Causal vs non-causal agent count distributions across train/val/test for the causal-agents benchmarks.
     uv run -m controlledshifts.run_analysis analysis=causal_distribution
 
+    # Per-scenario criticality-score distributions across train/val/test for the ego-safeshift benchmark.
+    uv run -m controlledshifts.run_analysis analysis=score_distribution
+
 See `docs/ANALYSIS.md` and the per-analysis configs under `configs/analysis/` for more argument details.
 """
 
@@ -26,6 +29,7 @@ from omegaconf import DictConfig
 
 from controlledshifts import utils
 from controlledshifts.utils.analysis.causal_distribution import run_causal_distribution_analysis
+from controlledshifts.utils.analysis.score_distribution import run_score_distribution_analysis
 from controlledshifts.utils.plotting import configure_fonts
 
 
@@ -39,6 +43,7 @@ _ANALYSES: dict[str, Callable[[DictConfig, Logger, Path], None]] = {
     "distribution_shift": utils.run_distribution_shift_analysis,
     "robustness": utils.run_robustness_scores_analysis,
     "causal_distribution": run_causal_distribution_analysis,
+    "score_distribution": run_score_distribution_analysis,
 }
 
 
