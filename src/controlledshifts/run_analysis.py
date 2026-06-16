@@ -8,6 +8,9 @@ Runs one of the analyses over a single combined results file, selected via the `
     # Per-model, per-metric distribution-shift sensitivity scores (radar plot + CSV + LaTeX table).
     uv run -m controlledshifts.run_analysis analysis=sensitivity_score
 
+    # Causal vs non-causal agent count distributions across train/val/test for the causal-agents benchmarks.
+    uv run -m controlledshifts.run_analysis analysis=causal_distribution
+
 See `docs/ANALYSIS.md` and the per-analysis configs under `configs/analysis/` for more argument details.
 """
 
@@ -22,6 +25,8 @@ import pyrootutils
 from omegaconf import DictConfig
 
 from controlledshifts import utils
+from controlledshifts.utils.analysis.causal_distribution import run_causal_distribution_analysis
+from controlledshifts.utils.plotting import configure_fonts
 
 
 log = utils.get_pylogger(__name__)
@@ -33,6 +38,7 @@ pyrootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 _ANALYSES: dict[str, Callable[[DictConfig, Logger, Path], None]] = {
     "distribution_shift": utils.run_distribution_shift_analysis,
     "sensitivity_score": utils.run_score_analysis,
+    "causal_distribution": run_causal_distribution_analysis,
 }
 
 
@@ -44,6 +50,7 @@ def main(config: DictConfig) -> None:
         ValueError: If the selected analysis has no registered runner.
     """
     random.seed(config.seed)
+    configure_fonts(log=log)
 
     runner = _ANALYSES.get(config.analysis_name)
     if runner is None:

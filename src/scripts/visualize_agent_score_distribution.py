@@ -13,6 +13,8 @@ import numpy as np
 import seaborn as sns
 from numpy.typing import NDArray
 
+from controlledshifts.utils.plotting import configure_fonts
+
 
 def _get_agent_scores_from_h5(group: h5py.File) -> tuple[NDArray[np.int_], NDArray[np.int_]]:
     """Extract individual and interaction agent scores from an h5py group.
@@ -179,4 +181,5 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+    configure_fonts()
     compute_agent_score_distributions(args.data_cache_path, args.data_subsets, args.output_path)

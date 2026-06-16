@@ -34,6 +34,7 @@ from omegaconf import DictConfig
 
 from controlledshifts import benchmarks, utils
 from controlledshifts.benchmarks import Benchmark, BenchmarkSplit
+from controlledshifts.utils.plotting import configure_fonts
 
 
 _LOGGER = utils.get_pylogger(__name__)
@@ -73,6 +74,7 @@ def main(cfg: DictConfig) -> None:
         ValueError: If the computed training/validation/testing splits overlap.
     """
     _LOGGER.info("Printing config tree")
+    configure_fonts(log=_LOGGER)
     utils.print_config_tree(cfg, resolve=True, save_to_file=False)
 
     benchmark = Benchmark(cfg.benchmark_name)

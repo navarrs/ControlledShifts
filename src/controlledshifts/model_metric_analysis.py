@@ -17,6 +17,7 @@ import pyrootutils
 from omegaconf import DictConfig
 
 from controlledshifts import utils
+from controlledshifts.utils.plotting import configure_fonts
 
 
 log = utils.get_pylogger(__name__)
@@ -28,6 +29,7 @@ pyrootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 def main(config: DictConfig) -> float | None:
     """Hydra's entrypoint for running scenario analysis training."""
     random.seed(config.seed)
+    configure_fonts(log=log)
 
     start = time()
     output_path = Path(config.output_path)
