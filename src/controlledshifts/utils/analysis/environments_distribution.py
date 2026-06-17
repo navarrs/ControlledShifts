@@ -177,6 +177,19 @@ def _plot_tsne(frame: pd.DataFrame, output_path: Path) -> None:
         labelcolor=TEXT_COLOR,
     )
 
+    ax_cluster.set_title("Environment clusters (t-SNE of NetLSD descriptors)")
+    ax_split.set_title("Benchmark splits (t-SNE of NetLSD descriptors)")
+    if show_axes:
+        ax_cluster.set(xlabel="t-SNE 1", ylabel="t-SNE 2")
+        ax_split.set(xlabel="t-SNE 1", ylabel="t-SNE 2")
+    else:
+        for ax in (ax_cluster, ax_split):
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.grid(visible=False)
+            for spine in ax.spines.values():
+                spine.set_visible(False)
+
     fig.tight_layout()
     fig.subplots_adjust(wspace=0.05)
     output_file = output_path / "tsne.png"
@@ -225,7 +238,8 @@ def run_environments_distribution_analysis(config: DictConfig, log: Logger, outp
     Otherwise the frame is rebuilt from the benchmark's descriptor cache, scaler and split CSV.
 
     Args:
-        config: Analysis configuration (``cache_path``, ``clustering_algorithm``, ``seed``, ``overwrite``).
+        config: Analysis configuration (``cache_path``, ``clustering_algorithm``, ``seed``, ``overwrite``,
+            ``show_axes``).
         log: Logger.
         output_path: Directory to save the cached embedding and plots.
     """
@@ -244,7 +258,7 @@ def run_environments_distribution_analysis(config: DictConfig, log: Logger, outp
         if frame is None:
             return
 
-    _plot_tsne(frame, output_path)
+    _plot_tsne(frame, output_path, show_axes=config.show_axes)
     _plot_silhouette(frame, output_path)
 
     print("\n✓ Analysis complete!")

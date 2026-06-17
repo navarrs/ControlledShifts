@@ -301,7 +301,9 @@ uv run -m controlledshifts.run_analysis analysis=environments
 
 It writes, under `<output_path>/`: the cached `environments_embedding.csv`, a `tsne.png` (the TSNE embedding stacked
 vertically — coloured by assigned cluster on top and by train/validation/testing split on the bottom, each with its
-own legend), and a `silhouette.png` (per-cluster silhouette bars with the overall mean marked).
+own legend), and a `silhouette.png` (per-cluster silhouette bars with the overall mean marked). Set `show_axes: true`
+to render the TSNE subplots with axes and labels; by default they are drawn as a bare scatter (legend and title only)
+without axes or grid.
 
 ## Scenario Overlap Analysis
 
