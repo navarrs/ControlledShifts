@@ -265,6 +265,39 @@ It writes, under `<output_path>/`: the cached `environments_embedding.csv`, a `t
 vertically — coloured by assigned cluster on top and by train/validation/testing split on the bottom, each with its
 own legend), and a `silhouette.png` (per-cluster silhouette bars with the overall mean marked).
 
+## Scenario Overlap Analysis
+
+The file `configs/analysis/scenario_overlap.yaml` measures how different the benchmarks are by quantifying how many
+scenarios their corresponding splits share. It reads only the split JSONs under `splits_path`
+(`/data/driving/waymo/splits`), so it is fast and writes no cache. The `benchmarks` list selects which benchmarks to
+compare (each entry gives a display `name` and the `split_json` filename), and `splits` selects which splits to
+compare (default `[training, validation, testing]`):
+
+```yaml
+splits_path: /data/driving/waymo/splits
+splits: [training, validation, testing]
+benchmarks:
+  - uniform:
+      name: Uniform
+      split_json: uniform
+  - ego_safeshift:
+      name: EgoSafeShift
+      split_json: ego_safeshift
+```
+
+For each split it builds a symmetric benchmark x benchmark matrix of the Jaccard index `|A ∩ B| / |A ∪ B|` over the
+scenario IDs. Benchmarks built on a shared reference split (e.g. `causal_agents` vs `uniform`) land near 1.0, while
+benchmarks that resample the population (e.g. `causal_agents_hard` test set) drop well below.
+
+Run the analysis as:
+```bash
+uv run -m controlledshifts.run_analysis analysis=scenario_overlap
+```
+
+It writes, under `<output_path>/`: a single `scenario_overlap.png` with one annotated Jaccard heatmap per split
+(sharing one colorbar), and a tidy `scenario_overlap.csv` (columns `split`, `benchmark_a`, `benchmark_b`, `size_a`,
+`size_b`, `intersection`, `union`, `jaccard`) holding the raw intersection counts behind the plotted Jaccard values.
+
 
 # Sample Selection
 

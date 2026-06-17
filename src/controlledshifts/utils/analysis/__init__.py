@@ -8,6 +8,7 @@ from controlledshifts.utils.analysis.sample_selection import (
     plot_sample_selection_sweep_heatmap,
     plot_sample_selection_sweep_lineplot,
 )
+from controlledshifts.utils.analysis.scenario_overlap import run_scenario_overlap_analysis
 from controlledshifts.utils.analysis.score_distribution import run_score_distribution_analysis
 
 
@@ -20,5 +21,6 @@ __all__ = [
     "run_distribution_shift_analysis",
     "run_environments_analysis",
     "run_robustness_scores_analysis",
+    "run_scenario_overlap_analysis",
     "run_score_distribution_analysis",
 ]
