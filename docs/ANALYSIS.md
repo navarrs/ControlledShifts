@@ -235,6 +235,36 @@ It writes, under `<output_path>/`: the long-form `score_distribution.csv`, a per
 benchmark: a violin (`<quantity>_violin.png`, splits on the x-axis), a histogram (`<quantity>_histogram.png`, overlaid
 per-split density curves), and a ridgeline (`<quantity>_ridge.png`, one overlapping density row per split).
 
+## Environments Benchmark Analysis
+
+The file `configs/analysis/environments.yaml` configures a visualization of the NetLSD-descriptor clustering that
+defines the environments benchmark. It reads only the artifacts written by benchmark creation under `cache_path`:
+`descriptors_cache.pkl` (the NetLSD descriptors), `scaler.pkl` (the `StandardScaler` fit during clustering), and
+`{clustering_algorithm}/environment_benchmark.csv` (the per-scenario `cluster_label`, `hardness_score`, `input_set`
+and `output_set`). The descriptors are aligned to the CSV and scaled with the saved scaler before TSNE and silhouette,
+so the embedding and silhouette scores match the space the benchmark clustered in.
+
+Set `cache_path` and `clustering_algorithm` to match the benchmark run you want to inspect:
+
+```yaml
+cache_path: /data/driving/waymo/meta/environments
+clustering_algorithm: ward
+```
+
+The plots are driven entirely by the cached `environments_embedding.csv` (columns `scenario_id`, `tsne_1`, `tsne_2`,
+`cluster_label`, `output_set`, `silhouette`). On a re-run (with `overwrite=false`) it is loaded directly and the
+figures are regenerated without recomputing the TSNE embedding or silhouette scores. Set `overwrite=true` to rebuild
+it from the descriptor cache.
+
+Run the analysis as:
+```bash
+uv run -m controlledshifts.run_analysis analysis=environments
+```
+
+It writes, under `<output_path>/`: the cached `environments_embedding.csv`, a `tsne.png` (the TSNE embedding stacked
+vertically — coloured by assigned cluster on top and by train/validation/testing split on the bottom, each with its
+own legend), and a `silhouette.png` (per-cluster silhouette bars with the overall mean marked).
+
 
 # Sample Selection
 

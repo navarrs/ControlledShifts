@@ -6,6 +6,7 @@ from controlledshifts.utils.analysis import (
     plot_sample_selection_sweep_lineplot,
     run_causal_distribution_analysis,
     run_distribution_shift_analysis,
+    run_environments_analysis,
     run_robustness_scores_analysis,
     run_score_distribution_analysis,
 )
@@ -38,6 +39,7 @@ __all__ = [
     "print_config_tree",
     "run_causal_distribution_analysis",
     "run_distribution_shift_analysis",
+    "run_environments_analysis",
     "run_robustness_scores_analysis",
     "run_score_distribution_analysis",
     "save_cache",

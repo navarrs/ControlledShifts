@@ -109,7 +109,7 @@ def _compute_graph_descriptor(
     return scenario_id, split, descriptor
 
 
-def _load_descriptor_cache(cache_path: Path) -> dict[str, tuple[str, str, NDArray[np.float64]]]:
+def load_descriptor_cache(cache_path: Path) -> dict[str, tuple[str, str, NDArray[np.float64]]]:
     """Loads the descriptor cache from disk.
 
     The cache maps filepath strings to (scenario_id, split, descriptor) tuples. Returns an empty dict if the cache
@@ -179,7 +179,7 @@ def _compute_descriptors_with_cache(  # noqa: PLR0913
     Raises:
         ValueError: If no valid descriptors could be computed or retrieved.
     """
-    cache = _load_descriptor_cache(cache_path)
+    cache = load_descriptor_cache(cache_path)
 
     if overwrite:
         for fp in filepaths:
