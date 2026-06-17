@@ -8,6 +8,7 @@ from controlledshifts.utils.analysis import (
     run_distribution_shift_analysis,
     run_environments_analysis,
     run_robustness_scores_analysis,
+    run_scenario_overlap_analysis,
     run_score_distribution_analysis,
 )
 from controlledshifts.utils.data_utils import load_batches, load_causal_agent_ids, minmax_scaler, save_cache
@@ -41,6 +42,7 @@ __all__ = [
     "run_distribution_shift_analysis",
     "run_environments_analysis",
     "run_robustness_scores_analysis",
+    "run_scenario_overlap_analysis",
     "run_score_distribution_analysis",
     "save_cache",
     "task_wrapper",

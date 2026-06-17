@@ -17,6 +17,9 @@ Runs one of the analyses over a single combined results file, selected via the `
     # NetLSD-descriptor clustering for the environments benchmark (TSNE by cluster/split + silhouette plot).
     uv run -m controlledshifts.run_analysis analysis=environments
 
+    # Pairwise scenario overlap between benchmarks per split (Jaccard heatmaps + CSV).
+    uv run -m controlledshifts.run_analysis analysis=scenario_overlap
+
 See `docs/ANALYSIS.md` and the per-analysis configs under `configs/analysis/` for more argument details.
 """
 
@@ -46,6 +49,7 @@ _ANALYSES: dict[str, Callable[[DictConfig, Logger, Path], None]] = {
     "causal_distribution": utils.run_causal_distribution_analysis,
     "score_distribution": utils.run_score_distribution_analysis,
     "environments": utils.run_environments_analysis,
+    "scenario_overlap": utils.run_scenario_overlap_analysis,
 }
 
 

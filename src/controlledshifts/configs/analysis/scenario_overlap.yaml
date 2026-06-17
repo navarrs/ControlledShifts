@@ -1,0 +1,26 @@
+# @package _global_
+defaults:
+  - default.yaml
+
+analysis_name: scenario_overlap
+output_path: ./outputs/scenario_overlap_analysis
+splits_path: /data/driving/waymo/splits
+
+# Splits to compare; each gets its own benchmark x benchmark Jaccard-overlap heatmap.
+splits: [training, validation, testing]
+
+# Benchmarks to include -- referenced by split-JSON filename and display name. Edit this list to choose which
+# benchmarks to analyze.
+benchmarks:
+  - uniform:
+      name: Uniform
+      split_json: uniform
+  - causal_agents_hard:
+      name: CausalAgents
+      split_json: causal_agents_hard
+  - ego_safeshift:
+      name: EgoSafeShift
+      split_json: ego_safeshift
+  - environments:
+      name: Environments
+      split_json: environments
