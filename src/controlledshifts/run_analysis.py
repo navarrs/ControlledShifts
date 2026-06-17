@@ -14,6 +14,9 @@ Runs one of the analyses over a single combined results file, selected via the `
     # Per-scenario criticality-score distributions across train/val/test for the ego-safeshift benchmark.
     uv run -m controlledshifts.run_analysis analysis=score_distribution
 
+    # NetLSD-descriptor clustering for the environments benchmark (TSNE by cluster/split + silhouette plot).
+    uv run -m controlledshifts.run_analysis analysis=environments
+
 See `docs/ANALYSIS.md` and the per-analysis configs under `configs/analysis/` for more argument details.
 """
 
@@ -42,6 +45,7 @@ _ANALYSES: dict[str, Callable[[DictConfig, Logger, Path], None]] = {
     "robustness": utils.run_robustness_scores_analysis,
     "causal_distribution": utils.run_causal_distribution_analysis,
     "score_distribution": utils.run_score_distribution_analysis,
+    "environments": utils.run_environments_analysis,
 }
 
 

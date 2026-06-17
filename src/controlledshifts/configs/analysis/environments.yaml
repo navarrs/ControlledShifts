@@ -1,0 +1,17 @@
+# @package _global_
+defaults:
+  - default.yaml
+
+analysis_name: environments
+output_path: ./outputs/environments_analysis
+
+# Directory holding the environments benchmark artifacts (descriptors_cache.pkl, scaler.pkl and
+# {clustering_algorithm}/environment_benchmark.csv). Must match the benchmark's cache_path.
+cache_path: /data/driving/waymo/meta/environments
+
+# Selects {cache_path}/{clustering_algorithm}/environment_benchmark.csv; must match the algorithm used to build it.
+clustering_algorithm: ward
+
+# When false (default), plots are regenerated from the cached environments_embedding.csv without recomputing TSNE or
+# silhouette scores. Set true to rebuild the embedding from the descriptor cache.
+overwrite: false
