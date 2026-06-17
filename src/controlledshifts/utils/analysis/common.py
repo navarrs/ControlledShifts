@@ -41,7 +41,7 @@ MODEL_COLOR_MAP = {
 
 SPLIT_COLOR_MAP = {
     "training": "#355070",
-    "validation": "#6d597a",
+    "validation": "#8f769f",
     "testing": "#b56576",
 }
 
