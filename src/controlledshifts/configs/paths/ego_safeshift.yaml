@@ -1,8 +1,11 @@
 defaults:
   - default.yaml
 
-# Re-splits the base scenes by Ego-SafeShift's per-scenario 'gt' scores (hardest go to testing); the partition lives in
-# splits/ego_safeshift.json.
+# Re-splits the base scenes by Ego-SafeShift's per-scenario 'gt' scores (hardest go to testing). create_benchmark writes
+# one split file per scoring variant, named by the run's `split_name` (e.g. ego_safeshift_scores8) or an auto-derived
+# ego_safeshift_<tag>. Point `split_json` below at the file you created (the create_benchmark run logs its exact path).
+# For the simple single-CSV case, pass `split_name=ego_safeshift` so the partition lives in splits/ego_safeshift.json,
+# matching the default below.
 tag: 'ego-safeshift'
 
 # Training and validation use the In-Distribution (ID) subset.

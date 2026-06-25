@@ -150,23 +150,34 @@ uv run -m controlledshifts.train model=[model_name] paths=safeshift
 Like SafeShift, but scenes are ranked by **ego-centric** safety scores (ground-truth scoring): the highest-scoring
 (hardest) scenes form the OOD test set and the rest form the ID train/val pool, following `split_ratios`.
 
-**Create:**
+**Create (with a precomputed score CSV):**
 ```bash
-uv run -m controlledshifts.create_benchmark benchmark=ego_safeshift \
+uv run -m controlledshifts.create_benchmark benchmark=ego_safeshift split_name=ego_safeshift \
     scenario_score_mapping_filepath=/data/driving/waymo/meta/ego-safeshift/scores_8/scenario_to_scores_mapping.csv
 # -> splits/ego_safeshift.json
 ```
 
-Key options (see `configs/benchmark/ego_safeshift.yaml`):
-- `scenario_score_mapping_filepath` (**required**): CSV with a `scenario_ids` column and a score column.
-- `score_type`: column to rank by (higher = harder = test). Default: `gt_critical_continuous_safeshift`.
-- `split_ratios`: `(train, val, test)` fractions; the hardest scenes form the test set. Default: `[0.70, 0.15, 0.15]`.
+**Create (no CSV — scores are computed on the fly):**
+```bash
+uv run -m controlledshifts.create_benchmark benchmark=ego_safeshift split_name=ego_safeshift_scores8
+# -> computes scores via the SafeShift API, caches them under splits/ego_safeshift/, writes splits/ego_safeshift_scores8.json
+```
+When `scenario_score_mapping_filepath` is null or missing, the benchmark scores every scenario under `input_data_path`
+using the SafeShift characterization API (the shared `scoring` config group), writing the per-scenario scores to
+`${splits_path}/ego_safeshift/scenario_to_scores_mapping_<hash>.csv` (keyed by a hash of the scoring config, so changing
+the scoring config writes a new file; reused on re-runs unless `overwrite=true`).
 
-**Producing the score file:** the ego scores come from the [ScenarioCharacterization](https://github.com/navarrs/ScenarioCharacterization/)
+Key options (see `configs/benchmark/ego_safeshift.yaml`):
+- `scenario_score_mapping_filepath`: CSV with a `scenario_ids` column and a score column. If null/missing, scores are computed (see above).
+- `score_type`: column to rank by (higher = harder = test). Default: `gt_critical_continuous_safeshift`. Computed CSVs contain `gt_critical_continuous_{safeshift,individual,interaction}`.
+- `split_ratios`: `(train, val, test)` fractions; the hardest scenes form the test set. Default: `[0.70, 0.15, 0.15]`.
+- `split_name`: split JSON filename stem. When null, an `ego_safeshift_<tag>` name is auto-derived (keyed by the score source, `score_type`, `split_ratios` and `seed`) so multiple score CSVs each get their own split file. Set it (e.g. `ego_safeshift_scores8`) to reference the split deterministically from `configs/paths/`.
+
+**Producing the score file (optional):** instead of letting the benchmark compute scores, you can supply a precomputed
+`scenario_to_scores_mapping.csv` from the [ScenarioCharacterization](https://github.com/navarrs/ScenarioCharacterization/)
 package, which scores each scene from the perspective of the ego agent. Follow its scoring
-[instructions](https://github.com/navarrs/ScenarioCharacterization/blob/main/docs/CHARACTERIZATION.md) to produce the
-`scenario_to_scores_mapping.csv` required above — a CSV with a `scenario_ids` column plus the score column named by
-`score_type` (default `gt_critical_continuous_safeshift`), e.g. at `meta/ego-safeshift/scores_8/scenario_to_scores_mapping.csv`.
+[instructions](https://github.com/navarrs/ScenarioCharacterization/blob/main/docs/CHARACTERIZATION.md) to produce a CSV
+with a `scenario_ids` column plus the score column named by `score_type`, e.g. at `meta/ego-safeshift/scores_8/scenario_to_scores_mapping.csv`.
 A precomputed file is available [here](https://drive.google.com/file/d/1Ptv1JIM0qymo7180_a5svLZJXWn03yQx/view?usp=drive_link); place it in the `./meta` folder.
 
 **Train / evaluate:**

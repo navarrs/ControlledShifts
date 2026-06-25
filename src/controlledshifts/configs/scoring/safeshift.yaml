@@ -1,0 +1,94 @@
+# Single source of truth for the SafeShift scoring parameters. Mounted under `dataset.config` (so the agent-centric
+# autolabel pipeline and its cache-profile hash see these keys) and at top level as `scoring` (so benchmark creation can
+# score scenarios without depending on the dataset config). See datasets/scenario_scorer.py.
+
+conflict_points:
+  intersection_threshold: 0.1 # meters
+  resample_factor: 1
+  return_static_conflict_points: false
+  return_dynamic_conflict_points: false
+  return_lane_conflict_points: false
+
+closest_lanes:
+  num_lanes: 16
+  threshold_distance: 10 # meters
+  subsample_factor: 2
+
+# The scenario characterization configuration below follows the parameters used to get the values for the scores and
+# features.
+scenario_characterization:
+  scenario_type: 'gt'
+  return_criterion: 'critical'
+  feature_type: continuous # 'categorical' or 'continuous'
+  ego_only: false
+
+  # Individual feature categorization files
+  vehicle_categorization_file: ./meta/scores/type_vehicle_feature_percentiles.json
+  cyclist_categorization_file: ./meta/scores/type_cyclist_feature_percentiles.json
+  pedestrian_categorization_file: ./meta/scores/type_pedestrian_feature_percentiles.json
+
+  # Interaction feature categorization files
+  vehicle_vehicle_categorization_file: ./meta/scores/type_vehicle_vehicle_feature_percentiles.json
+  vehicle_pedestrian_categorization_file: ./meta/scores/type_vehicle_pedestrian_feature_percentiles.json
+  vehicle_cyclist_categorization_file: ./meta/scores/type_vehicle_cyclist_feature_percentiles.json
+  pedestrian_pedestrian_categorization_file: ./meta/scores/type_pedestrian_pedestrian_feature_percentiles.json
+  pedestrian_cyclist_categorization_file: ./meta/scores/type_pedestrian_cyclist_feature_percentiles.json
+  cyclist_cyclist_categorization_file: ./meta/scores/type_cyclist_cyclist_feature_percentiles.json
+
+  # Scoring parameters
+  vru_priority_weight: 2.0 # Weight for VRU priority in scoring
+  categorize_scores: false # Whether to categorize scores
+  score_weighting_method: "distance_to_ego_agent" # 'uniform' or 'distance_to_ego_agent' or 'distance_to_relevant_agents'
+  reduce_distance_penalty: true # Whether to reduce distance penalty
+  aggregated_score_weight: 0.5 # Weight for aggregated score in final score computation
+  individual_score_function: simple
+  individual_categorization_file: ./meta/scores/gt_critical_categorical_individual.json
+  interaction_score_function: simple
+  interaction_categorization_file: ./meta/scores/gt_critical_categorical_interaction.json
+
+  score_clip:
+    min: 0.0
+    max: 200.0
+
+  inv_stability_cap: 10.0 # Maximum value for inverse interaction metrics (inv_mttcp, inv_ttc, inv_thw)
+
+  # NOTE: if weights are not specified here, will use default values from FeatureWeights in schemas/detections.py.
+  weights:
+    # Individual features
+    speed: 1.0
+    speed_limit_diff: 1.0
+    acceleration: 1.0
+    deceleration: 1.0
+    jerk: 0.0
+    waiting_period: 1.0
+
+    # Individual features from Unitraj
+    trajectory_type: 0.1
+    kalman_difficulty: 1.0
+
+    # Interaction features
+    collision: 4.0
+    mttcp: 2.0
+    thw: 2.0
+    ttc: 2.0
+    drac: 2.0
+
+  # NOTE: if detections are not specified here, the code uses the default values from FeatureDetections which is
+  # defined in 'schemas/detections.py'. The current thresholds have been adjusted from FeatureDetections based on
+  # feature distribution analysis performed on a subset of the WOMD data, using 'run_feature_analysis.py'. We select
+  # the ceil of maximum value accross vehicles, pedestrians and cyclists at the 95th percentile as the detection
+  # threshold.
+  detections:
+    speed: 18 # in m/s, i.e. ~90 km/h ~56 mph
+    speed_limit_diff: 19 # in m/s, i.e. ~61 km/h ~38 mph
+    acceleration: 5 # in m/s^2
+    deceleration: 5 # in m/s^2
+    jerk: 60 # in m/s^3
+    waiting_period: 5 # in s/m
+    kalman_difficulty: 23.0
+
+    collision: 1
+    mttcp: 2
+    thw: 2
+    ttc: 2
+    drac: 5

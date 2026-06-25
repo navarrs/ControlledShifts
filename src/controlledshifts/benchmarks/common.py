@@ -9,6 +9,7 @@ from typing import Any, NamedTuple
 
 import numpy as np
 from numpy.random import Generator
+from omegaconf import DictConfig
 
 from controlledshifts.utils.pylogger import get_pylogger
 
@@ -147,6 +148,20 @@ def split_ids_by_score(
     return _build_split_mapping(training, validation, testing)
 
 
+def resolve_split_name(benchmark: Benchmark, config: DictConfig) -> str:
+    """Returns the split filename stem for a benchmark run.
+
+    Ego-SafeShift varies the name per scoring variant (so multiple score CSVs each get their own split JSON); every
+    other benchmark uses ``config.benchmark_name``.
+    """
+    if benchmark is Benchmark.EGO_SAFESHIFT:
+        # Local import to avoid a circular dependency (ego_safeshift imports from this module).
+        from controlledshifts.benchmarks.ego_safeshift import ego_safeshift_split_name  # noqa: PLC0415
+
+        return ego_safeshift_split_name(config)
+    return config.benchmark_name
+
+
 def collect_scenario_filepaths(data_path: Path) -> list[Path]:
     """Returns all .pkl scenario filepaths under data_path, excluding info files.
 
@@ -212,15 +227,22 @@ def load_split_if_exists(splits_path: Path, benchmark_name: str, *, overwrite: b
 
 
 def save_benchmark_split(
-    split: BenchmarkSplit, benchmark_name: str, splits_path: Path, *, overwrite: bool = False
+    split: BenchmarkSplit,
+    benchmark_name: str,
+    splits_path: Path,
+    *,
+    overwrite: bool = False,
+    benchmark_label: str | None = None,
 ) -> Path:
     """Writes a BenchmarkSplit to ``${splits_path}/${benchmark_name}.json`` and returns the path.
 
     Args:
         split: Split to serialize.
-        benchmark_name: Benchmark name, used as the JSON filename and stored inside the file.
+        benchmark_name: Used as the JSON filename stem (may be a per-variant name, e.g. ``ego_safeshift_<tag>``).
         splits_path: Directory under which the JSON file is written (created if missing).
         overwrite: If False, skip writing when the JSON already exists. Defaults to False.
+        benchmark_label: Logical benchmark name stored inside the file; defaults to ``benchmark_name``. Use it to keep
+            the stored label (e.g. ``ego_safeshift``) while the filename carries a per-variant tag.
 
     Returns:
         Path to the written (or already-existing) JSON file.
@@ -231,7 +253,7 @@ def save_benchmark_split(
         _LOGGER.info("Split %s already exists; not overwriting (set overwrite=true to regenerate)", output_filepath)
         return output_filepath
     payload = {
-        "benchmark_name": benchmark_name,
+        "benchmark_name": benchmark_label or benchmark_name,
         "training": split.training,
         "validation": split.validation,
         "testing": split.testing,

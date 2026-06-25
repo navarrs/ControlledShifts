@@ -4,11 +4,20 @@ defaults:
 
 benchmark_name: ego_safeshift
 
-# Path to the CSV file with columns 'scenario_ids' and score_type.
-scenario_score_mapping_filepath: ???
+# Path to the CSV file with columns 'scenario_ids' and score_type. If null or the file does not exist, scores are
+# computed from the scenarios under input_data_path using the SafeShift characterization API (the shared `scoring`
+# config group) and written to ${splits_path}/ego_safeshift/scenario_to_scores_mapping_<hash>.csv (keyed by a hash of
+# the scoring config; reused on re-runs unless overwrite=true).
+scenario_score_mapping_filepath: null
 
-# Column in the CSV to use for ranking scenarios (higher score = harder = test set).
+# Column in the CSV to use for ranking scenarios (higher score = harder = test set). When scores are computed here, the
+# available columns are gt_critical_continuous_{safeshift,individual,interaction}.
 score_type: gt_critical_continuous_safeshift
 
 # (train, val, test) fractions of the full dataset. The hardest scenarios form the test set. Should sum to 1.0.
 split_ratios: [0.70, 0.15, 0.15]
+
+# Split JSON filename stem. When null, an auto-derived ego_safeshift_<tag> is used, keyed by the score source,
+# score_type, split_ratios and seed, so multiple score CSVs / scoring configs each get their own split file. Set this
+# to a stable, human-readable name (e.g. ego_safeshift_scores8) to reference it deterministically from configs/paths/.
+split_name: null

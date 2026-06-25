@@ -4,6 +4,7 @@ defaults:
   - scenario: waymo
   - visualization: viz_static
   - dataset: waymo_analysis
+  - scoring: safeshift  # ego_safeshift reads cfg.scoring to score scenarios when no score CSV is provided
   - _self_
 
 # General parameters shared across all benchmarks.
