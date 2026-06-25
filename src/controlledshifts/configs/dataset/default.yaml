@@ -1,7 +1,7 @@
 defaults:
   # Single source of truth for the SafeShift scoring params; mounted under `config` so the autolabel pipeline and the
   # cache-profile hash see them. `_self_` is last so the explicit `config:` keys below still merge.
-  - /scoring/safeshift@config
+  - /scoring/ego_safeshift@config
   - _self_
 
 _target_: controlledshifts.datasets.base_dataset.BaseDataset
@@ -53,5 +53,6 @@ config:
   causal_labels_path: ${paths.causal_labels_path}
 
   # SafeShift configuration. The scoring params (conflict_points / closest_lanes / scenario_characterization) are
-  # composed from the shared `scoring/safeshift` group via this file's `defaults`; see configs/scoring/safeshift.yaml.
+  # composed from the shared `scoring/ego_safeshift` group via this file's `defaults`; see
+  # configs/scoring/ego_safeshift.yaml.
   autolabel_agents: ${autolabel_agents}
