@@ -135,27 +135,27 @@ document must load `\usepackage[table]{xcolor}` (and `\usepackage{multirow}`).
 
 ## Robustness Score Analysis
 
-The file `configs/analysis/robustness.yaml` reduces the same combined results file into comparable *robustness
-scores* per model per metric, measured against a reference. Two reference modes are produced:
+The file `configs/analysis/robustness.yaml` reduces the same combined results file into comparable *scores*
+per model per metric, measured against a reference. Two reference modes are produced:
 
-- `naive_relative` — each model vs the **Naive** baseline **within the same benchmark**.
-- `uniform_relative` — each model vs **its own** performance in the **Uniform** benchmark (e.g. AutoBot on
+- `naive_relative` — each model scaled by the **Naive** baseline **within the same benchmark**.
+- `uniform_relative` — each model scaled by **its own** performance in the **Uniform** benchmark (e.g. AutoBot on
   EgoSafeShift vs AutoBot on Uniform). The Uniform benchmark is excluded from this mode's aggregation.
 
-All metrics are lower-is-better (errors). Working in natural-log space, each model is characterized by two
-reference-relative robustness axes:
+All metrics are lower-is-better (errors). Following the MASE / OWA framing of the N-BEATS paper
+([arXiv:1905.10437](https://arxiv.org/pdf/1905.10437)), each model is characterized by two reference-relative *score*
+axes (the reciprocal MASE skill, so higher is better):
 
-- `seen_robustness_score = log(ref_seen / model_seen)` — **ID-level robustness**: how much better the model already is
-  on the seen split (its starting point).
-- `shift_robustness_score = log((ref_unseen/ref_seen) / (model_unseen/model_seen))` — **shift robustness**: how much
-  *less* the model degrades seen→unseen than the reference. Sign-preserving, so a model that improves under shift is
-  rewarded.
+- `id_score = ref_seen / model_seen` — **ID score** (reciprocal MASE on the seen split).
+- `ood_score = ref_unseen / model_unseen` — **OOD score** (reciprocal MASE on the unseen split).
 
-Both share the same log units, are symmetric and unbounded both ways (a 2× improvement and a 2× degradation are
-`±log 2`), and are `0` for the reference compared against itself (so the Naive row is a visible baseline in
-`naive_relative`): **higher == more robust than the reference**, `0` == on par, negative == worse. There are no
-epsilon/clip knobs and no regression — the axes are exact log ratios. Each is aggregated across benchmarks (NaN-safe
-`mean`/`median`, set by `score.aggregate`); the `Combined` column holds the per-model mean across metrics.
+Both are dimensionless, **higher == better**, and `1.0` == on par with the reference (the reference's own row is exactly
+`1.0`, so the Naive row is a visible baseline in `naive_relative`); `> 1` beats the reference, `< 1` is worse. Because
+each split is scaled by the reference *on that same split*, a good model with low absolute OOD error stays high on
+`ood_score` regardless of its degradation *factor* — this avoids the **robustness paradox**, where a uniformly-weak
+model that multiplies its error by a small factor would otherwise look more robust than a strong model. The division is
+NaN-guarded (a non-finite/non-positive numerator or denominator drops out). Each axis is aggregated across benchmarks
+(NaN-safe `mean`/`median`, set by `score.aggregate`); the `Combined` column holds the per-model mean across metrics.
 
 ### Combined ranking score
 
