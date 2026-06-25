@@ -6,6 +6,8 @@
 uv run python ...
 
 # Format and lint before committing
+uv run ruff format
+uv run ruff check --fix
 uv run pre-commit run --all-files
 ```
 
@@ -22,15 +24,30 @@ uv run pre-commit run --all-files
 
 # Code Guidelines
 
-- Be concise. When writing documentation, docstrings, comments, new functions, classes, or entrypoints, write only what is needed to convey intent and usage. Avoid comments that restate the code, redundant or boilerplate docstrings, over-explaining obvious behavior, and filler prose. Match the verbosity and comment density of the surrounding code.
 - Line length limit is 120 columns. This applies to code, comments, and docstrings.
-- Avoid local imports unless they are strictly necessary.
 - When fixing pre-commit errors, prioritize fixing the root cause over adding suppression comments (like # noqa, # pyright: ignore, etc.)
 - Always use specific type hints instead of `typing.Any`.
-- Don't duplicate logic: Before writing new code, check if similar logic already exists in the codebase. Reuse existing functions, especially those in `src/controlledshifts/utils/`, even if it means importing across modules.
-- Extract shared logic into `src/controlledshifts/utils/` if you encounter duplicated code.
+- Be concise. When writing documentation, docstrings, comments, new functions, classes, or entrypoints, write only what is needed to convey intent and usage. Avoid comments that restate the code, redundant or boilerplate docstrings, over-explaining obvious behavior, and filler prose. Match the verbosity and comment density of the surrounding code.
+
+## Imports & package structure
+
+- Prefer module-level imports. Use local (function-scoped) imports only to break a genuine circular dependency or to defer a heavy/optional import — and add a brief comment saying which. Don't use them to paper over import-order problems; restructure instead.
+- Modules inside a package must never import their own enclosing package by name. For example, a file in `utils/` must not write `from controlledshifts import utils` or `from controlledshifts.utils import X` — always import the specific submodule directly (e.g. `from controlledshifts.utils.logging_utils import get_pylogger`). The same rule applies to any other package: files in `scenario_characterization/` must not import `controlledshifts.scenario_characterization` as a package. (This intra-package rule is the opposite of how you treat *other* packages, which you import via their public API — see below.)
+- Import another package through its public top-level API, not its internal submodules. If you need one of its internals, that's a signal its API is missing something — flag it rather than reaching in.
+- `__init__.py` defines a package's PUBLIC API. Only put there: re-exports of names meant for external use, plus `__all__` listing them. Treat it as the package's contract — don't add a name without confirming it's meant to be public.
+- Every re-exporting `__init__.py` must define `__all__`, and every name in `__all__` must be imported or defined in that file.
+- No heavy work at import time. No slow imports, network/file/db access, config loading, or logging side effects in `__init__.py` — it runs on every import of the package. Defer expensive submodules with module-level `__getattr__` (PEP 562) instead of importing them eagerly.
+- Never use `from module import *`. Import explicit names.
+- Use explicit relative imports within a package (`from .core import X`); use absolute imports across packages.
+
+## Reuse & utilities
+
+- Don't duplicate logic: before writing new code, check if similar logic already exists in the codebase. Reuse existing functions, especially those in `src/controlledshifts/utils/`, even if it means importing across modules.
 - Before creating any new utilities, search `src/controlledshifts/utils/` for existing library code.
-- Tests should follow these principles:
-  - Use functions and fixtures; do not use test classes.
-  - Favor targeted, efficient tests over exhaustive edge-case coverage.
-  - Prefer running individual tests rather than the full test suite to improve iteration speed.
+- Extract shared logic into `src/controlledshifts/utils/` if you encounter duplicated code.
+
+## Tests
+
+- Use functions and fixtures; do not use test classes.
+- Favor targeted, efficient tests over exhaustive edge-case coverage.
+- Prefer running individual tests rather than the full test suite to improve iteration speed.
