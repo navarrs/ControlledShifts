@@ -5,6 +5,9 @@ Runs one of the analyses over a single combined results file, selected via the `
     # In-distribution vs out-of-distribution benchmark comparison (per-benchmark plots + LaTeX table).
     uv run -m controlledshifts.run_analysis analysis=distribution_shift
 
+    # One in-distribution reference vs many benchmarks with no artificial training shift (table + bars + gap heatmap).
+    uv run -m controlledshifts.run_analysis analysis=unshifted_generalization
+
     # Per-model, per-metric distribution-shift robustness scores (radar plot + CSV + LaTeX table).
     uv run -m controlledshifts.run_analysis analysis=robustness
 
@@ -45,6 +48,7 @@ pyrootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 # Maps the selected ``analysis`` config-group option (its ``analysis_name``) to its runner.
 _ANALYSES: dict[str, Callable[[DictConfig, Logger, Path], None]] = {
     "distribution_shift": utils.run_distribution_shift_analysis,
+    "unshifted_generalization": utils.run_unshifted_generalization_analysis,
     "robustness": utils.run_robustness_scores_analysis,
     "causal_distribution": utils.run_causal_distribution_analysis,
     "score_distribution": utils.run_score_distribution_analysis,

@@ -10,6 +10,7 @@ from controlledshifts.utils.analysis.sample_selection import (
 )
 from controlledshifts.utils.analysis.scenario_overlap import run_scenario_overlap_analysis
 from controlledshifts.utils.analysis.score_distribution import run_score_distribution_analysis
+from controlledshifts.utils.analysis.unshifted_generalization import run_unshifted_generalization_analysis
 
 
 __all__ = [
@@ -23,4 +24,5 @@ __all__ = [
     "run_robustness_scores_analysis",
     "run_scenario_overlap_analysis",
     "run_score_distribution_analysis",
+    "run_unshifted_generalization_analysis",
 ]

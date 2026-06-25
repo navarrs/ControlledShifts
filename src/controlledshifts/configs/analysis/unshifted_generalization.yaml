@@ -1,0 +1,20 @@
+# @package _global_
+defaults:
+  - default.yaml
+
+# Single in-distribution reference (mini-validation) vs many evaluation benchmarks, with no artificial training-time
+# shift. `mini` is just the name of the small WOMD subset used for training. See docs/ANALYSIS.md.
+analysis_name: unshifted_generalization
+benchmarks_filepath: ./meta/runs/mini.csv
+output_path: ./outputs/unshifted_generalization_analysis
+benchmark_colormap: colorblind
+
+reference:
+  name: Mini-Val
+  split: "val/waymo-mini-id"
+
+benchmarks:
+  - mini_test: {name: Mini-Test, split: "test/waymo-mini-ood"}
+  - causal_agents_hard: {name: CausalAgentsHard, split: "test/waymo-remove-noncausal-hard-testing"}
+  - ego_safeshift: {name: EgoSafeShift-OOD, split: "test/waymo-ego-safeshift-ood"}
+  - environments: {name: Environments-OOD, split: "test/waymo-environments-ood"}

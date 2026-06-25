@@ -8,6 +8,7 @@ models_to_compare: [
   'scenetransformer',
   'wayformer',
   'mtr',
+  # 'cvm',
 ]
 
 trajectory_forecasting_metrics: [

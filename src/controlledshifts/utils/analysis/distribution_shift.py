@@ -298,7 +298,7 @@ def _plot_grouped_bar_chart(
 
 def build_benchmark_df(
     metrics_df: pd.DataFrame,
-    splits: tuple[str, str],
+    splits: tuple[str, ...],
     metrics: list[str],
     models_to_compare: list[str],
     *,
@@ -306,13 +306,14 @@ def build_benchmark_df(
 ) -> pd.DataFrame:
     """Reconstruct a per-model benchmark DataFrame from the combined results file.
 
-    For each model in ``models_to_compare``, the seen (ID) and unseen (OOD) metric values are looked up independently
-    and joined by model name. A benchmark's seen and unseen splits may therefore come from different training runs (or
-    even different datasets); each value is taken from the first row that populates the corresponding column.
+    For each model in ``models_to_compare``, the metric values for each split in ``splits`` are looked up independently
+    and joined by model name (typically the seen/unseen pair, but any number of split prefixes is supported). A
+    benchmark's splits may therefore come from different training runs (or even different datasets); each value is taken
+    from the first row that populates the corresponding column.
 
     Args:
         metrics_df: Combined results with a ``Name`` (``<dataset>_<model>``) column and ``<split>/<metric>`` columns.
-        splits: ``(seen_split, unseen_split)`` column prefixes, e.g.
+        splits: Split column prefixes to extract, e.g.
             ``("test/waymo-uniform-validation", "test/waymo-uniform-testing")``.
         metrics: Metric names to extract for each split.
         models_to_compare: Raw model identifiers (as they appear after ``<dataset>_``) to include.
