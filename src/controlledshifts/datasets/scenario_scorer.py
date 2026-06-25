@@ -93,12 +93,21 @@ class ScenarioScorer:
         self.features = SafeShiftFeatures(scenario_characterization)
         self.scorer = SafeShiftScorer(scenario_characterization)
 
-    def score_features(self, scenario: Scenario) -> ScenarioScores:
-        """Computes features and scores; assumes map metadata is already populated on the scenario."""
-        features = self.features.compute(scenario)
+    def score_features(self, scenario: Scenario, *, max_workers: int | None = None) -> ScenarioScores:
+        """Computes features and scores; assumes map metadata is already populated on the scenario.
+
+        ``max_workers`` is passed to the SafeShift feature computation: ``None`` lets it use all CPUs; pass ``1`` to run
+        in-process (e.g. when this is already inside a worker pool, which cannot spawn child processes).
+        """
+        features = self.features.compute(scenario, max_workers=max_workers)
         return self.scorer.compute(scenario, features)
 
-    def compute(self, scenario: Scenario, *, total_steps: int | None = None) -> ScenarioScores:
+    def compute(
+        self, scenario: Scenario, *, total_steps: int | None = None, max_workers: int | None = None
+    ) -> ScenarioScores:
         """Adds map metadata (optionally truncated to ``total_steps``) then computes features and scores."""
+        # TODO: conflict-point / closest-lane metadata (and features) are recomputed from scratch on every call -- the
+        # expensive geometry is not cached. Add an on-disk cache (keyed by scenario id + map-config hash) so repeated
+        # scoring with different score weightings does not re-pay the geometry/feature cost.
         scenario = add_scenario_map_metadata(scenario, self.conflict_points, self.closest_lanes, total_steps)
-        return self.score_features(scenario)
+        return self.score_features(scenario, max_workers=max_workers)

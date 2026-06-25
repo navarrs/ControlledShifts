@@ -80,7 +80,8 @@ def _score_chunk(filepaths: list[Path]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for filepath in filepaths:
         try:
-            scores = scorer.compute(load_scenario(filepath))
+            # max_workers=1: this is already a daemonic pool worker, which cannot spawn its own child processes.
+            scores = scorer.compute(load_scenario(filepath), max_workers=1)
         except Exception:
             _LOGGER.exception("error scoring scenario: %s", filepath.stem)
             continue
