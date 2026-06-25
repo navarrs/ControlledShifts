@@ -7,6 +7,7 @@ from .common import (
     check_overlap,
     load_benchmark_split,
     load_split_if_exists,
+    resolve_split_name,
     save_benchmark_split,
 )
 from .ego_safeshift import create_ego_safeshift_benchmark
@@ -28,5 +29,6 @@ __all__ = [
     "create_uniform_benchmark",
     "load_benchmark_split",
     "load_split_if_exists",
+    "resolve_split_name",
     "save_benchmark_split",
 ]

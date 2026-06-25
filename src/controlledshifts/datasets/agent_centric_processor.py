@@ -11,7 +11,6 @@ import json
 from typing import Any
 
 import numpy as np
-from characterization.features.safeshift_features import SafeShiftFeatures
 from characterization.schemas import (
     AgentData,
     Scenario,
@@ -20,11 +19,10 @@ from characterization.schemas import (
     StaticMapData,
     TracksToPredict,
 )
-from characterization.scorer.safeshift_scorer import SafeShiftScorer
 from characterization.utils.common import AgentTrajectoryMasker, AgentType
-from characterization.utils.geometric_utils import find_closest_lanes, find_conflict_points
 from omegaconf import DictConfig, OmegaConf
 
+from controlledshifts.datasets.scenario_scorer import ScenarioScorer, add_scenario_map_metadata
 from controlledshifts.utils import data_utils, pylogger
 from controlledshifts.utils.constants import LARGE_FLOAT
 
@@ -108,17 +106,10 @@ class AgentCentricProcessor:
         self.autolabel_agents = config.get("autolabel_agents", False)
         self.conflict_points_config = config.get("conflict_points", None)
         self.closest_lanes_config = config.get("closest_lanes", None)
-        self.scenario_features_processor, self.scenario_scores_processor = None, None
+        self.scorer: ScenarioScorer | None = None
         if self.autolabel_agents:
-            scenario_characterization_config = config.get("scenario_characterization", None)
-            if self.conflict_points_config is None or self.closest_lanes_config is None:
-                error_message = "autolabel_agents is True but conflict_points or closest_lanes config is missing."
-                raise ValueError(error_message)
-            if scenario_characterization_config is None:
-                error_message = "autolabel_agents is True but scenario_characterization config is missing."
-                raise ValueError(error_message)
-            self.scenario_features_processor = SafeShiftFeatures(scenario_characterization_config)
-            self.scenario_scores_processor = SafeShiftScorer(scenario_characterization_config)
+            # ScenarioScorer validates the presence of the scoring config blocks.
+            self.scorer = ScenarioScorer(config)
 
     def processing_profile(self) -> dict[str, Any]:
         """Returns this processor's resolved processing profile (see module-level :func:`processing_profile`)."""
@@ -168,9 +159,7 @@ class AgentCentricProcessor:
             scenario = self.shape_scenario(scenario)
             scores = scenario_scores
             if self.autolabel_agents:
-                scenario = self.compute_scenario_map_metadata(scenario)
-                scenario_features = self.scenario_features_processor.compute(scenario)
-                scores = self.scenario_scores_processor.compute(scenario, scenario_features)
+                scores = self.compute_scores(scenario)
 
             records = self.process_agent_centric_scenario(scenario, scenario_scores=scores)
             if records is not None:
@@ -183,48 +172,25 @@ class AgentCentricProcessor:
         return records
 
     def compute_scenario_map_metadata(self, scenario: Scenario) -> Scenario:
-        """Computes map-related metadata for the scenario, such as conflict points and closest lanes.
+        """Computes map metadata (conflict points, closest lanes), truncated to this processor's ``total_steps``."""
+        return add_scenario_map_metadata(
+            scenario, self.conflict_points_config, self.closest_lanes_config, total_steps=self.total_steps
+        )
 
-        Args:
-            scenario: The input scenario for which to compute map metadata.
+    def compute_scores(self, scenario: Scenario) -> ScenarioScores:
+        """Computes SafeShift scores for a (shaped) scenario; requires an autolabel-enabled processor.
 
-        Returns:
-            The scenario with updated map metadata.
+        Map metadata is computed truncated to ``total_steps`` to match the processor's shaped trajectories, then the
+        SafeShift features and scores are computed.
         """
-        conflict_points_info = find_conflict_points(
-            scenario,
-            resample_factor=self.conflict_points_config.get("resample_factor", 1),
-            intersection_threshold=self.conflict_points_config.get("intersection_threshold", 0.5),
-            return_static_conflict_points=self.conflict_points_config.get("return_static_conflict_points", False),
-            return_lane_conflict_points=self.conflict_points_config.get("return_lane_conflict_points", False),
-            return_dynamic_conflict_points=self.conflict_points_config.get("return_dynamic_conflict_points", False),
-        )
-        agent_distances_to_conflict_points, conflict_points = None, None
-        if conflict_points_info is not None:
-            agent_distances_to_conflict_points = (
-                None
-                if conflict_points_info["agent_distances_to_conflict_points"] is None
-                else conflict_points_info["agent_distances_to_conflict_points"][:, : self.total_steps, :]
+        if self.scorer is None:
+            error_message = (
+                "Scoring requires an autolabel-enabled processor. Re-run with the override "
+                "`dataset.config.autolabel_agents=true`."
             )
-            conflict_points = (
-                None
-                if conflict_points_info["all_conflict_points"] is None
-                else conflict_points_info["all_conflict_points"]
-            )
-            scenario.static_map_data.map_conflict_points = conflict_points
-            scenario.static_map_data.agent_distances_to_conflict_points = agent_distances_to_conflict_points
-
-        closest_lanes_info = find_closest_lanes(
-            scenario,
-            k_closest=self.closest_lanes_config.get("num_lanes", 16),
-            threshold_distance=self.closest_lanes_config.get("threshold_distance", 10.0),
-            subsample_factor=self.closest_lanes_config.get("subsample_factor", 2),
-        )
-        if closest_lanes_info is not None:
-            agent_closest_lanes = closest_lanes_info["agent_closest_lanes"][:, : self.total_steps, :, :]
-            scenario.static_map_data.agent_closest_lanes = agent_closest_lanes
-
-        return scenario
+            raise ValueError(error_message)
+        scenario = self.compute_scenario_map_metadata(scenario)
+        return self.scorer.score_features(scenario)
 
     def process_agent_centric_scenario(
         self, scenario: Scenario, scenario_scores: ScenarioScores | None = None

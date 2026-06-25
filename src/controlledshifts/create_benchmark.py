@@ -16,9 +16,13 @@ Example usage:
     # Causal Agents Hard benchmark
     uv run -m controlledshifts.create_benchmark benchmark=causal_agents_hard
 
-    # Ego-SafeShift benchmark
+    # Ego-SafeShift benchmark (with a precomputed score CSV)
     uv run -m controlledshifts.create_benchmark benchmark=ego_safeshift \\
         scenario_score_mapping_filepath=meta/ego-safeshift/scores_8/scenario_to_scores_mapping.csv
+
+    # Ego-SafeShift benchmark (no CSV: scores are computed and cached; split saved as ego_safeshift_<tag>.json,
+    # or pass split_name=... for a stable filename)
+    uv run -m controlledshifts.create_benchmark benchmark=ego_safeshift split_name=ego_safeshift_scores8
 
     # Environments benchmark
     uv run -m controlledshifts.create_benchmark benchmark=environments
@@ -80,11 +84,15 @@ def main(cfg: DictConfig) -> None:
     benchmark = Benchmark(cfg.benchmark_name)
     splits_path = Path(cfg.splits_path)
 
-    split = benchmarks.load_split_if_exists(splits_path, cfg.benchmark_name, overwrite=cfg.overwrite)
+    # The split filename may be per-variant (e.g. ego_safeshift_<tag>) while the stored label stays the benchmark name.
+    split_name = benchmarks.resolve_split_name(benchmark, cfg)
+    split = benchmarks.load_split_if_exists(splits_path, split_name, overwrite=cfg.overwrite)
     if split is None:
         split = _compute_split(benchmark, cfg)
         benchmarks.check_overlap(split)
-        benchmarks.save_benchmark_split(split, cfg.benchmark_name, splits_path, overwrite=cfg.overwrite)
+        benchmarks.save_benchmark_split(
+            split, split_name, splits_path, overwrite=cfg.overwrite, benchmark_label=cfg.benchmark_name
+        )
 
 
 if __name__ == "__main__":

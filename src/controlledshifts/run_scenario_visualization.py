@@ -79,20 +79,6 @@ class PreparedScenario(NamedTuple):
     causal_gt_ids: NDArray[np.int_] | None = None
 
 
-def _compute_scores(processor: AgentCentricProcessor, scenario: Scenario) -> tuple[Scenario, ScenarioScores]:
-    """Computes scenario map metadata, features, and scores; requires an autolabel-enabled processor."""
-    if processor.scenario_features_processor is None or processor.scenario_scores_processor is None:
-        error_message = (
-            "Scoring requires the processor's feature/score processors. Re-run with the override "
-            "`dataset.config.autolabel_agents=true`."
-        )
-        raise ValueError(error_message)
-    scenario = processor.compute_scenario_map_metadata(scenario)
-    features = processor.scenario_features_processor.compute(scenario)
-    scores = processor.scenario_scores_processor.compute(scenario, features)
-    return scenario, scores
-
-
 def _to_agent_centric(
     processor: AgentCentricProcessor, scenario: Scenario, scores: ScenarioScores | None
 ) -> AgentCentricScenario | None:
@@ -116,7 +102,7 @@ def prepare_scored(
 ) -> PreparedScenario | None:
     """Scored visualization: compute features -> scores and render the scene score."""
     del visualizer, model_output
-    scenario, scores = _compute_scores(processor, scenario)
+    scores = processor.compute_scores(scenario)
     return PreparedScenario(scenario, scores=scores)
 
 
