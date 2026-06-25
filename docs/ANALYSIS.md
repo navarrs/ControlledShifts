@@ -103,6 +103,36 @@ overall-mean row giving the per-metric mean across the entire sweep. Because the
 consuming LaTeX document must load `\usepackage[table]{xcolor}`.
 
 
+## Unshifted-Generalization Analysis
+
+The file `configs/analysis/unshifted_generalization.yaml` configures a complementary study where the training data is
+*not* subjected to any artificial shift (it trains/validates on the non-overlapping `mini` subset). Instead of a
+seen/unseen pair per benchmark, there is a single in-distribution `reference` split (mini-validation) and a flat list of
+evaluation `benchmarks`; every benchmark's gap is measured relative to that one reference:
+
+```yaml
+reference:
+  name: Mini-Val
+  split: "val/waymo-mini-id"
+benchmarks:
+  - mini_test: {name: Mini-Test, split: "test/waymo-mini-ood"}
+  - causal_agents_hard: {name: CausalAgentsHard, split: "test/waymo-remove-noncausal-hard-testing"}
+  # ...
+```
+
+Run it as:
+```bash
+uv run -m controlledshifts.run_analysis analysis=unshifted_generalization
+```
+
+It writes a vertical per-benchmark LaTeX table to `<output_path>/results.tex` (a reference block of plain absolute
+values followed by one block per benchmark whose cells are `value (gap%)` vs the reference, each block ending in a gray
+mean row and the table closing with a gray overall-mean row), a grouped value bar chart `benchmark_values.png` (the
+reference benchmark is hatched), and a benchmark x model gap heatmap `gap_heatmap.png` (red = worse). The console prints
+the per-benchmark mean gap and flags the worst benchmark. As above, the table uses `\rowcolor`, so the consuming LaTeX
+document must load `\usepackage[table]{xcolor}` (and `\usepackage{multirow}`).
+
+
 ## Robustness Score Analysis
 
 The file `configs/analysis/robustness.yaml` reduces the same combined results file into comparable *robustness
@@ -129,14 +159,21 @@ epsilon/clip knobs and no regression — the axes are exact log ratios. Each is 
 
 ### Combined ranking score
 
-To rank models by a single value, the two axes are reduced to a **combined** score. Their raw sum is deliberately *not*
-used: it telescopes to `seen + shift = log(ref_unseen / model_unseen)`, which ranks models purely by OOD error (the
-reference cancels to an additive constant) and adds nothing beyond the OOD numbers. Instead the combined score uses
-**standardized equal-influence**: each axis is z-scored across the model cohort (per metric, NaN-aware), the two
-z-scores are summed, and the per-model mean across metrics is the ranking value. This gives both axes — and every
-metric — equal say regardless of their natural spread. The trade-off is that the combined score is **cohort-relative**:
-`0` is the cohort average (not the reference), and scores recenter if the set of models changes. It is a ranking tool,
-not an absolute metric.
+To rank models by a single value, the two axes are reduced — within the same reference frame — to a `combined` score
+that is the per-metric geometric mean:
+
+```
+combined_metric = sqrt(id_score · ood_score)
+Combined        = mean(combined_metric across metrics)
+```
+
+`Combined` is NaN-safe (a non-positive or missing axis drops the cell). The geometric mean does both jobs at once: its
+absolute level rewards quality, and because it punishes ID/OOD imbalance it penalizes shift degradation — so a single
+frame captures both, with no second reference. `1.0` means on par with the reference. Under `naive_relative` this
+demotes the Naive baseline (pinned at `1.0`, since it is its own reference) and keeps a model genuinely worse than Naive
+below it — this is the downstream-performance ranking. Under `uniform_relative` the combined is a **stability** view:
+the reference is the model's own Uniform row, so the most *consistent* model (the input-agnostic Naive) ranks high
+there, as expected for a self-relative stability score rather than a performance ranking.
 
 Run the analysis as:
 ```bash
@@ -144,12 +181,13 @@ uv run -m controlledshifts.run_analysis analysis=robustness
 ```
 
 For each reference mode it writes, under `<output_path>/<mode>/`:
-- a radar plot, CSV and LaTeX table for each axis (`seen_robustness_*`, `shift_robustness_*`);
-- a `robustness_decomposition.png` scatter — one panel per metric placing each model at
-  `(seen_robustness_score, shift_robustness_score)`, with the reference at the origin; the upper-right quadrant is both
-  better in-distribution and more shift-robust than the reference;
-- the combined ranking as a sorted bar chart (`combined_robustness_ranking.png`, best first) plus its CSV and LaTeX
-  table (`combined_robustness_scores.*`).
+- a radar plot, CSV and LaTeX table for each axis (`id_score_*`, `ood_score_*`), with a dashed `1.0`
+  reference ring;
+- a `score_decomposition.png` scatter — one panel per metric placing each model at
+  `(id_score, ood_score)`, with the reference at `(1, 1)`; the upper-right quadrant beats the reference on
+  both ID and OOD, and the dashed `y = x` diagonal marks "degrades like the reference" (above it = more shift-robust);
+- the combined robustness ranking as a sorted bar chart (`combined_robustness_ranking.png`, best first) plus its CSV and
+  LaTeX table (`combined_robustness_scores.*`).
 
 
 ## Causal Agent Distribution Analysis

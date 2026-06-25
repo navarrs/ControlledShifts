@@ -29,14 +29,16 @@ MODEL_NAME_MAP = {
     "mtr": "MTR",
     "safe-wayformer": "Safe-Wayformer",
     "naive": "Naive",
+    "cvm": "CVM",
 }
 
 MODEL_COLOR_MAP = {
     "Naive": "#000000",
-    "AutoBot": "#FF7F50",
-    "SceneTransformer": "#CD5C5C",
-    "Wayformer": "#1E90FF",
-    "MTR": "#9370DB",
+    "AutoBot": "#FFA358",
+    "SceneTransformer": "#FF705D",
+    "Wayformer": "#5EAEFE",
+    "MTR": "#B774DE",
+    "CVM": "#5AD495",
 }
 
 SPLIT_COLOR_MAP = {
@@ -77,6 +79,16 @@ SPLIT_NAME_MAP = {
 def relative_gap_pct(value: float | NDArray, reference: float | NDArray) -> float | NDArray:
     """Compute ``(value - reference) / |reference| * 100``. Works for scalars and numpy arrays."""
     return ((value - reference) / (np.abs(reference) + EPSILON)) * 100
+
+
+def model_colors(models: pd.Index | NDArray, colormap: str) -> list[str | tuple[float, float, float]]:
+    """Per-model colors aligned to ``models``, using the fixed :data:`MODEL_COLOR_MAP` where available.
+
+    Models without a fixed color fall back to the configured ``colormap`` palette (assigned in order among the
+    unmapped models), so the Naive baseline stays black and every model keeps the same color across plots.
+    """
+    fallback = iter(sns.color_palette(colormap, sum(model not in MODEL_COLOR_MAP for model in models)))
+    return [MODEL_COLOR_MAP[model] if model in MODEL_COLOR_MAP else next(fallback) for model in models]
 
 
 def set_yaxis_limits(

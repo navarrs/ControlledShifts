@@ -13,3 +13,6 @@ val_sources:
 
 test_sources:
   - {variant: mini, split_json: mini, split: testing, tag: mini-ood}
+  - {variant: base, split_json: ego_safeshift, split: testing, tag: ego-safeshift-ood}
+  - {variant: base, split_json: environments, split: testing, tag: environments-ood}
+  - {variant: remove_noncausal, split_json: causal_agents_hard, split: testing, tag: remove-noncausal-hard-testing}
