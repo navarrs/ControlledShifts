@@ -45,7 +45,7 @@ import seaborn as sns
 from numpy.typing import NDArray
 from omegaconf import DictConfig
 
-from controlledshifts.utils.analysis.common import METRIC_NAME_MAP, MODEL_COLOR_MAP, MODEL_NAME_MAP
+from controlledshifts.utils.analysis.common import METRIC_NAME_MAP, MODEL_NAME_MAP, model_colors
 from controlledshifts.utils.analysis.distribution_shift import build_benchmark_df
 from controlledshifts.utils.constants import EPSILON
 from controlledshifts.utils.plotting import set_analysis_theme
@@ -84,16 +84,6 @@ def _set_titles(fig: plt.Figure, title: str, subtitle: str) -> None:
     """
     fig.suptitle(title, fontsize=16, fontweight="bold")
     fig.text(0.5, 0.93, subtitle, ha="center", va="top", fontsize=11, color="dimgray")
-
-
-def _model_colors(models: pd.Index, colormap: str) -> list[str | tuple[float, float, float]]:
-    """Per-model colors aligned to ``models``, using the fixed :data:`MODEL_COLOR_MAP` where available.
-
-    Models without a fixed color fall back to the configured ``colormap`` palette (assigned in order among the
-    unmapped models), so the Naive baseline stays black and every model keeps the same color across plots.
-    """
-    fallback = iter(sns.color_palette(colormap, sum(model not in MODEL_COLOR_MAP for model in models)))
-    return [MODEL_COLOR_MAP[model] if model in MODEL_COLOR_MAP else next(fallback) for model in models]
 
 
 def _score(model: float, ref: float) -> float:
@@ -354,7 +344,7 @@ def _plot_score_radar(  # noqa: PLR0913
     angles = np.linspace(0, 2 * np.pi, len(metrics), endpoint=False).tolist()
     closed_angles = [*angles, angles[0]]
 
-    palette = _model_colors(scores_df.index, colormap)
+    palette = model_colors(scores_df.index, colormap)
     fig = plt.figure(figsize=(11, 9))
     ax = fig.add_subplot(111, polar=True)
     ax.set_theta_offset(np.pi / 2)
@@ -531,7 +521,7 @@ def _plot_robustness_decomposition(  # noqa: PLR0913
     margin = max(hi - lo, EPSILON) * 0.1
     lower, upper = max(0.0, lo - margin), hi + margin
 
-    palette = _model_colors(id_df.index, colormap)
+    palette = model_colors(id_df.index, colormap)
     n_cols = min(3, len(panels))
     n_rows = math.ceil(len(panels) / n_cols)
     fig, axes = plt.subplots(
@@ -612,7 +602,7 @@ def _plot_combined_ranking(  # noqa: PLR0913
     if ranking.empty:
         return
 
-    colors = _model_colors(ranking.index, colormap)
+    colors = model_colors(ranking.index, colormap)
     fig, ax = plt.subplots(figsize=(9, 0.7 * len(ranking) + 2))
     ax.barh(list(ranking.index), ranking.to_numpy(), color=colors, edgecolor="black", linewidth=0.8, alpha=0.9)
     ax.axvline(1.0, color="dimgray", linestyle="--", linewidth=1.0)
