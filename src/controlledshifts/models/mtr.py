@@ -27,7 +27,7 @@ from omegaconf import DictConfig
 from controlledshifts.models.base_model import BaseModel
 from controlledshifts.models.components.mtr.mtr_decoder import MTRDecoder
 from controlledshifts.models.components.mtr.mtr_encoder import MTREncoder
-from controlledshifts.schemas.output_schemas import ModelOutput, ScenarioEmbedding, TrajectoryDecoderOutput
+from controlledshifts.schemas import ModelOutput, ScenarioEmbedding, TrajectoryDecoderOutput
 from controlledshifts.utils import save_cache
 from controlledshifts.utils.constants import ModelStatus
 

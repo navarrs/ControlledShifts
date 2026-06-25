@@ -7,7 +7,7 @@ from torch import nn
 
 from controlledshifts.models.base_model import BaseModel
 from controlledshifts.models.components import common
-from controlledshifts.schemas.output_schemas import ModelOutput, ScenarioEmbedding, TrajectoryDecoderOutput
+from controlledshifts.schemas import ModelOutput, ScenarioEmbedding, TrajectoryDecoderOutput
 
 
 class AutoBot(BaseModel):

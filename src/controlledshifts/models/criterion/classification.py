@@ -4,7 +4,7 @@ import torch
 from omegaconf import DictConfig, ListConfig
 
 from controlledshifts.models.criterion.base_criterion import Criterion
-from controlledshifts.schemas.output_schemas import ModelOutput
+from controlledshifts.schemas import ModelOutput
 
 
 class SafetyClassification(Criterion):

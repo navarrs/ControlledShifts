@@ -37,6 +37,7 @@ import pyrootutils
 from omegaconf import DictConfig
 
 from controlledshifts import utils
+from controlledshifts.utils import analysis
 from controlledshifts.utils.plotting import configure_fonts
 
 
@@ -47,13 +48,13 @@ pyrootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
 # Maps the selected ``analysis`` config-group option (its ``analysis_name``) to its runner.
 _ANALYSES: dict[str, Callable[[DictConfig, Logger, Path], None]] = {
-    "distribution_shift": utils.run_distribution_shift_analysis,
-    "unshifted_generalization": utils.run_unshifted_generalization_analysis,
-    "robustness": utils.run_robustness_scores_analysis,
-    "causal_distribution": utils.run_causal_distribution_analysis,
-    "score_distribution": utils.run_score_distribution_analysis,
-    "environments": utils.run_environments_analysis,
-    "scenario_overlap": utils.run_scenario_overlap_analysis,
+    "distribution_shift": analysis.run_distribution_shift_analysis,
+    "unshifted_generalization": analysis.run_unshifted_generalization_analysis,
+    "robustness": analysis.run_robustness_scores_analysis,
+    "causal_distribution": analysis.run_causal_distribution_analysis,
+    "score_distribution": analysis.run_score_distribution_analysis,
+    "environments": analysis.run_environments_analysis,
+    "scenario_overlap": analysis.run_scenario_overlap_analysis,
 }
 
 

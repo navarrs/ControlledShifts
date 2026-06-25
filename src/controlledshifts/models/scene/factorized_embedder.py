@@ -6,7 +6,7 @@ from torch import nn
 from controlledshifts.models.components import common
 from controlledshifts.models.components.cross_attention import CrossAttentionBlock
 from controlledshifts.models.components.self_attention import FactorizedSelfAttentionBlock
-from controlledshifts.schemas.output_schemas import ScenarioEmbedding
+from controlledshifts.schemas import ScenarioEmbedding
 
 
 class FactorizedEmbedder(nn.Module):

@@ -9,7 +9,7 @@ import torch.nn.functional as F  # noqa: N812
 from torch import nn
 
 from controlledshifts.models.components import common
-from controlledshifts.schemas.output_schemas import TrajectoryDecoderOutput
+from controlledshifts.schemas import TrajectoryDecoderOutput
 
 
 class TrajectoryDecoder(nn.Module):

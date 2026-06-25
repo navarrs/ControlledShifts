@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from omegaconf import DictConfig
 from torch import Tensor, nn
 
-from controlledshifts.schemas.output_schemas import ModelOutput
+from controlledshifts.schemas import ModelOutput
 
 
 class Criterion(nn.Module, ABC):
