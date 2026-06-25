@@ -9,7 +9,7 @@ from torch import nn
 
 from controlledshifts.models.components import common
 from controlledshifts.models.components.perceiver_io import PerceiverDecoder, PerceiverEncoder, TrainableQueryProvider
-from controlledshifts.schemas.output_schemas import ScenarioEmbedding
+from controlledshifts.schemas import ScenarioEmbedding
 
 
 class PerceiverEmbedder(nn.Module):

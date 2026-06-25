@@ -5,7 +5,7 @@ from omegaconf import DictConfig
 from torch import nn
 
 from controlledshifts.models.base_model import BaseModel
-from controlledshifts.schemas.output_schemas import ModelOutput, ScenarioEmbedding, TrajectoryDecoderOutput
+from controlledshifts.schemas import ModelOutput, ScenarioEmbedding, TrajectoryDecoderOutput
 from controlledshifts.utils.data_utils import interpolate_polyline_at_arclength, project_point_to_polylines
 
 
