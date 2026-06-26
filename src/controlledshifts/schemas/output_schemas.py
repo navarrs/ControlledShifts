@@ -44,41 +44,6 @@ class CausalOutput(BaseModel):  # pyright: ignore[reportUntypedBaseClass]
     causal_mask: Tensor[TorchTensor, Any, Float] | None = None
 
 
-class SafetyOutput(BaseModel):  # pyright: ignore[reportUntypedBaseClass]
-    """Encapsulates safety classification output values.
-
-    Attributes:
-        individual_safety_gt (TorchTensor(Float)): contains categories in {0-N}, where 1 to N are the different
-            safety levels. Values of 0 indicate a score below the lowest threshold; values above N indicate a score
-            above the highest threshold. Invalid or padded entries are indicated by individual_safety_mask.
-        individual_safety_pred (TorchTensor(Float)): contains the predicted tensor of safety levels.
-        individual_safety_pred_probs (TorchTensor(Float)): contains the predicted tensor as a probability vector.
-        individual_safety_logits (TorchTensor(Float)): contains the logit values before applying a Softmax.
-        individual_safety_mask (TorchTensor(Float)): boolean-valued float mask (1.0 = valid, 0.0 = invalid/padded).
-            Invalid entries have no valid scorer output or are padding agents.
-        interaction_safety_gt (TorchTensor(Float)): contains categories in {0-N}, where 1 to N are the different
-            safety levels. Values of 0 indicate a score below the lowest threshold; values above N indicate a score
-            above the highest threshold. Invalid or padded entries are indicated by interaction_safety_mask.
-        interaction_safety_pred (TorchTensor(Float)): contains the predicted tensor of safety levels.
-        interaction_safety_pred_probs (TorchTensor(Float)): contains the predicted tensor as a probability vector.
-        interaction_safety_logits (TorchTensor(Float)): contains the logit values before applying a Softmax.
-        interaction_safety_mask (TorchTensor(Float)): boolean-valued float mask (1.0 = valid, 0.0 = invalid/padded).
-            Invalid entries have no valid scorer output or are padding agents.
-    """
-
-    individual_safety_gt: Tensor[TorchTensor, Any, Float]
-    individual_safety_pred: Tensor[TorchTensor, Any, Float]
-    individual_safety_pred_probs: Tensor[TorchTensor, Any, Float]
-    individual_safety_logits: Tensor[TorchTensor, Any, Float] | None = None
-    individual_safety_mask: Tensor[TorchTensor, Any, Float] | None = None
-
-    interaction_safety_gt: Tensor[TorchTensor, Any, Float]
-    interaction_safety_pred: Tensor[TorchTensor, Any, Float]
-    interaction_safety_pred_probs: Tensor[TorchTensor, Any, Float]
-    interaction_safety_logits: Tensor[TorchTensor, Any, Float] | None = None
-    interaction_safety_mask: Tensor[TorchTensor, Any, Float] | None = None
-
-
 class ScenarioEmbedding(BaseModel):  # pyright: ignore[reportUntypedBaseClass]
     """Encapsulates the output values of the ScenarioEmbedded defined in 'models/scene/embedder.py'.
 
@@ -113,7 +78,6 @@ class ModelOutput(BaseModel):  # pyright: ignore[reportUntypedBaseClass]
     Attributes:
         scenario_embedding (ScenarioEmbedding): the scenario embedding output values.
         trajectory_decoder_output (TrajectoryDecoderOutput | None): the trajectory decoder output values.
-        safety_output (SafetyOutput | None): the safety output values.
         causal_output (CausalOutput | None): the causal output values.
         history_ground_truth (TorchTensor(Float)): the ground truth history trajectories.
         future_ground_truth (TorchTensor(Float)): the ground truth future trajectories.
@@ -126,7 +90,6 @@ class ModelOutput(BaseModel):  # pyright: ignore[reportUntypedBaseClass]
 
     scenario_embedding: ScenarioEmbedding
     trajectory_decoder_output: TrajectoryDecoderOutput | None = None
-    safety_output: SafetyOutput | None = None
     causal_output: CausalOutput | None = None
 
     # Meta Information

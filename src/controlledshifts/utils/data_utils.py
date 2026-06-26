@@ -791,7 +791,6 @@ def resplit_batch(batch: output.ModelOutput) -> dict[str, output.ModelOutput]:
     # Unpack model output
     batch_scenario_embedding = batch.scenario_embedding
     batch_trajectory_output = batch.trajectory_decoder_output
-    batch_safety_output = batch.safety_output
     batch_causal_output = batch.causal_output
     batch_history_gt = batch.history_ground_truth.value
     batch_future_gt = batch.future_ground_truth.value
@@ -820,19 +819,6 @@ def resplit_batch(batch: output.ModelOutput) -> dict[str, output.ModelOutput]:
                 causal_pred_probs=batch_causal_output.causal_pred_probs.value[n].detach().cpu(),  # pyright: ignore[reportArgumentType]
                 causal_logits=batch_causal_output.causal_logits.value[n].detach().cpu(),  # pyright: ignore[reportArgumentType, reportOptionalMemberAccess]
             )
-        safety_output = None
-        if batch_safety_output is not None:
-            safety_output = output.SafetyOutput(
-                individual_safety_gt=batch_safety_output.individual_safety_gt.value[n].detach().cpu(),  # pyright: ignore[reportArgumentType]
-                individual_safety_pred=batch_safety_output.individual_safety_pred.value[n].detach().cpu(),  # pyright: ignore[reportArgumentType]
-                individual_safety_pred_probs=batch_safety_output.individual_safety_pred_probs.value[n].detach().cpu(),  # pyright: ignore[reportArgumentType]
-                individual_safety_logits=batch_safety_output.individual_safety_logits.value[n].detach().cpu(),  # pyright: ignore[reportArgumentType, reportOptionalMemberAccess]
-                interaction_safety_gt=batch_safety_output.interaction_safety_gt.value[n].detach().cpu(),  # pyright: ignore[reportArgumentType]
-                interaction_safety_pred=batch_safety_output.interaction_safety_pred.value[n].detach().cpu(),  # pyright: ignore[reportArgumentType]
-                interaction_safety_pred_probs=batch_safety_output.interaction_safety_pred_probs.value[n].detach().cpu(),  # pyright: ignore[reportArgumentType]
-                interaction_safety_logits=batch_safety_output.interaction_safety_logits.value[n].detach().cpu(),  # pyright: ignore[reportArgumentType, reportOptionalMemberAccess]
-            )
-
         scenario_scores = None
         if batch_scene_score is not None:
             scenario_scores = output.ScenarioScores(
@@ -846,7 +832,6 @@ def resplit_batch(batch: output.ModelOutput) -> dict[str, output.ModelOutput]:
         batch_resplit[scenario_id] = output.ModelOutput(
             scenario_embedding=scenario_embedding,
             trajectory_decoder_output=trajectory_decoder_output,
-            safety_output=safety_output,
             causal_output=causal_output,
             history_ground_truth=batch_history_gt[n].detach().cpu(),  # pyright: ignore[reportArgumentType]
             future_ground_truth=batch_future_gt[n].detach().cpu(),  # pyright: ignore[reportArgumentType]
