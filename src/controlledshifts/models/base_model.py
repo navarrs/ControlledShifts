@@ -14,7 +14,6 @@ from pytorch_lightning import LightningModule
 from controlledshifts.schemas.output_schemas import (
     CausalOutput,
     ModelOutput,
-    SafetyOutput,
     ScenarioScores,
     TrajectoryDecoderOutput,
 )
@@ -509,39 +508,6 @@ class BaseModel(LightningModule, ABC):
         }
 
     @staticmethod
-    def _compute_safety_metrics(safety_output: SafetyOutput) -> dict[str, npt.NDArray[np.float64]]:
-        """Computes safety metrics on model outputs.
-
-        Args:
-            safety_output: safety output from the model's forward pass.
-
-        Returns:
-            dict[str, npt.NDArray[np.float64]]: dictionary containing computed safety metrics
-        """
-        individual_labels = safety_output.individual_safety_gt.value.squeeze(-1)
-        individual_predictions = safety_output.individual_safety_pred.value
-        num_classes = safety_output.individual_safety_pred_probs.value.shape[-1]
-        ind_precision, ind_recall, ind_f1_score = metric_utils.compute_multiclass_accuracy(
-            individual_labels, individual_predictions, num_classes
-        )
-
-        interaction_labels = safety_output.interaction_safety_gt.value.squeeze(-1)
-        interaction_predictions = safety_output.interaction_safety_pred.value
-        num_classes = safety_output.interaction_safety_pred_probs.value.shape[-1]
-        int_precision, int_recall, int_f1_score = metric_utils.compute_multiclass_accuracy(
-            interaction_labels, interaction_predictions, num_classes
-        )
-
-        return {
-            "individualPrecision": ind_precision.cpu().detach().numpy(),
-            "individualRecall": ind_recall.cpu().detach().numpy(),
-            "individualF1Score": ind_f1_score.cpu().detach().numpy(),
-            "interactionPrecision": int_precision.cpu().detach().numpy(),
-            "interactionRecall": int_recall.cpu().detach().numpy(),
-            "interactionF1Score": int_f1_score.cpu().detach().numpy(),
-        }
-
-    @staticmethod
     def compute_metrics(
         inputs: dict[str, Any], outputs: ModelOutput, status: ModelStatus
     ) -> dict[str, npt.NDArray[np.float64]]:
@@ -568,11 +534,6 @@ class BaseModel(LightningModule, ABC):
         if causal_output is not None:
             causal_metrics = BaseModel._compute_causal_metrics(causal_output)
             metric_dict.update(causal_metrics)
-
-        safety_output = outputs.safety_output
-        if safety_output is not None:
-            safety_metrics = BaseModel._compute_safety_metrics(safety_output)
-            metric_dict.update(safety_metrics)
 
         return metric_dict
 
