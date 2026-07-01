@@ -113,10 +113,11 @@ def _build_embedding_frame(config: DictConfig, log: Logger, output_path: Path) -
     return embedding_df
 
 
-def _plot_tsne(frame: pd.DataFrame, output_path: Path) -> None:
+def _plot_tsne(frame: pd.DataFrame, output_path: Path, *, show_axes: bool) -> None:
     """Saves the TSNE embedding coloured by cluster (left) and by split (right), side by side, to ``tsne.png``.
 
-    The two panels share the y-axis and each carries its own legend below the panel.
+    The two panels share the y-axis and each carries its own legend below the panel. When ``show_axes`` is false the
+    axis ticks, spines and labels are hidden.
     """
     labels = frame["cluster_label"].to_numpy()
     n_clusters = int(labels.max()) + 1
