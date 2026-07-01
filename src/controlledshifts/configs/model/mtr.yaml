@@ -96,7 +96,7 @@ config:
   lr_clip: 0.000001
 
   # MTR-specific hyperparameters that are not shared with the other models.
-  max_epochs: 50
+  max_epochs: 100
   grad_clip_norm: 1000.0 # large value to effectively disable gradient clipping
   max_num_agents: 32
   max_num_roads: 384

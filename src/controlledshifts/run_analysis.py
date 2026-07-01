@@ -18,7 +18,7 @@ Runs one of the analyses over a single combined results file, selected via the `
     uv run -m controlledshifts.run_analysis analysis=score_distribution
 
     # NetLSD-descriptor clustering for the environments benchmark (TSNE by cluster/split + silhouette plot).
-    uv run -m controlledshifts.run_analysis analysis=environments
+    uv run -m controlledshifts.run_analysis analysis=environments_distribution
 
     # Pairwise scenario overlap between benchmarks per split (Jaccard heatmaps + CSV).
     uv run -m controlledshifts.run_analysis analysis=scenario_overlap
@@ -53,7 +53,7 @@ _ANALYSES: dict[str, Callable[[DictConfig, Logger, Path], None]] = {
     "robustness": analysis.run_robustness_scores_analysis,
     "causal_distribution": analysis.run_causal_distribution_analysis,
     "score_distribution": analysis.run_score_distribution_analysis,
-    "environments": analysis.run_environments_analysis,
+    "environments_distribution": analysis.run_environments_distribution_analysis,
     "scenario_overlap": analysis.run_scenario_overlap_analysis,
 }
 

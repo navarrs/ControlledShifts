@@ -26,7 +26,7 @@ from sklearn.manifold import TSNE
 from sklearn.metrics import silhouette_samples
 
 from controlledshifts.benchmarks.environments import load_descriptor_cache
-from controlledshifts.utils.analysis.common import SPLIT_COLOR_MAP, SPLIT_ORDER
+from controlledshifts.utils.analysis.common import SPLIT_COLOR_MAP, SPLIT_LABELS, SPLIT_ORDER, TEXT_COLOR
 from controlledshifts.utils.plotting import set_analysis_theme
 
 
@@ -114,15 +114,16 @@ def _build_embedding_frame(config: DictConfig, log: Logger, output_path: Path) -
 
 
 def _plot_tsne(frame: pd.DataFrame, output_path: Path) -> None:
-    """Saves the TSNE embedding coloured by cluster (top) and by split (bottom), stacked vertically, to ``tsne.png``.
+    """Saves the TSNE embedding coloured by cluster (left) and by split (right), side by side, to ``tsne.png``.
 
-    Each subplot carries its own legend.
+    The two panels share the y-axis and each carries its own legend below the panel.
     """
     labels = frame["cluster_label"].to_numpy()
     n_clusters = int(labels.max()) + 1
     cmap = get_cmap("tab20", n_clusters)
 
-    fig, (ax_cluster, ax_split) = plt.subplots(2, 1, figsize=(10, 16))
+    fig, (ax_cluster, ax_split) = plt.subplots(1, 2, figsize=(20, 8), sharey=True)
+    fig.suptitle("t-SNE of NetLSD Descriptors", color=TEXT_COLOR)
 
     for cluster_id in range(n_clusters):
         mask = labels == cluster_id
@@ -136,10 +137,20 @@ def _plot_tsne(frame: pd.DataFrame, output_path: Path) -> None:
                 linewidths=0,
                 label=f"C{cluster_id}",
             )
-    ax_cluster.set_xlabel("t-SNE 1")
-    ax_cluster.set_ylabel("t-SNE 2")
-    ax_cluster.set_title("Environment clusters (t-SNE of NetLSD descriptors)")
-    ax_cluster.legend(loc="upper left", bbox_to_anchor=(1.02, 1), fontsize=9, framealpha=0.8, markerscale=3)
+    ax_cluster.set_xlabel("t-SNE 1", color=TEXT_COLOR)
+    ax_cluster.set_ylabel("t-SNE 2", color=TEXT_COLOR)
+    ax_cluster.set_title("Environment clusters", color=TEXT_COLOR)
+    ax_cluster.tick_params(colors=TEXT_COLOR)
+    ax_cluster.grid(visible=False)
+    ax_cluster.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.12),
+        ncol=min(n_clusters, 10),
+        fontsize=12,
+        framealpha=0.8,
+        markerscale=3,
+        labelcolor=TEXT_COLOR,
+    )
 
     for split in SPLIT_ORDER:
         mask = frame["output_set"] == split
@@ -151,14 +162,23 @@ def _plot_tsne(frame: pd.DataFrame, output_path: Path) -> None:
                 s=12,
                 alpha=0.6,
                 linewidths=0,
-                label=split,
+                label=SPLIT_LABELS[split],
             )
-    ax_split.set_xlabel("t-SNE 1")
-    ax_split.set_ylabel("t-SNE 2")
-    ax_split.set_title("Benchmark splits (t-SNE of NetLSD descriptors)")
-    ax_split.legend(loc="upper left", bbox_to_anchor=(1.02, 1), framealpha=0.8, markerscale=3)
+    ax_split.set_xlabel("t-SNE 1", color=TEXT_COLOR)
+    ax_split.set_title("Benchmark splits", color=TEXT_COLOR)
+    ax_split.tick_params(colors=TEXT_COLOR)
+    ax_split.grid(visible=False)
+    ax_split.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.12),
+        ncol=len(SPLIT_ORDER),
+        framealpha=0.8,
+        markerscale=3,
+        labelcolor=TEXT_COLOR,
+    )
 
     fig.tight_layout()
+    fig.subplots_adjust(wspace=0.05)
     output_file = output_path / "tsne.png"
     fig.savefig(output_file, dpi=300, bbox_inches="tight")
     plt.close(fig)
@@ -197,7 +217,7 @@ def _plot_silhouette(frame: pd.DataFrame, output_path: Path) -> None:
     print(f"✓ Plot saved as '{output_file}'")
 
 
-def run_environments_analysis(config: DictConfig, log: Logger, output_path: Path) -> None:
+def run_environments_distribution_analysis(config: DictConfig, log: Logger, output_path: Path) -> None:
     """Visualizes the environments benchmark clustering: TSNE by cluster, TSNE by split, and silhouette scores.
 
     The plots are driven by the cached ``environments_embedding.csv``: when it already exists (and ``overwrite`` is

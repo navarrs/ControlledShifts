@@ -179,14 +179,14 @@ def plot_heatmap(  # noqa: PLR0913
 # quantity-to-label mapping is passed in by the caller.
 
 SPLIT_ORDER: tuple[str, ...] = ("training", "validation", "testing")
-_SPLIT_LABELS: dict[str, str] = {"training": "Train", "validation": "Val", "testing": "Test"}
+SPLIT_LABELS: dict[str, str] = {"training": "Train", "validation": "Val", "testing": "Test"}
 
 _TITLE_FONTSIZE = 16
 _LABEL_FONTSIZE = 15
 _TICK_FONTSIZE = 13
 _SUPTITLE_FONTSIZE = 17
 _LEGEND_FONTSIZE = 14
-_TEXT_COLOR = "#808080"
+TEXT_COLOR = "#808080"
 
 
 @dataclass(frozen=True)
@@ -219,7 +219,7 @@ def _add_split_legend(fig: Figure, palette: list[str]) -> Legend:
         The attached legend.
     """
     handles = [
-        Patch(facecolor=color, edgecolor="none", label=_SPLIT_LABELS[split_key])
+        Patch(facecolor=color, edgecolor="none", label=SPLIT_LABELS[split_key])
         for split_key, color in zip(SPLIT_ORDER, palette, strict=False)
     ]
     legend = fig.legend(
@@ -229,10 +229,10 @@ def _add_split_legend(fig: Figure, palette: list[str]) -> Legend:
         bbox_to_anchor=(1.0, 0.5),
         fontsize=_LEGEND_FONTSIZE,
         title_fontsize=_LEGEND_FONTSIZE,
-        labelcolor=_TEXT_COLOR,
+        labelcolor=TEXT_COLOR,
         frameon=False,
     )
-    legend.get_title().set_color(_TEXT_COLOR)
+    legend.get_title().set_color(TEXT_COLOR)
     return legend
 
 
@@ -287,16 +287,16 @@ def plot_violin(long_df: pd.DataFrame, quantity: str, plot_config: SplitDistribu
             alpha=0.6,
             ax=ax,
         )
-        ax.set_title(benchmark, fontsize=_TITLE_FONTSIZE, color=_TEXT_COLOR)
+        ax.set_title(benchmark, fontsize=_TITLE_FONTSIZE, color=TEXT_COLOR)
         ax.set_xlabel("")
         ax.set_xticks(range(len(order)))
-        ax.set_xticklabels([_SPLIT_LABELS[split_key] for split_key in order])
+        ax.set_xticklabels([SPLIT_LABELS[split_key] for split_key in order])
         label = plot_config.quantity_labels[quantity] if ax is axes[0, 0] else ""
-        ax.set_ylabel(label, fontsize=_LABEL_FONTSIZE, color=_TEXT_COLOR)
-        ax.tick_params(labelsize=_TICK_FONTSIZE, colors=_TEXT_COLOR)
+        ax.set_ylabel(label, fontsize=_LABEL_FONTSIZE, color=TEXT_COLOR)
+        ax.tick_params(labelsize=_TICK_FONTSIZE, colors=TEXT_COLOR)
 
     title = f"{plot_config.quantity_labels[quantity]}{plot_config.title_suffix}"
-    suptitle = fig.suptitle(title, fontsize=_SUPTITLE_FONTSIZE, color=_TEXT_COLOR)
+    suptitle = fig.suptitle(title, fontsize=_SUPTITLE_FONTSIZE, color=TEXT_COLOR)
     legend = _add_split_legend(fig, plot_config.palette)
     fig.tight_layout()
     _center_suptitle_over_content(fig, suptitle, legend)
@@ -349,7 +349,7 @@ def plot_ridge(long_df: pd.DataFrame, quantity: str, plot_config: SplitDistribut
                 ax.text(
                     0.0,
                     0.15,
-                    _SPLIT_LABELS[split_key],
+                    SPLIT_LABELS[split_key],
                     transform=ax.transAxes,
                     ha="right",
                     va="bottom",
@@ -358,17 +358,17 @@ def plot_ridge(long_df: pd.DataFrame, quantity: str, plot_config: SplitDistribut
                     color=color_map[split_key],
                 )
             if row == 0:
-                ax.set_title(benchmark, fontsize=_TITLE_FONTSIZE, color=_TEXT_COLOR)
+                ax.set_title(benchmark, fontsize=_TITLE_FONTSIZE, color=TEXT_COLOR)
             if row == n_rows - 1:
-                ax.set_xlabel(plot_config.quantity_labels[quantity], fontsize=_LABEL_FONTSIZE, color=_TEXT_COLOR)
-                ax.tick_params(axis="x", labelsize=_TICK_FONTSIZE, colors=_TEXT_COLOR)
+                ax.set_xlabel(plot_config.quantity_labels[quantity], fontsize=_LABEL_FONTSIZE, color=TEXT_COLOR)
+                ax.tick_params(axis="x", labelsize=_TICK_FONTSIZE, colors=TEXT_COLOR)
             else:
                 ax.set_xlabel("")
                 ax.spines["bottom"].set_visible(False)
                 ax.tick_params(axis="x", length=0)
 
     title = f"{plot_config.quantity_labels[quantity]}{plot_config.title_suffix}"
-    fig.suptitle(title, fontsize=_SUPTITLE_FONTSIZE, color=_TEXT_COLOR)
+    fig.suptitle(title, fontsize=_SUPTITLE_FONTSIZE, color=TEXT_COLOR)
     fig.subplots_adjust(hspace=-0.25, top=0.9)
     output_file = plot_config.output_path / f"{quantity}_ridge.png"
     fig.savefig(output_file, dpi=300, bbox_inches="tight")
@@ -409,13 +409,13 @@ def plot_distribution_histogram(long_df: pd.DataFrame, quantity: str, plot_confi
             legend=False,
             ax=ax,
         )
-        ax.set_title(benchmark, fontsize=_TITLE_FONTSIZE, color=_TEXT_COLOR)
-        ax.set_xlabel(plot_config.quantity_labels[quantity], fontsize=_LABEL_FONTSIZE, color=_TEXT_COLOR)
-        ax.set_ylabel("Density" if ax is axes[0, 0] else "", fontsize=_LABEL_FONTSIZE, color=_TEXT_COLOR)
-        ax.tick_params(labelsize=_TICK_FONTSIZE, colors=_TEXT_COLOR)
+        ax.set_title(benchmark, fontsize=_TITLE_FONTSIZE, color=TEXT_COLOR)
+        ax.set_xlabel(plot_config.quantity_labels[quantity], fontsize=_LABEL_FONTSIZE, color=TEXT_COLOR)
+        ax.set_ylabel("Density" if ax is axes[0, 0] else "", fontsize=_LABEL_FONTSIZE, color=TEXT_COLOR)
+        ax.tick_params(labelsize=_TICK_FONTSIZE, colors=TEXT_COLOR)
 
     title = f"{plot_config.quantity_labels[quantity]}{plot_config.title_suffix}"
-    suptitle = fig.suptitle(title, fontsize=_SUPTITLE_FONTSIZE, color=_TEXT_COLOR)
+    suptitle = fig.suptitle(title, fontsize=_SUPTITLE_FONTSIZE, color=TEXT_COLOR)
     legend = _add_split_legend(fig, plot_config.palette)
     fig.tight_layout()
     _center_suptitle_over_content(fig, suptitle, legend)
