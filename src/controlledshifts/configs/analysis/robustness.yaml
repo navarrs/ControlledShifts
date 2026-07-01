@@ -25,16 +25,17 @@ benchmarks:
       unseen: "test/waymo-remove-noncausal-hard-testing"
   - ego_safeshift:
       name: EgoSafeShift
-      seen: "test/waymo-causal-ego-safeshift-id"
-      unseen: "test/waymo-causal-ego-safeshift-ood"
+      seen: "test/waymo-ego-safeshift-id"
+      unseen: "test/waymo-ego-safeshift-ood"
   - environments:
       name: Environments
       seen: "test/waymo-environments-id"
       unseen: "test/waymo-environments-ood"
 
 score:
-  # Which robustness scores to produce. naive_relative compares each model to the Naive baseline
-  # within a benchmark; uniform_relative compares each model to its own Uniform-benchmark performance.
+  # Which scaled-error scores to produce. naive_relative scales each model by the Naive baseline within a benchmark
+  # (downstream quality ranking); uniform_relative scales each model by its own Uniform-benchmark performance (shift
+  # stability). Each mode gets its own combined score = sqrt(id_score * ood_score).
   reference_modes: [naive_relative, uniform_relative]
   uniform_key: uniform # Benchmark key used as the uniform_relative reference.
-  aggregate: mean # Aggregation across benchmarks (mean|median); the Combined column always means across metrics.
+  aggregate: mean # Aggregation across benchmarks (mean|median); the combined always means across metrics.
