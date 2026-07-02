@@ -395,7 +395,7 @@ shared scenario IDs per split.
 
 # Sample Selection
 
-Sample selection produces a JSON blacklist of training scenarios to drop so a model can be retrained on a smaller data regime. The `drop` list is consumed by the dataset at train time (`controlledshifts.datasets.base_dataset`). Only `random_drop` is implemented today; the other `SampleSelection` strategies are scaffolded and raise `NotImplementedError` until ported. See `configs/sample_selection.yaml` for all options.
+Sample selection produces a JSON blacklist of training scenarios to drop so a model can be retrained on a smaller data regime. The `drop` list is consumed by the dataset at train time (`controlledshifts.datasets.base_dataset`). Available strategies: `random_drop` (model-free), and the embedding-based `kmeans_random_drop`, `simple_kmeans_cosine_drop`, `gumbel_kmeans_cosine_drop`, and `den_tp` (these read cached model outputs, so they need a train batch cache — pass `create_training_batch_cache=true` with a checkpoint, or point at an existing cache). See `configs/sample_selection.yaml` for all options.
 
 Generate a blacklist. Embedding-based strategies first cache the training-set model outputs with a pretrained checkpoint (`create_training_batch_cache=true`); `random_drop` only needs an existing cache:
 ```bash

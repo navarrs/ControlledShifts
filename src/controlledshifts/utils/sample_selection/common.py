@@ -1,5 +1,6 @@
-"""Shared helpers for sample selection strategies."""
+"""Shared helpers and the strategy enum for sample selection."""
 
+from enum import Enum
 from typing import Any
 
 import numpy as np
@@ -7,14 +8,24 @@ from numpy.random import Generator, default_rng
 from numpy.typing import NDArray
 
 
+class SampleSelection(Enum):
+    ALL = "all"
+    RANDOM_DROP = "random_drop"
+    KMEANS_RANDOM_DROP = "kmeans_random_drop"
+    SIMPLE_KMEANS_COSINE_DROP = "simple_kmeans_cosine_drop"
+    GUMBEL_KMEANS_COSINE_DROP = "gumbel_kmeans_cosine_drop"
+    DEN_TP = "den_tp"
+
+
 # Exponent used in Gumbel sorting for zero-weight samples - large enough to strongly deprioritize them without
 # completely zeroing out their probability via uniform**inf.
 _GUMBEL_LARGE_EXPONENT: float = 8.0
 
 
-def aggregate_selected_samples(selected_samples: dict[str, Any]) -> None:
-    """Aggregates the per-group (token or cluster) keep/drop sample IDs into a single keep and drop list. Mutates the
-    input dictionary in place.
+def aggregate_selected_samples(selected_samples: dict[Any, Any]) -> None:
+    """Aggregates the per-group (cluster or density-bin) keep/drop sample IDs into a single keep and drop list. Mutates
+    the input dictionary in place. Groups are keyed by their (int) label; the aggregate keep/drop/counts are added under
+    string keys, so the dict is intentionally heterogeneous.
 
     Args:
         selected_samples: a dictionary containing the sample selection results per group.

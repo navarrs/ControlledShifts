@@ -33,8 +33,8 @@ gen_experiment: no_model
 sample_selection_path: ${paths.experiment_cache_path}/sample_selection/${paths.tag}/${gen_experiment}
 
 # Strategies and retention percentages to sweep. selection_strategy / percentage_to_keep are the per-iteration values
-# set by the entrypoint. Only random_drop is implemented today; the rest are declared in the SampleSelection enum and
-# will be ported later.
+# set by the entrypoint. Available: random_drop (model-free), kmeans_random_drop, simple_kmeans_cosine_drop,
+# gumbel_kmeans_cosine_drop, den_tp (the embedding-based ones require a train batch cache).
 selection_strategies:
   - random_drop
 percentages_to_keep:

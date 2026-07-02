@@ -42,8 +42,6 @@ sample_selection_strategies_to_compare: [
   # 'simple_kmeans_cosine_drop',
   # 'gumbel_kmeans_cosine_drop',
   # 'den_tp',
-  # 'vocab_cluster_jaccard_drop',
-  # 'vocab_cluster_hamming_drop',
 ]
 
 lineplot_colormap: tab10

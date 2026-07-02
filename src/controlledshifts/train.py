@@ -19,7 +19,8 @@ from pytorch_lightning import Callback
 from torch.utils.data import DataLoader, Dataset
 
 from controlledshifts import utils
-from controlledshifts.utils.constants import DataSplits, SampleSelection
+from controlledshifts.utils.constants import DataSplits
+from controlledshifts.utils.sample_selection import SampleSelection
 
 
 if TYPE_CHECKING:

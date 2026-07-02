@@ -31,8 +31,8 @@ from torch.utils.data import DataLoader, Dataset
 
 from controlledshifts import utils
 from controlledshifts.schemas import ModelOutput
-from controlledshifts.utils import sample_selection
-from controlledshifts.utils.constants import DataSplits, SampleSelection
+from controlledshifts.utils.constants import DataSplits
+from controlledshifts.utils.sample_selection import SampleSelection, cluster, dentp, random_drop
 
 
 if TYPE_CHECKING:
@@ -74,6 +74,19 @@ def _load_training_scenario_ids(cfg: DictConfig) -> list[str]:
     return scenario_ids
 
 
+def _require_model_outputs(
+    model_outputs: dict[str, ModelOutput] | None, strategy: SampleSelection
+) -> dict[str, ModelOutput]:
+    """Returns the cached model outputs, or raises if an embedding-based strategy is run without them."""
+    if model_outputs is None:
+        error_message = (
+            f"Strategy '{strategy.value}' needs cached model outputs; run with create_training_batch_cache=true "
+            "and a valid ckpt_name."
+        )
+        raise ValueError(error_message)
+    return model_outputs
+
+
 def _run_sample_selection(
     config: DictConfig,
     scenario_ids: list[str],
@@ -91,37 +104,33 @@ def _run_sample_selection(
     selection_strategy = SampleSelection(config.selection_strategy)
     match selection_strategy:
         case SampleSelection.RANDOM_DROP:
-            selected_samples = sample_selection.random_selection(config, scenario_ids)
-        case (
-            SampleSelection.KMEANS_RANDOM_DROP
-            | SampleSelection.SIMPLE_KMEANS_COSINE_DROP
-            | SampleSelection.GUMBEL_KMEANS_COSINE_DROP
-            | SampleSelection.DEN_TP
-            | SampleSelection.VOCAB_CLUSTER_HAMMING_DROP
-            | SampleSelection.VOCAB_CLUSTER_JACCARD_DROP
-        ):
-            if model_outputs is None:
-                error_message = (
-                    f"Strategy '{selection_strategy.value}' needs cached model outputs; "
-                    "run with create_training_batch_cache=true and a valid ckpt_name."
-                )
-                raise ValueError(error_message)
-            error_message = f"Selection strategy '{selection_strategy.value}' is not yet ported."
-            raise NotImplementedError(error_message)
+            selected_samples = random_drop.random_selection(config, scenario_ids)
+        case SampleSelection.KMEANS_RANDOM_DROP:
+            outputs = _require_model_outputs(model_outputs, selection_strategy)
+            selected_samples = cluster.random_selection_per_cluster(config, outputs)
+        case SampleSelection.SIMPLE_KMEANS_COSINE_DROP:
+            config.sorting_strategy = "simple"
+            outputs = _require_model_outputs(model_outputs, selection_strategy)
+            selected_samples = cluster.cosine_selection_per_cluster(config, outputs)
+        case SampleSelection.GUMBEL_KMEANS_COSINE_DROP:
+            config.sorting_strategy = "gumbel"
+            outputs = _require_model_outputs(model_outputs, selection_strategy)
+            selected_samples = cluster.cosine_selection_per_cluster(config, outputs)
+        case SampleSelection.DEN_TP:
+            outputs = _require_model_outputs(model_outputs, selection_strategy)
+            selected_samples = dentp.dentp_selection(config, outputs)
         case _:
             error_message = f"Unsupported selection strategy: {selection_strategy}"
             raise ValueError(error_message)
 
+    # Cluster/dentp strategies return per-group breakdowns alongside the aggregate; write only the aggregate keep/drop
+    # (the contract base_dataset consumes), keeping every strategy's output shape identical.
+    result = {key: selected_samples[key] for key in ("keep", "num_to_keep", "drop", "num_to_drop")}
     output_filepath = output_path / f"sample_selection_{selection_strategy.value}_{config.percentage_to_keep}.json"
     output_filepath.parent.mkdir(parents=True, exist_ok=True)
     with output_filepath.open("w") as f:
-        json.dump(selected_samples, f, indent=2)
-    log.info(
-        "Wrote %s (keep=%s, drop=%s)",
-        output_filepath,
-        selected_samples["num_to_keep"],
-        selected_samples["num_to_drop"],
-    )
+        json.dump(result, f, indent=2)
+    log.info("Wrote %s (keep=%s, drop=%s)", output_filepath, result["num_to_keep"], result["num_to_drop"])
 
 
 @utils.task_wrapper

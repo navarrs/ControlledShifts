@@ -70,8 +70,6 @@ VALID_STRATEGIES=(
     simple_kmeans_cosine_drop
     gumbel_kmeans_cosine_drop
     den_tp
-    vocab_cluster_hamming_drop
-    vocab_cluster_jaccard_drop
 )
 
 # Shared selection-path template. Single-quoted so the '${...}' stay as Hydra interpolations resolved per benchmark.

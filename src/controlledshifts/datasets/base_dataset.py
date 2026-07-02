@@ -21,7 +21,8 @@ from torch.utils.data import Dataset
 
 from controlledshifts.datasets.agent_centric_processor import processing_profile, processing_profile_hash
 from controlledshifts.utils import pylogger
-from controlledshifts.utils.constants import DataSplits, SampleSelection
+from controlledshifts.utils.constants import DataSplits
+from controlledshifts.utils.sample_selection import SampleSelection
 
 
 _LOGGER = pylogger.get_pylogger(__name__)
