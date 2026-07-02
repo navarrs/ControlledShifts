@@ -392,6 +392,30 @@ It also writes an `overlaps/` subdirectory holding the overlapping scenario IDs 
 benchmark. Each file mirrors the split JSONs — a `benchmarks` metadata list naming the group, then one sorted array of
 shared scenario IDs per split.
 
+
+# Sample Selection
+
+Sample selection produces a JSON blacklist of training scenarios to drop so a model can be retrained on a smaller data regime. The `drop` list is consumed by the dataset at train time (`controlledshifts.datasets.base_dataset`). Only `random_drop` is implemented today; the other `SampleSelection` strategies are scaffolded and raise `NotImplementedError` until ported. See `configs/sample_selection.yaml` for all options.
+
+Generate a blacklist. Embedding-based strategies first cache the training-set model outputs with a pretrained checkpoint (`create_training_batch_cache=true`); `random_drop` only needs an existing cache:
+```bash
+uv run -m controlledshifts.run_sample_selection \
+    paths=causal_agents model=wayformer ckpt_name=epoch_093 \
+    create_training_batch_cache=true selection_strategies=[random_drop] percentages_to_keep=[0.55]
+```
+This writes `sample_selection_random_drop_0.55.json` to `<paths.experiment_cache_path>/sample_selection/<paths.tag>/<gen_experiment>/`, where `gen_experiment` is `no_model` for `random_drop` and the generating run's dated experiment id for embedding-based strategies (so different checkpoints of the same model do not collide).
+
+Train on the blacklist by pointing `sample_selection_path` at that directory:
+```bash
+uv run -m controlledshifts.train \
+    paths=causal_agents model=wayformer sample_selection_strategy=random_drop percentage=0.55 \
+    sample_selection_path='${paths.experiment_cache_path}/sample_selection/${paths.tag}/no_model'
+```
+
+Sweep generation and training across strategy x percentage x model x benchmark with `run_sample_selection_sweep.sh` (`-G` generates, omitting it trains, `-n` is a dry run):
+```bash
+./run_sample_selection_sweep.sh -G -m wayformer -b causal_agents -s random_drop   # generate
+./run_sample_selection_sweep.sh -b causal_agents -s random_drop                   # train
 ```
 
 # Score Distribution Analysis

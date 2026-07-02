@@ -1,0 +1,64 @@
+# @package _global_
+# Inherits the training config so the (optional) train-set caching step composes paths + scenario + dataset + model +
+# trainer exactly as the downstream training run that consumes the blacklist. Training-only machinery is stripped below.
+defaults:
+  - train.yaml
+  - _self_
+
+task_name: sample_selection
+
+# This task only (optionally) runs the pretrained model over the train set to cache outputs, then selects on CPU.
+callbacks: null
+logger: null
+train: false
+test: false
+
+# Dump one ModelOutput pickle per training scenario during the cache step (see models/base_model.py).
+model:
+  config:
+    sample_selection: true
+
+# Checkpoint of the model that produces the embeddings; only needed when create_training_batch_cache=true.
+ckpt_name: null
+ckpt_path: ${paths.ckpt_path}/${ckpt_name}.ckpt
+
+# If true, run the pretrained model over the training set to (re)build the train batch cache before selecting.
+create_training_batch_cache: false
+
+# Where the selection JSONs are written and later read from at train time. gen_experiment identifies the model version
+# that produced the embeddings, so two checkpoints of the same model never collide; set it to the generating run's dated
+# experiment id (e.g. environments-benchmark_wayformer_2026-04-14_10-27-47) for embedding-based strategies. random_drop
+# is model-independent, so it uses the literal no_model segment.
+gen_experiment: no_model
+sample_selection_path: ${paths.experiment_cache_path}/sample_selection/${paths.tag}/${gen_experiment}
+
+# Strategies and retention percentages to sweep. selection_strategy / percentage_to_keep are the per-iteration values
+# set by the entrypoint. Only random_drop is implemented today; the rest are declared in the SampleSelection enum and
+# will be ported later.
+selection_strategies:
+  - random_drop
+percentages_to_keep:
+  - 0.45
+  - 0.55
+  - 0.65
+  - 0.75
+  - 0.85
+  - 0.95
+selection_strategy: null
+percentage_to_keep: null
+
+# Which cached split to load (base_model caches train batches under the "train" tag) and how much of it.
+split: train
+num_batches: null
+num_scenarios: null
+
+# Knobs consumed by the not-yet-ported strategies; carried for parity, unused by random_drop.
+sorting_strategy: simple
+alignment_strategy: jaccard
+min_percentage_per_class: 0.012
+clustering_strategy: kmeans
+num_clusters: 100
+agent_density_interval: 4
+agent_density_weight: 1.0
+
+seed: 42

@@ -221,9 +221,6 @@ __marimo__/
 # Ignore for now:
 
 # Sample selection
-src/controlledshifts/run_sample_selection.py
-src/controlledshifts/configs/sample_selection.yaml
-src/controlledshifts/sample_selection/
 tests/
 meta/
 outputs/
