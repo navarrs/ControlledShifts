@@ -9,7 +9,6 @@ shared primitives the group- and embedding-based strategies build on.
 from .common import (
     SampleSelection,
     aggregate_selected_samples,
-    allocate_removal_budget,
     compute_proportional_number_to_drop,
     greedy_select_from_sim_matrix,
     make_group_result,
@@ -23,7 +22,6 @@ from .random_drop import random_selection
 __all__ = [
     "SampleSelection",
     "aggregate_selected_samples",
-    "allocate_removal_budget",
     "compute_proportional_number_to_drop",
     "greedy_select_from_sim_matrix",
     "make_group_result",

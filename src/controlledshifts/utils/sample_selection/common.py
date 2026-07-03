@@ -46,52 +46,6 @@ def make_group_result(keep: list[str], drop: list[str]) -> dict[str, Any]:
     return {"keep": keep, "num_to_keep": len(keep), "drop": drop, "num_to_drop": len(drop)}
 
 
-def allocate_removal_budget(
-    group_sizes: dict[int, int],
-    total_removal: int,
-) -> dict[int, int]:
-    """Allocates the removal budget across groups proportional to their size.
-
-    Larger groups receive more of the removal budget. Any deficit from integer rounding is distributed to the largest
-    groups first; any surplus is trimmed from the largest groups first.
-
-    Args:
-        group_sizes: mapping from group label to the number of scenarios in that group.
-        total_removal: total number of scenarios to remove across all groups.
-
-    Returns:
-        Dict mapping each group label to the number of scenarios to remove from it.
-    """
-    total = sum(group_sizes.values())
-    if total == 0:
-        return dict.fromkeys(group_sizes, 0)
-
-    allocations: dict[int, int] = {k: int(total_removal * size / total) for k, size in group_sizes.items()}
-    remaining = total_removal - sum(allocations.values())
-
-    # Distribute leftover removals to the largest groups first.
-    for k in sorted(group_sizes, key=lambda x: group_sizes[x], reverse=True):
-        if remaining == 0:
-            break
-        available = group_sizes[k] - allocations[k]
-        if available > 0:
-            add = min(available, remaining)
-            allocations[k] += add
-            remaining -= add
-
-    # Trim any accidental over-allocation from the largest groups first.
-    if remaining < 0:
-        excess = -remaining
-        for k in sorted(group_sizes, key=lambda x: group_sizes[x], reverse=True):
-            if excess == 0:
-                break
-            trim = min(allocations[k], excess)
-            allocations[k] -= trim
-            excess -= trim
-
-    return allocations
-
-
 def compute_proportional_number_to_drop(
     total_number_to_drop: int, percentage: float, min_percentage: float, total_valid_percentage: float
 ) -> int:
