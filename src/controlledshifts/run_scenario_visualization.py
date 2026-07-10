@@ -6,7 +6,7 @@ viz_trajpred|...``); each type loads/computes only what it needs:
 
     * regular       - just draw the scenarios (static or animated).
     * scored        - compute scenario features -> scores and render the scene score.
-    * trajpred      - transform to agent-centric format and overlay model trajectory predictions.
+    * trajpred      - transform to agent-centric format and render one comparison pane per model.
     * model_output  - render other cached model outputs (e.g. causal predictions).
 
 Outputs are written to ``output_dir/<render>/<split_type>/<split>/<pane_type>``.
@@ -24,6 +24,20 @@ Example usage:
     uv run -m controlledshifts.run_scenario_visualization \
         visualization=viz_scored dataset.config.autolabel_agents=true \
         split_filepath=... scenarios_root=...
+
+    # Trajpred visualization: one pane per model, aligned on the scenarios shared across all model caches.
+    uv run -m controlledshifts.run_scenario_visualization \
+        visualization=viz_trajpred \
+        split_filepath=/data/driving/waymo/splits/uniform.json \
+        scenarios_root=/data/driving/waymo/variants/base \
+        splits_to_visualize=[validation] num_scenarios=3 \
+        'models=[{name:wayformer,batch_cache_path:/data/.../wayformer},{name:mtr,batch_cache_path:/data/.../mtr}]'
+
+    # Trajpred with a single model (one pane) via the batch_cache_path fallback.
+    uv run -m controlledshifts.run_scenario_visualization \
+        visualization=viz_trajpred \
+        split_filepath=... scenarios_root=... \
+        batch_cache_path=/data/.../wayformer num_scenarios=3
 
 See ``docs/ANALYSIS.md`` for more details.
 """

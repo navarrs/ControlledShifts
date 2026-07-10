@@ -934,8 +934,11 @@ def load_batches_per_model(
         Maps each selected scenario id to a mapping of model name to that model's per-scenario output.
 
     Raises:
-        ValueError: if no scenario id is shared across all models.
+        ValueError: if ``model_specs`` is empty or no scenario id is shared across all models.
     """
+    if not model_specs:
+        msg = "model_specs must contain at least one (name, cache path) pair."
+        raise ValueError(msg)
     loaded = {name: _load_all_batches(path, num_batches=None, tag=tag) for name, path in model_specs}
 
     common_ids = set.intersection(*(set(batches) for batches in loaded.values()))

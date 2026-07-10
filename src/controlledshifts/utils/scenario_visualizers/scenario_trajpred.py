@@ -76,9 +76,8 @@ class ScenarioTrajpredVisualizer(BaseVisualizer):
         map_mask = scenario.map_polylines_mask
 
         for idx, lane in enumerate(map_xy):
-            lane_type = map_type[idx]
-            lane_type = np.argmax(lane_type)
-            if lane_type in [1, 2, 3]:
+            # Skip lane centerlines (1/2/3 = freeway/surface/bike); draw only road lines, edges, and crosswalks.
+            if map_type[idx] in [1, 2, 3]:
                 continue
             for i in range(len(lane) - 1):
                 if map_mask[idx, i] and map_mask[idx, i + 1]:
