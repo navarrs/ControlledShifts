@@ -181,14 +181,23 @@ Run the analysis as:
 uv run -m controlledshifts.run_analysis analysis=robustness
 ```
 
-For each reference mode it writes, under `<output_path>/<mode>/`:
-- a radar plot, CSV and LaTeX table for each axis (`id_score_*`, `ood_score_*`), with a dashed `1.0`
+For each reference mode it writes, under `<output_path>/<folder>/` (`naive_relative` → `quality_naive`,
+`uniform_relative` → `stability_uniform`):
+- a radar plot, CSV and LaTeX table for each axis (`seen_score_*`, `unseen_score_*`), with a dashed `1.0`
   reference ring;
 - a `score_decomposition.png` scatter — one panel per metric placing each model at
   `(id_score, ood_score)`, with the reference at `(1, 1)`; the upper-right quadrant beats the reference on
   both ID and OOD, and the dashed `y = x` diagonal marks "degrades like the reference" (above it = more shift-robust);
 - the combined robustness ranking as a sorted bar chart (`combined_robustness_ranking.png`, best first) plus its CSV and
   LaTeX table (`combined_robustness_scores.*`).
+
+It also writes a single combined `<output_path>/robustness_summary.png` spanning all reference modes: a 3×2 grid
+whose columns are the modes (Quality / Stability) and whose rows are the Seen radar, Unseen radar and Combined
+ranking, so the two views can be compared side by side under a shared model legend.
+
+The output folder names and the `seen_score`/`unseen_score` file stems are set by module-level constants
+(`SUMMARY_FOLDERS`, `RADAR_TERM_STEMS`) in `robustness_scores.py`; the `id_score`/`ood_score` quantities above name the
+underlying scores, not the files.
 
 
 ## Causal Agent Distribution Analysis
