@@ -6,7 +6,7 @@ viz_trajpred|...``); each type loads/computes only what it needs:
 
     * regular       - just draw the scenarios (static or animated).
     * scored        - compute scenario features -> scores and render the scene score.
-    * trajpred      - transform to agent-centric format and overlay model trajectory predictions.
+    * trajpred      - transform to agent-centric format and render one comparison pane per model.
     * model_output  - render other cached model outputs (e.g. causal predictions).
 
 Outputs are written to ``output_dir/<render>/<split_type>/<split>/<pane_type>``.
@@ -24,6 +24,20 @@ Example usage:
     uv run -m controlledshifts.run_scenario_visualization \
         visualization=viz_scored dataset.config.autolabel_agents=true \
         split_filepath=... scenarios_root=...
+
+    # Trajpred visualization: one pane per model, aligned on the scenarios shared across all model caches.
+    uv run -m controlledshifts.run_scenario_visualization \
+        visualization=viz_trajpred \
+        split_filepath=/data/driving/waymo/splits/uniform.json \
+        scenarios_root=/data/driving/waymo/variants/base \
+        splits_to_visualize=[validation] num_scenarios=3 \
+        'models=[{name:wayformer,batch_cache_path:/data/.../wayformer},{name:mtr,batch_cache_path:/data/.../mtr}]'
+
+    # Trajpred with a single model (one pane) via the batch_cache_path fallback.
+    uv run -m controlledshifts.run_scenario_visualization \
+        visualization=viz_trajpred \
+        split_filepath=... scenarios_root=... \
+        batch_cache_path=/data/.../wayformer num_scenarios=3
 
 See ``docs/ANALYSIS.md`` for more details.
 """
@@ -77,6 +91,7 @@ class PreparedScenario(NamedTuple):
     scores: ScenarioScores | None = None
     model_output: ModelOutput | None = None
     causal_gt_ids: NDArray[np.int_] | None = None
+    model_outputs: dict[str, ModelOutput] | None = None
 
 
 def _to_agent_centric(
@@ -109,12 +124,12 @@ def prepare_scored(
 def prepare_trajpred(
     processor: AgentCentricProcessor, visualizer: BaseVisualizer, scenario: Scenario, model_output: ModelOutput | None
 ) -> PreparedScenario | None:
-    """Trajectory-prediction visualization: transform to agent-centric and overlay model predictions."""
-    del visualizer
+    """Trajectory-prediction visualization: transform to agent-centric; per-model outputs are attached by ``main``."""
+    del visualizer, model_output
     agent_centric = _to_agent_centric(processor, scenario, scores=None)
     if agent_centric is None:
         return None
-    return PreparedScenario(agent_centric, model_output=model_output)
+    return PreparedScenario(agent_centric)
 
 
 def prepare_model_output(
@@ -188,6 +203,53 @@ def build_output_dir(output_dir: Path, render: str, split_type: str, split: str,
     return resolved
 
 
+def resolve_trajpred_models(config: DictConfig) -> list[tuple[str, str | Path]]:
+    """Resolves the ``(name, cache_path)`` model specs for trajpred, one per comparison pane.
+
+    Uses the ``models`` list when provided; otherwise falls back to the single ``batch_cache_path`` (labelled by
+    ``model_experiment``, else the cache directory name) so existing one-model runs keep working. Returns an empty
+    list when neither is configured.
+    """
+    models = config.get("models", None)
+    if models:
+        return [(model.name, model.batch_cache_path) for model in models]
+    if config.batch_cache_path is not None:
+        name = config.get("model_experiment", None) or Path(config.batch_cache_path).name or "model"
+        return [(name, config.batch_cache_path)]
+    return []
+
+
+def load_split_model_outputs(
+    config: DictConfig,
+    viz_type: VizType,
+    trajpred_models: list[tuple[str, str | Path]],
+    scenario_ids: list[str],
+    split_tag: str,
+) -> tuple[dict[str, ModelOutput] | None, dict[str, dict[str, ModelOutput]] | None, list[str]]:
+    """Loads a split's cached model outputs and filters/samples its scenario ids accordingly.
+
+    TRAJPRED loads one cache per model aligned on a shared scenario set; MODEL_OUTPUT loads a single cache; both keep
+    only scenarios that have an output. Other viz types load nothing and sample the split's ids down to num_scenarios.
+
+    Returns:
+        ``(single-model batches, per-model outputs keyed by scenario then model, filtered scenario ids)``.
+    """
+    batches: dict[str, ModelOutput] | None = None
+    scenario_to_models: dict[str, dict[str, ModelOutput]] | None = None
+    if viz_type == VizType.TRAJPRED:
+        scenario_to_models = utils.load_batches_per_model(trajpred_models, config.num_scenarios, config.seed, split_tag)
+        scenario_ids = [scenario_id for scenario_id in scenario_ids if scenario_id in scenario_to_models]
+    elif viz_type == VizType.MODEL_OUTPUT:
+        batches = utils.load_batches(
+            config.batch_cache_path, config.num_batches, config.num_scenarios, config.seed, split_tag
+        )
+        scenario_ids = [scenario_id for scenario_id in scenario_ids if scenario_id in batches]
+    elif config.num_scenarios is not None and len(scenario_ids) > config.num_scenarios:
+        random.seed(config.seed)
+        scenario_ids = random.sample(scenario_ids, config.num_scenarios)
+    return batches, scenario_to_models, scenario_ids
+
+
 @hydra.main(version_base="1.3", config_path="configs", config_name="scenario_visualization.yaml")
 def main(config: DictConfig) -> None:
     """Hydra entry point for rendering the scenarios of a benchmark split."""
@@ -212,8 +274,16 @@ def main(config: DictConfig) -> None:
     render = "animated" if visualizer.is_animated else "static"
     pane_type = pane_type_for(viz_type, config)
     prepare = SCENARIO_PREPARER[viz_type]
-    needs_model = viz_type in {VizType.TRAJPRED, VizType.MODEL_OUTPUT}
-    if needs_model and config.batch_cache_path is None:
+
+    # TRAJPRED renders one pane per model (aligned on a shared scenario set); MODEL_OUTPUT loads a single cache.
+    trajpred_models = resolve_trajpred_models(config) if viz_type == VizType.TRAJPRED else []
+    if viz_type == VizType.TRAJPRED and not trajpred_models:
+        error_message = (
+            "viz_type 'trajpred' needs model outputs; set `models` (a list of {name, batch_cache_path}) or the single "
+            "`batch_cache_path`."
+        )
+        raise ValueError(error_message)
+    if viz_type == VizType.MODEL_OUTPUT and config.batch_cache_path is None:
         error_message = f"viz_type '{viz_type.value}' needs model outputs; set batch_cache_path to the cached batches."
         raise ValueError(error_message)
 
@@ -225,17 +295,11 @@ def main(config: DictConfig) -> None:
         split_tag = SPLIT_TAGS[split_key]
         scenario_ids = list(getattr(split, split_key))
 
-        # Model-based types load cached outputs for this split and only visualize scenarios that have one;
-        # load_batches already samples down to num_scenarios. For the other types, sample the split's ids here.
-        batches: dict[str, ModelOutput] | None = None
-        if needs_model:
-            batches = utils.load_batches(
-                config.batch_cache_path, config.num_batches, config.num_scenarios, config.seed, split_tag
-            )
-            scenario_ids = [scenario_id for scenario_id in scenario_ids if scenario_id in batches]
-        elif config.num_scenarios is not None and len(scenario_ids) > config.num_scenarios:
-            random.seed(config.seed)
-            scenario_ids = random.sample(scenario_ids, config.num_scenarios)
+        # Model-based types load this split's cached outputs and keep only scenarios that have one; the other types
+        # load nothing and sample the split's ids down to num_scenarios.
+        batches, scenario_to_models, scenario_ids = load_split_model_outputs(
+            config, viz_type, trajpred_models, scenario_ids, split_tag
+        )
 
         # Map each scenario id to its pickle in the flat variant store and build the destination folder for this split.
         id_to_path = {scenario_id: scenarios_root / f"{scenario_id}.pkl" for scenario_id in scenario_ids}
@@ -259,12 +323,17 @@ def main(config: DictConfig) -> None:
                 log.warning("Could not prepare scenario %s for %s, skipping.", scenario_id, viz_type.value)
                 continue
 
+            # TRAJPRED attaches this scenario's per-model outputs (guaranteed present: ids were filtered above).
+            if scenario_to_models is not None:
+                prepared = prepared._replace(model_outputs=scenario_to_models[scenario_id])
+
             visualizer.visualize_scenario(
                 prepared.scenario,
                 scores=prepared.scores,
                 model_output=prepared.model_output,
                 output_dir=str(output_dir),
                 causal_gt_ids=prepared.causal_gt_ids,
+                model_outputs=prepared.model_outputs,
             )
 
     log.info("Total time: %.2f seconds", time() - start)

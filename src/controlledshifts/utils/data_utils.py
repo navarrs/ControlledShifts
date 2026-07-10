@@ -844,6 +844,41 @@ def resplit_batch(batch: output.ModelOutput) -> dict[str, output.ModelOutput]:
     return batch_resplit
 
 
+def _load_all_batches(
+    base_data_path: str | Path,
+    num_batches: int | None,
+    tag: str = "val",
+) -> dict[str, output.ModelOutput]:
+    """Loads pickled per-scenario model outputs from disk, keyed by scenario id (no sampling).
+
+    Args:
+        base_data_path: root cache directory holding one per-split subdirectory per ``tag``.
+        num_batches: maximum number of per-scenario files to load; None loads all (capped at `MAX_NUM_BATCHES`).
+        tag: split subdirectory to load from (e.g. ``val``).
+
+    Returns:
+        Maps every loaded scenario id to its per-scenario outputs.
+
+    Raises:
+        ValueError: if no per-scenario files are found under the `tag` subdirectory.
+    """
+    _LOGGER.info("Loading scenario outputs from %s", Path(base_data_path) / tag)
+    num_batches = MAX_NUM_BATCHES if num_batches is None else min(num_batches, MAX_NUM_BATCHES)
+
+    batches = {}
+    for n, scenario_file in enumerate((Path(base_data_path) / tag).glob("*.pkl")):
+        if n >= num_batches:
+            break
+        with scenario_file.open("rb") as f:
+            scenario_output: output.ModelOutput = pickle.load(f)
+        batches[scenario_output.scenario_id[0]] = scenario_output
+
+    if not batches:
+        msg = f"No per-scenario files found in {Path(base_data_path) / tag}"
+        raise ValueError(msg)
+    return batches
+
+
 def load_batches(
     base_data_path: str | Path,
     num_batches: int | None,
@@ -866,28 +901,59 @@ def load_batches(
     Raises:
         ValueError: if no per-scenario files are found under the `tag` subdirectory.
     """
-    _LOGGER.info("Loading scenario outputs from %s", Path(base_data_path) / tag)
-    num_batches = MAX_NUM_BATCHES if num_batches is None else min(num_batches, MAX_NUM_BATCHES)
+    batches = _load_all_batches(base_data_path, num_batches, tag)
     random.seed(seed)
-
-    batches = {}
-    for n, scenario_file in enumerate((Path(base_data_path) / tag).glob("*.pkl")):
-        if n >= num_batches:
-            break
-        with scenario_file.open("rb") as f:
-            scenario_output: output.ModelOutput = pickle.load(f)
-        batches[scenario_output.scenario_id[0]] = scenario_output
-
-    if not batches:
-        msg = f"No per-scenario files found in {Path(base_data_path) / tag}"
-        raise ValueError(msg)
     # Select scenarios
-    scenario_ids = batches.keys()
-    total_scenarios = len(scenario_ids)
+    total_scenarios = len(batches)
     num_scenarios = max(1, total_scenarios) if num_scenarios is None else max(1, min(num_scenarios, total_scenarios))
     _LOGGER.info("Selecting %s / %s scenarios", num_scenarios, total_scenarios)
     selected_scenarios = random.sample(list(batches.keys()), num_scenarios)
     return {scenario: batches[scenario] for scenario in selected_scenarios}
+
+
+def load_batches_per_model(
+    model_specs: list[tuple[str, str | Path]],
+    num_scenarios: int | None,
+    seed: int,
+    tag: str = "val",
+) -> dict[str, dict[str, output.ModelOutput]]:
+    """Loads per-scenario outputs for several models, aligned on one sampled scenario set.
+
+    Each model's outputs are loaded in full, then a single scenario set is sampled from the intersection of the
+    scenario ids available across all models, so every returned scenario carries an output from every model. This
+    keeps the multi-model trajpred panes aligned on the same scenarios. ``num_batches`` is intentionally not applied
+    per model here: capping the per-model glob would shrink the intersection unpredictably.
+
+    Args:
+        model_specs: (name, cache path) pairs; ``name`` labels the model in the returned mapping.
+        num_scenarios: number of scenarios to keep; None keeps the whole intersection.
+        seed: random seed used to select scenarios.
+        tag: split subdirectory to load from (e.g. ``val``).
+
+    Returns:
+        Maps each selected scenario id to a mapping of model name to that model's per-scenario output.
+
+    Raises:
+        ValueError: if ``model_specs`` is empty or no scenario id is shared across all models.
+    """
+    if not model_specs:
+        msg = "model_specs must contain at least one (name, cache path) pair."
+        raise ValueError(msg)
+    loaded = {name: _load_all_batches(path, num_batches=None, tag=tag) for name, path in model_specs}
+
+    common_ids = set.intersection(*(set(batches) for batches in loaded.values()))
+    if not common_ids:
+        model_names = ", ".join(loaded)
+        msg = f"No scenario ids are shared across all models ({model_names}) for tag '{tag}'."
+        raise ValueError(msg)
+
+    random.seed(seed)
+    total_scenarios = len(common_ids)
+    num_scenarios = total_scenarios if num_scenarios is None else max(1, min(num_scenarios, total_scenarios))
+    _LOGGER.info("Selecting %s / %s scenarios shared across %s models", num_scenarios, total_scenarios, len(loaded))
+    # Sample from a sorted list so the selection is reproducible under the seed (set order is nondeterministic).
+    selected = random.sample(sorted(common_ids), num_scenarios)
+    return {scenario_id: {name: loaded[name][scenario_id] for name in loaded} for scenario_id in selected}
 
 
 def load_scenario_scores(scores_paths: str | Path, scenario_ids: Iterable[str]) -> dict[str, dict[str, Any]]:

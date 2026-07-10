@@ -19,7 +19,7 @@ where:
   * `viz_scored` (`scored`): compute scenario features → scores and render the scene score. **Requires** `dataset.config.autolabel_agents=true` so the feature/score processors are built.
   * `viz_causal` / `viz_causal_animated` (`model_output`): render ground-truth and predicted causal agents (needs cached model outputs).
   * `viz_causal_gt` (`causal_gt`): render only the ground-truth causal agents, loaded from the causal-label JSON files (`dataset.config.causal_labels_path`). Needs no cached model outputs or predictions.
-  * `viz_trajpred` (`trajpred`): transform to agent-centric format and overlay model trajectory predictions (needs cached model outputs).
+  * `viz_trajpred` (`trajpred`): transform to agent-centric format and render one comparison pane per model. Each pane draws the shared scene context (map, agent history, and the dimmed ground-truth future) plus that model's predicted trajectories, titled with the model name — there is no separate ground-truth-only pane (needs cached model outputs). See `models` below.
 
   Each visualization config declares a `panes_to_plot` list (values from `SupportedPanes`, e.g. `ALL_AGENTS`, `HIGHLIGHT_RELEVANT`, `CAUSAL_AGENTS_GT`, `CAUSAL_AGENTS_PRED`, `TRAJECTORY_PREDICTION`) that controls which panes are rendered, one window per pane.
 * `split_filepath`: path to the benchmark split JSON. The visualized scenarios are taken from this file's `training`/`validation`/`testing` lists, and its `benchmark_name` becomes the `split_type` folder in the output path.
@@ -27,6 +27,7 @@ where:
 * `scenarios_root`: directory holding the scenario pickles, organized into `training/`, `validation/`, `testing/` subdirectories of `<scenario_id>.pkl`.
 * `num_batches` / `num_scenarios`: for the model-based types (`trajpred`, `model_output`), control how many cached scenarios are loaded; scenarios are sampled if more are available than requested. Cached model outputs live as one pickle per scenario under `batch_cache_path/<split>/<scenario_id>.pkl` (split is `train`/`val`/`test`).
 * `model_experiment`: for generic `model_output` visualizations, the tag used as the output `pane_type` folder.
+* `models`: for `trajpred`, a list of `{name, batch_cache_path}` entries; each model becomes one pane titled with its `name`. Scenarios are sampled once from the intersection of scenario ids available across all listed models, so the panes stay aligned (here `num_scenarios` governs how many aligned scenarios are drawn and `num_batches` is not applied per model). When `models` is null, a single top-level `batch_cache_path` still works and renders a one-model comparison.
 
 Outputs are written under:
 ```
