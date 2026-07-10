@@ -3,13 +3,17 @@
 Quantifies how different the benchmarks are by measuring, for each split, how many scenarios their corresponding
 splits share. For every configured split (training/validation/testing) it builds a symmetric benchmark x benchmark
 matrix of the Jaccard index (intersection over union) of the scenario IDs and renders it as an annotated heatmap. The
-raw intersection counts (and split sizes) are written alongside to a tidy CSV.
+raw intersection counts (and split sizes) are written alongside to a tidy CSV. The overlapping scenario IDs themselves
+are written as JSON files under ``overlaps/`` — one per benchmark pair plus an ``all_benchmarks.json`` for the
+intersection common to every benchmark, listing the shared IDs per split.
 
 This reads only the split JSONs, so it is fast and needs no caching.
 
 See `docs/ANALYSIS.md` for usage details.
 """
 
+import json
+from itertools import combinations
 from logging import Logger
 from pathlib import Path
 
@@ -67,6 +71,36 @@ def _overlap_records(split: str, names: list[str], id_sets: list[set[str]]) -> l
     return records
 
 
+def _overlap_payload(
+    group_names: list[str], indices: list[int], splits: list[str], id_sets_by_split: dict[str, list[set[str]]]
+) -> dict[str, list[str]]:
+    """Builds one overlap file's payload: the benchmarks involved, then the sorted intersected IDs per split."""
+    payload: dict[str, list[str]] = {"benchmarks": group_names}
+    for split in splits:
+        group_sets = [id_sets_by_split[split][i] for i in indices]
+        payload[split] = sorted(set.intersection(*group_sets))  # empty list when the group shares nothing
+    return payload
+
+
+def _write_overlap_files(
+    names: list[str], splits: list[str], id_sets_by_split: dict[str, list[set[str]]], output_path: Path, log: Logger
+) -> None:
+    """Writes one JSON per unordered benchmark pair plus `all_benchmarks.json`, listing overlapping IDs per split."""
+    overlaps_path = output_path / "overlaps"
+    overlaps_path.mkdir(parents=True, exist_ok=True)
+
+    for (i, name_a), (j, name_b) in combinations(enumerate(names), 2):
+        payload = _overlap_payload([name_a, name_b], [i, j], splits, id_sets_by_split)
+        with (overlaps_path / f"{name_a}_{name_b}.json").open("w") as f:
+            json.dump(payload, f, indent=2)
+
+    all_payload = _overlap_payload(names, list(range(len(names))), splits, id_sets_by_split)
+    with (overlaps_path / "all_benchmarks.json").open("w") as f:
+        json.dump(all_payload, f, indent=2)
+
+    log.info("Saved %d overlap files to %s", len(names) * (len(names) - 1) // 2 + 1, overlaps_path)
+
+
 def _plot_overlap_grid(
     matrices: list[npt.NDArray[np.float64]], labels: list[str], splits: list[str], output_path: Path
 ) -> None:
@@ -115,12 +149,14 @@ def run_scenario_overlap_analysis(config: DictConfig, log: Logger, output_path: 
 
     For every split in ``config.splits`` a symmetric benchmark x benchmark Jaccard matrix is computed over the
     scenario IDs and saved as an annotated heatmap, with the raw intersection counts and split sizes written to
-    ``scenario_overlap.csv``.
+    ``scenario_overlap.csv``. The overlapping scenario IDs are also written as JSON under ``overlaps/`` — one file per
+    benchmark pair plus ``all_benchmarks.json`` for the intersection across all benchmarks, each listing the shared IDs
+    per split.
 
     Args:
         config: Analysis configuration (``splits_path``, ``splits``, ``benchmarks``).
         log: Logger.
-        output_path: Directory to save the heatmaps and CSV.
+        output_path: Directory to save the heatmaps, CSV, and ``overlaps/`` JSON files.
     """
     set_analysis_theme(log=log)
 
@@ -134,10 +170,13 @@ def run_scenario_overlap_analysis(config: DictConfig, log: Logger, output_path: 
 
     names = list(benchmarks)
     splits = list(config.splits)
+    id_sets_by_split: dict[str, list[set[str]]] = {
+        split: [set(getattr(benchmarks[name], split)) for name in names] for split in splits
+    }
     records: list[dict[str, str | int | float]] = []
     matrices: list[npt.NDArray[np.float64]] = []
     for split in splits:
-        id_sets = [set(getattr(benchmarks[name], split)) for name in names]
+        id_sets = id_sets_by_split[split]
         split_records = _overlap_records(split, names, id_sets)
         records.extend(split_records)
 
@@ -146,6 +185,7 @@ def run_scenario_overlap_analysis(config: DictConfig, log: Logger, output_path: 
         matrices.append(matrix.to_numpy())
 
     _plot_overlap_grid(matrices, names, splits, output_path)
+    _write_overlap_files(names, splits, id_sets_by_split, output_path, log)
 
     csv_path = output_path / "scenario_overlap.csv"
     pd.DataFrame(records).to_csv(csv_path, index=False)

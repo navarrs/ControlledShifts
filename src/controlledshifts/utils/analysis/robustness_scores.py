@@ -53,17 +53,29 @@ from controlledshifts.utils.plotting import set_analysis_theme
 
 COMBINED_COLUMN = "Combined"
 
+# A per-model plot color: a hex string (fixed models) or an RGB tuple (palette fallback), as returned by model_colors.
+Color = str | tuple[float, float, float]
+
 # Score-term keys returned by :func:`compute_robustness_scores`. The two per-metric score axes are rendered as radars;
 # the combined robustness score is rendered as a sorted bar chart.
 ID_TERM = "id"
 OOD_TERM = "ood"
 COMBINED_TERM = "combined"
+# Reference-mode strings (drive the scoring/skip logic and the config ``reference_modes``); do NOT rename these.
+NAIVE_RELATIVE = "naive_relative"
 UNIFORM_RELATIVE = "uniform_relative"
 # Radar terms only (the per-metric score axes), mapped to their output-file stem and display title.
-RADAR_TERM_STEMS = {ID_TERM: "id_score", OOD_TERM: "ood_score"}
+RADAR_TERM_STEMS = {ID_TERM: "seen_score", OOD_TERM: "unseen_score"}
 RADAR_TERM_TITLES = {ID_TERM: "Seen Score", OOD_TERM: "Unseen Score"}
 COMBINED_FILE_STEM = "combined_robustness"
 COMBINED_TITLE = "Combined Robustness Score"
+
+# Output folder + semantic label per reference mode, plus the stacked-summary figure stem and its bar-panel title.
+# Only OUTPUT naming lives here -- the reference-mode strings above are unchanged. Edit these to rename outputs.
+SUMMARY_FOLDERS = {NAIVE_RELATIVE: "quality_naive", UNIFORM_RELATIVE: "stability_uniform"}
+SUMMARY_LABELS = {NAIVE_RELATIVE: "Quality", UNIFORM_RELATIVE: "Stability"}
+SUMMARY_FILE_STEM = "robustness_summary"
+COMBINED_PANEL_TITLE = "Combined Score"
 
 # Cosine/sine deadband for deciding radar label alignment (center vs left/right, top/bottom).
 _LABEL_ALIGN_THRESHOLD = 0.1
@@ -312,41 +324,41 @@ def _radial_ticks(values: list[float], *, n_target: int = 5) -> tuple[float, flo
     return r_lower, r_upper, step, ticks
 
 
-def _plot_score_radar(  # noqa: PLR0913
+def _draw_score_radar(  # noqa: PLR0913
+    ax: plt.Axes,
     scores_df: pd.DataFrame,
-    output_path: Path,
-    colormap: str,
-    title: str,
-    subtitle: str,
-    filename: str,
+    palette: list[Color],
+    radial: tuple[float, float, float, NDArray] | None,
     *,
-    radial: tuple[float, float, float, NDArray] | None = None,
-) -> None:
-    """Render a radar/spider plot of per-model scores across the metric axes (higher is better).
+    show_mean: bool,
+    ref_fontsize: float = 8,
+    tick_fontsize: float = 9,
+    metric_fontsize: float = 12,
+    rlabel_at_bottom: bool = False,
+) -> tuple[list, list[str]]:
+    """Draw per-model score polygons onto a polar ``ax`` and return its legend ``(handles, labels)``.
 
-    One closed polygon (with light fill) per model spans the metric axes; the per-model ``Combined`` score is annotated
-    in the legend. A dashed circle marks the ``score = 1.0`` reference ring (as good as the reference).
+    Shared by the standalone radar and the stacked summary. One closed polygon (light fill) per model spans the metric
+    axes; a dashed circle marks the ``score = 1.0`` reference ring. Callers must guarantee ``scores_df`` has at least
+    one metric column.
 
     Args:
+        ax: Polar axes to draw on.
         scores_df: Frame indexed by ``Model`` with metric columns plus a ``Combined`` column.
-        output_path: Directory to save the plot.
-        colormap: Seaborn/matplotlib palette name.
-        title: Main title.
-        subtitle: Subtitle (the reference mode).
-        filename: Output file stem (``.png`` appended).
-        radial: Optional precomputed ``(r_lower, r_upper, step, ticks)`` to share one scale and rings across radars;
-            when ``None`` the bounds are derived from this frame's own data.
+        palette: Per-model colors aligned to ``scores_df``'s row order.
+        radial: Precomputed ``(r_lower, r_upper, step, ticks)`` to share one scale across radars; when ``None`` the
+            bounds are derived from this frame's own data.
+        show_mean: Append the per-model ``Combined`` mean to each legend label (``"Model  (mean=X.XX)"``).
+        ref_fontsize: Font size of the ``reference (1.0)`` ring annotation.
+        tick_fontsize: Font size of the radial (score) tick numbers.
+        metric_fontsize: Font size of the metric axis labels around the rim.
+        rlabel_at_bottom: Place the radial tick numbers at the bottom instead of the upper-right, so they clear the
+            ``reference (1.0)`` annotation (which sits near the top).
     """
     metrics = [column for column in scores_df.columns if column != COMBINED_COLUMN]
-    if not metrics:
-        return
-
     angles = np.linspace(0, 2 * np.pi, len(metrics), endpoint=False).tolist()
     closed_angles = [*angles, angles[0]]
 
-    palette = model_colors(scores_df.index, colormap)
-    fig = plt.figure(figsize=(11, 9))
-    ax = fig.add_subplot(111, polar=True)
     ax.set_theta_offset(np.pi / 2)
     ax.set_theta_direction(-1)
 
@@ -356,7 +368,7 @@ def _plot_score_radar(  # noqa: PLR0913
         all_values.extend(value for value in values if not pd.isna(value))
         closed_values = [*values, values[0]]
         combined = row[COMBINED_COLUMN]
-        label = f"{model}  (mean={combined:.2f})" if not pd.isna(combined) else str(model)
+        label = f"{model}  (mean={combined:.2f})" if show_mean and not pd.isna(combined) else str(model)
         ax.plot(closed_angles, closed_values, color=color, linewidth=2.5, marker="o", markersize=5, label=label)
         ax.fill(closed_angles, closed_values, color=color, alpha=0.08)
 
@@ -369,7 +381,7 @@ def _plot_score_radar(  # noqa: PLR0913
     ax.annotate(
         "reference (1.0)",
         xy=(angles[0], 1.0),
-        fontsize=8,
+        fontsize=ref_fontsize,
         color="dimgray",
         ha="center",
         va="bottom",
@@ -395,23 +407,59 @@ def _plot_score_radar(  # noqa: PLR0913
             angle,
             label_radius,
             _metric_label(metric),
-            fontsize=12,
+            fontsize=metric_fontsize,
             fontweight="bold",
             ha=horizontal,
             va=vertical,
             clip_on=False,
         )
 
-    # Radial ticks: keep them off the spokes and lightly styled.
-    ax.set_rlabel_position(np.degrees(np.mean(angles[:2])))
-    ax.tick_params(axis="y", labelsize=9, colors="dimgray")
+    # Radial ticks: keep them off the spokes and lightly styled. Optionally move them to the bottom gap (data angle
+    # 180, opposite the top reference annotation) so the numbers don't collide with the "reference (1.0)" text.
+    ax.set_rlabel_position(180.0 if rlabel_at_bottom else np.degrees(np.mean(angles[:2])))
+    ax.tick_params(axis="y", labelsize=tick_fontsize, colors="dimgray")
     ax.grid(color="gray", alpha=0.25, linewidth=0.8)
     ax.spines["polar"].set_alpha(0.3)
+    return ax.get_legend_handles_labels()
+
+
+def _plot_score_radar(  # noqa: PLR0913
+    scores_df: pd.DataFrame,
+    output_path: Path,
+    colormap: str,
+    title: str,
+    subtitle: str,
+    filename: str,
+    *,
+    radial: tuple[float, float, float, NDArray] | None = None,
+) -> None:
+    """Render a standalone radar/spider plot of per-model scores across the metric axes (higher is better).
+
+    Thin wrapper around :func:`_draw_score_radar`: one closed polygon (light fill) per model, the per-model
+    ``Combined`` score annotated in the legend, and a dashed ``score = 1.0`` reference ring.
+
+    Args:
+        scores_df: Frame indexed by ``Model`` with metric columns plus a ``Combined`` column.
+        output_path: Directory to save the plot.
+        colormap: Seaborn/matplotlib palette name.
+        title: Main title.
+        subtitle: Subtitle (the reference mode).
+        filename: Output file stem (``.png`` appended).
+        radial: Optional precomputed ``(r_lower, r_upper, step, ticks)`` to share one scale and rings across radars;
+            when ``None`` the bounds are derived from this frame's own data.
+    """
+    metrics = [column for column in scores_df.columns if column != COMBINED_COLUMN]
+    if not metrics:
+        return
+
+    palette = model_colors(scores_df.index, colormap)
+    fig = plt.figure(figsize=(11, 9))
+    ax = fig.add_subplot(111, polar=True)
+    handles, labels = _draw_score_radar(ax, scores_df, palette, radial, show_mean=True)
 
     # Compress the polar axes so the title band clears the top rim label and the legend has room at the bottom.
     fig.subplots_adjust(top=0.84, bottom=0.12)
     _set_titles(fig, title, subtitle)
-    handles, labels = ax.get_legend_handles_labels()
     fig.legend(
         handles,
         labels,
@@ -580,14 +628,91 @@ def _plot_robustness_decomposition(  # noqa: PLR0913
     print(f"✓ Plot saved as '{output_file}'")
 
 
+def _draw_combined_ranking(  # noqa: PLR0913
+    ax: plt.Axes,
+    combined_df: pd.DataFrame,
+    colormap: str,
+    *,
+    palette: dict[str, Color] | None = None,
+    ref_fontsize: float = 8,
+    top_headroom: float = 0.0,
+    label_fontsize: float | None = None,
+    value_fontsize: float = 9,
+    xlabel_fontsize: float = 13,
+    xtick_fontsize: float = 9,
+) -> None:
+    """Draw the sorted horizontal bar chart of the combined score (``Combined`` column) onto ``ax``, best at the top.
+
+    Shared by the standalone ranking and the stacked summary. The dashed line at ``1.0`` marks the reference. When
+    ``palette`` is given, bar colors are looked up by model name so they match a shared radar/legend palette; otherwise
+    they come from ``colormap`` via :func:`model_colors`.
+
+    Args:
+        ax: Axes to draw on.
+        combined_df: Combined frame (indexed by ``Model``) whose ``Combined`` column is the ranking score.
+        colormap: Seaborn/matplotlib palette name (fallback when ``palette`` is not given).
+        palette: Optional model-name -> color map so bars match a shared radar/legend palette.
+        ref_fontsize: Font size of the ``reference (1.0)`` annotation.
+        top_headroom: Extra blank space (in bar-width units) above the top bar. The ``reference (1.0)`` label sits in
+            it, clear of both the top bar below and the panel title above (used by the stacked summary).
+        label_fontsize: When set, the y-tick (model name) font size; ``None`` keeps the theme default.
+        value_fontsize: Font size of the per-bar value labels.
+        xlabel_fontsize: Font size of the ``Score`` x-axis label.
+        xtick_fontsize: Font size of the x-axis tick numbers.
+    """
+    # Higher is better; sort ascending so the largest (best) bar ends up on top of the horizontal chart.
+    ranking = combined_df[COMBINED_COLUMN].dropna().sort_values(ascending=True)
+    if ranking.empty:
+        return
+
+    if palette is not None:
+        colors: list[Color] = [palette[model] for model in ranking.index]
+    else:
+        colors = model_colors(ranking.index, colormap)
+    ax.barh(list(ranking.index), ranking.to_numpy(), color=colors, edgecolor="black", linewidth=0.8, alpha=0.9)
+    ax.axvline(1.0, color="dimgray", linestyle="--", linewidth=1.0)
+    if top_headroom:
+        bottom, top = ax.get_ylim()
+        ax.set_ylim(bottom, top + top_headroom)
+    # Sit just below the top spine; with top_headroom the top bar is pushed down, so this lands in the blank band
+    # above the bars and below the title.
+    ax.annotate(
+        "reference (1.0)",
+        xy=(1.0, 1.0),
+        xytext=(3, -3),
+        xycoords=("data", "axes fraction"),
+        textcoords="offset points",
+        fontsize=ref_fontsize,
+        color="dimgray",
+        ha="left",
+        va="top",
+    )
+
+    for model, value in ranking.items():
+        ax.text(value, model, f"  {value:.2f}", va="center", ha="left", fontsize=value_fontsize)
+
+    # Widen the x-range 10% on both ends so the value labels don't overlap the axes.
+    lo, hi = ax.get_xlim()
+    pad = 0.1 * (hi - lo)
+    ax.set_xlim(lo - pad, hi + pad)
+
+    if label_fontsize is not None:
+        ax.tick_params(axis="y", labelsize=label_fontsize)
+    ax.set_xlabel("Score", fontsize=xlabel_fontsize, fontweight="bold")
+    ax.tick_params(axis="x", labelsize=xtick_fontsize)
+    ax.grid(visible=True, axis="x", alpha=0.25, linewidth=0.6)
+    ax.set_axisbelow(True)
+    sns.despine(ax=ax)
+
+
 def _plot_combined_ranking(  # noqa: PLR0913
     combined_df: pd.DataFrame, output_path: Path, colormap: str, title: str, subtitle: str, filename: str
 ) -> None:
-    """Sorted horizontal bar chart of the combined robustness score (``Combined`` column), best (highest) at the top.
+    """Standalone sorted horizontal bar chart of the combined robustness score, best (highest) at the top.
 
-    The score is OWA quality deflated by an ID->OOD percentage-degradation penalty. A bar chart fits a ranking better
-    than a radar. The dashed line at ``1.0`` marks the reference; bars to its right beat the reference, bars to its left
-    are worse.
+    Thin wrapper around :func:`_draw_combined_ranking`. The score is OWA quality deflated by an ID->OOD
+    percentage-degradation penalty; a bar chart fits a ranking better than a radar. The dashed line at ``1.0`` marks the
+    reference; bars to its right beat it, bars to its left are worse.
 
     Args:
         combined_df: Combined frame (indexed by ``Model``) whose ``Combined`` column is the ranking score.
@@ -597,43 +722,154 @@ def _plot_combined_ranking(  # noqa: PLR0913
         subtitle: Subtitle (the reference mode).
         filename: Output file stem (``.png`` appended).
     """
-    # Higher is better; sort ascending so the largest (best) bar ends up on top of the horizontal chart.
-    ranking = combined_df[COMBINED_COLUMN].dropna().sort_values(ascending=True)
+    ranking = combined_df[COMBINED_COLUMN].dropna()
     if ranking.empty:
         return
 
-    colors = model_colors(ranking.index, colormap)
     fig, ax = plt.subplots(figsize=(9, 0.7 * len(ranking) + 2))
-    ax.barh(list(ranking.index), ranking.to_numpy(), color=colors, edgecolor="black", linewidth=0.8, alpha=0.9)
-    ax.axvline(1.0, color="dimgray", linestyle="--", linewidth=1.0)
-    ax.annotate(
-        "reference (1.0)",
-        xy=(1.0, 1.0),
-        xytext=(3, -3),
-        xycoords=("data", "axes fraction"),
-        textcoords="offset points",
-        fontsize=8,
-        color="dimgray",
-        ha="left",
-        va="top",
-    )
-
-    for model, value in ranking.items():
-        ax.text(value, model, f"  {value:.2f}", va="center", ha="left", fontsize=9)
-
-    # Widen the x-range 10% on both ends so the value labels don't overlap the axes.
-    lo, hi = ax.get_xlim()
-    pad = 0.1 * (hi - lo)
-    ax.set_xlim(lo - pad, hi + pad)
-
-    ax.set_xlabel("Score", fontsize=13, fontweight="bold")
-    ax.tick_params(axis="x", labelsize=9)
+    _draw_combined_ranking(ax, combined_df, colormap)
     _set_titles(fig, title, subtitle)
-    ax.grid(visible=True, axis="x", alpha=0.25, linewidth=0.6)
-    ax.set_axisbelow(True)
-    sns.despine(ax=ax)
 
     fig.tight_layout(rect=(0, 0, 1, 0.95))
+    output_path.mkdir(parents=True, exist_ok=True)
+    output_file = output_path / f"{filename}.png"
+    fig.savefig(output_file, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    print(f"✓ Plot saved as '{output_file}'")
+
+
+def _plot_combined_summary(
+    mode_results: list[tuple[str, dict[str, pd.DataFrame], tuple[float, float, float, NDArray]]],
+    output_path: Path,
+    colormap: str,
+    filename: str,
+) -> None:
+    """Render one figure combining every reference mode as a column of the three headline views.
+
+    Columns are reference modes (e.g. Quality / Stability) in the given order; rows are the Seen radar, the Unseen radar
+    and the Combined-ranking bar. Each column keeps its **own** radial scale (the modes span very different ranges);
+    all columns share one palette and a single bottom model legend. Reuses :func:`_draw_score_radar` and
+    :func:`_draw_combined_ranking`.
+
+    Args:
+        mode_results: ``(reference_mode, scores, radial)`` per column, where ``scores`` is the dict from
+            :func:`compute_robustness_scores` and ``radial`` is that mode's shared radial scale.
+        output_path: Directory to save the plot.
+        colormap: Seaborn/matplotlib palette name.
+        filename: Output file stem (``.png`` appended).
+    """
+    if not mode_results:
+        return
+    first_id = mode_results[0][1][ID_TERM]
+    metrics = [column for column in first_id.columns if column != COMBINED_COLUMN]
+    if not metrics:
+        return
+
+    n_cols = len(mode_results)
+    palette = model_colors(first_id.index, colormap)  # models identical across modes -> one palette + one legend
+
+    fig = plt.figure(figsize=(7.5 * n_cols, 18))
+    gs = fig.add_gridspec(
+        3, n_cols, height_ratios=[1.0, 1.0, 0.55], hspace=0.42, wspace=0.3, left=0.16, right=0.97, top=0.87, bottom=0.11
+    )
+    fig_w, fig_h = fig.get_size_inches()
+
+    handles: list = []
+    labels: list[str] = []
+    row_axes: list[plt.Axes] = []
+    legend_left, legend_right = 0.0, 1.0  # widened to the ranking panels' outer edges inside the loop
+    for col, (reference_mode, scores, radial) in enumerate(mode_results):
+        id_df, ood_df, combined_df = scores[ID_TERM], scores[OOD_TERM], scores[COMBINED_TERM]
+        bar_palette = dict(zip(id_df.index, palette, strict=False))
+
+        ax_seen = fig.add_subplot(gs[0, col], polar=True)
+        ax_unseen = fig.add_subplot(gs[1, col], polar=True)
+        ax_bar = fig.add_subplot(gs[2, col])
+
+        # Center the bar plot area under the radar circle (the polar axes are height-constrained, so each circle is
+        # narrower than, and centered in, its cell).
+        radar_pos = ax_seen.get_position()
+        circle_w = min(radar_pos.width * fig_w, radar_pos.height * fig_h) / fig_w
+        circle_cx = radar_pos.x0 + radar_pos.width / 2
+        bar_pos = ax_bar.get_position()
+        ax_bar.set_position((circle_cx - circle_w / 2, bar_pos.y0, circle_w, bar_pos.height))
+        if col == 0:
+            legend_left = circle_cx - circle_w / 2  # left edge of the first ranking panel
+        legend_right = circle_cx + circle_w / 2  # right edge of the last ranking panel
+
+        handles, labels = _draw_score_radar(
+            ax_seen,
+            id_df,
+            palette,
+            radial,
+            show_mean=False,
+            ref_fontsize=12,
+            tick_fontsize=15,
+            metric_fontsize=15,
+            rlabel_at_bottom=True,
+        )
+        _draw_score_radar(
+            ax_unseen,
+            ood_df,
+            palette,
+            radial,
+            show_mean=False,
+            ref_fontsize=12,
+            tick_fontsize=15,
+            metric_fontsize=15,
+            rlabel_at_bottom=True,
+        )
+        _draw_combined_ranking(
+            ax_bar,
+            combined_df,
+            colormap,
+            palette=bar_palette,
+            ref_fontsize=14,
+            top_headroom=0.5,
+            label_fontsize=15,
+            value_fontsize=13,
+            xlabel_fontsize=15,
+            xtick_fontsize=12,
+        )
+
+        # Column header (reference mode) centered over the column, above the top radar's rim.
+        mode_label = SUMMARY_LABELS.get(reference_mode, _reference_label(reference_mode))
+        fig.text(
+            circle_cx,
+            0.915,
+            f"{mode_label} ({_reference_label(reference_mode)})",
+            ha="center",
+            va="bottom",
+            fontsize=22,
+            fontweight="bold",
+        )
+        if col == 0:
+            row_axes = [ax_seen, ax_unseen, ax_bar]
+
+    # Row labels once, at the far left, vertically centered on each row (the panel identity is shared by both columns).
+    row_titles = (RADAR_TERM_TITLES[ID_TERM], RADAR_TERM_TITLES[OOD_TERM], COMBINED_PANEL_TITLE)
+    for row_ax, row_title in zip(row_axes, row_titles, strict=False):
+        pos = row_ax.get_position()
+        y_center = (pos.y0 + pos.y1) / 2
+        fig.text(0.03, y_center, row_title, ha="center", va="center", rotation=90, fontsize=20, fontweight="bold")
+
+    fig.suptitle("Robustness Summary", fontsize=26, fontweight="bold", y=0.975)
+    # Stretch the legend across the full width of the ranking panels (edges tracked in the loop). mode="expand" fills
+    # the bbox width so the entries spread evenly rather than clumping in the center.
+    fig.legend(
+        handles,
+        labels,
+        loc="lower left",
+        ncol=len(labels),
+        mode="expand",
+        fontsize=14,
+        title="Model",
+        title_fontsize=16,
+        frameon=True,
+        framealpha=0.9,
+        bbox_to_anchor=(legend_left, 0.02, legend_right - legend_left, 0.04),
+    )
+
     output_path.mkdir(parents=True, exist_ok=True)
     output_file = output_path / f"{filename}.png"
     fig.savefig(output_file, dpi=300, bbox_inches="tight")
@@ -645,9 +881,12 @@ def run_robustness_scores_analysis(config: DictConfig, log: Logger, output_path:
     """Run score analysis for each configured reference mode.
 
     For each ``config.score.reference_modes`` entry, computes per-model per-metric ID/OOD scores from the combined
-    results file and, under ``output_path/<mode>/``, writes a radar plot, CSV table and LaTeX table for each of the two
-    axes; an ID-vs-OOD decomposition scatter; and the combined robustness ranking (per-metric ``sqrt(id * ood)``) as a
-    sorted bar chart with its CSV and LaTeX table.
+    results file and, under ``output_path/<folder>/`` (folder from :data:`SUMMARY_FOLDERS`, e.g. ``quality_naive``),
+    writes a radar plot, CSV table and LaTeX table for each of the two axes (stems from :data:`RADAR_TERM_STEMS`, e.g.
+    ``seen_score``/``unseen_score``); an ID-vs-OOD decomposition scatter; and the combined robustness ranking
+    (per-metric ``sqrt(id * ood)``) as a sorted bar chart with its CSV and LaTeX table. Finally, writes a single
+    top-level ``robustness_summary.png`` combining every reference mode as a column (Seen radar / Unseen radar /
+    Combined ranking) with a single shared model legend.
 
     Args:
         config: Analysis configuration (``benchmarks_filepath``, ``benchmarks``, ``models_to_compare``,
@@ -680,6 +919,8 @@ def run_robustness_scores_analysis(config: DictConfig, log: Logger, output_path:
 
     score_cfg = config.score
 
+    # Collected per mode (in config order) to render the single combined Quality-vs-Stability summary after the loop.
+    mode_results: list[tuple[str, dict[str, pd.DataFrame], tuple[float, float, float, NDArray]]] = []
     for reference_mode in score_cfg.reference_modes:
         log.info("Computing scores for reference mode '%s'", reference_mode)
         scores = compute_robustness_scores(
@@ -695,7 +936,7 @@ def run_robustness_scores_analysis(config: DictConfig, log: Logger, output_path:
             log.warning("No models scored for reference mode '%s'; skipping.", reference_mode)
             continue
 
-        mode_output = output_path / reference_mode
+        mode_output = output_path / str(SUMMARY_FOLDERS.get(reference_mode, reference_mode))
         reference_label = _reference_label(reference_mode)  # plot subtitle, e.g. "Naive-Relative"
         print(f"\n=== Scores: {reference_mode} ({len(scores[ID_TERM])} models) ===")
 
@@ -746,6 +987,11 @@ def run_robustness_scores_analysis(config: DictConfig, log: Logger, output_path:
         )
         _write_scores_csv(combined_sorted, mode_output, f"{COMBINED_FILE_STEM}_scores", label=COMBINED_TITLE)
         _write_scores_tex(combined_sorted, mode_output, f"{COMBINED_FILE_STEM}_scores", caption=combined_title)
+
+        mode_results.append((reference_mode, scores, shared_radial))
+
+    # Single combined summary spanning all reference modes (columns), written at the top level.
+    _plot_combined_summary(mode_results, output_path, colormap, SUMMARY_FILE_STEM)
 
     print("\n✓ Robustness score analysis complete!")
     log.info("Robustness score analysis complete!")
