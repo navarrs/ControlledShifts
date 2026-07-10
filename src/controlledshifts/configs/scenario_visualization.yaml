@@ -24,6 +24,14 @@ output_dir: outputs/scenario_viz
 # Model-output parameters (only used by the trajpred and model_output visualization types).
 batch_cache_path: null            # directory of cached model-output batches; REQUIRED for trajpred/model_output
 model_experiment: null            # used as the pane_type folder for model_output viz (e.g. "wayformer")
+
+# Trajpred multi-model comparison: renders one pane per model, each titled with `name`. When null, trajpred falls
+# back to the single `batch_cache_path` above (rendered as a one-model comparison). Scenarios are sampled once from
+# the intersection of scenario ids available across all listed models, so the panes stay aligned.
+models: null
+# models:
+#   - {name: wayformer, batch_cache_path: /data/.../wayformer}
+#   - {name: mtr, batch_cache_path: /data/.../mtr}
 num_batches: null
 num_scenarios: null
 seed: 42

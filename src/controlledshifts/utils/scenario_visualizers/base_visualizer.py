@@ -675,13 +675,14 @@ class BaseVisualizer(ABC):
                 a.set_ylim(ego_position[1] - distance, ego_position[1] + distance)
 
     @abstractmethod
-    def visualize_scenario(
+    def visualize_scenario(  # noqa: PLR0913
         self,
         scenario: Scenario | AgentCentricScenario,
         scores: ScenarioScores | None = None,
         model_output: ModelOutput | None = None,
         output_dir: str = "temp",
         causal_gt_ids: NDArray[np.int_] | None = None,
+        model_outputs: dict[str, ModelOutput] | None = None,
     ) -> None:
         """Visualizes a single scenario and saves the output to a file.
 
@@ -696,4 +697,6 @@ class BaseVisualizer(ABC):
             output_dir: the directory where to save the scenario visualization.
             causal_gt_ids: ground-truth causal agent ids for the GT causal pane, loaded from
                 the causal-label files; used when no model output is available.
+            model_outputs: per-model outputs keyed by model name, used by the trajpred visualizer to render one
+                comparison pane per model. Ignored by visualizers that render a single model output.
         """
