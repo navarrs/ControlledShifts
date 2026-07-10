@@ -338,6 +338,10 @@ uv run -m controlledshifts.run_analysis analysis=scenario_overlap
 It writes, under `<output_path>/`: a single `scenario_overlap.png` with one annotated Jaccard heatmap per split
 (sharing one colorbar), and a tidy `scenario_overlap.csv` (columns `split`, `benchmark_a`, `benchmark_b`, `size_a`,
 `size_b`, `intersection`, `union`, `jaccard`) holding the raw intersection counts behind the plotted Jaccard values.
+It also writes an `overlaps/` subdirectory holding the overlapping scenario IDs themselves as JSON: one
+`<BenchmarkA>_<BenchmarkB>.json` per benchmark pair plus an `all_benchmarks.json` for the intersection common to every
+benchmark. Each file mirrors the split JSONs — a `benchmarks` metadata list naming the group, then one sorted array of
+shared scenario IDs per split.
 
 
 # Sample Selection
