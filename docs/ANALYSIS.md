@@ -92,7 +92,7 @@ uv run -m controlledshifts.run_model_cache_sweep 'models=[wayformer,mtr]' 'bench
 A failing run does not abort the sweep; failures are reported in a summary at the end. See
 [`model_cache_sweep.yaml`](../src/controlledshifts/configs/model_cache_sweep.yaml) for all options.
 
-## Analyses
+## Model and Benchmark Analyses
 
 All analyses run through a single entrypoint, selecting a config from
 [`configs/analysis/`](../src/controlledshifts/configs/analysis/):
