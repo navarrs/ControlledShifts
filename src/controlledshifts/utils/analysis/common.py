@@ -64,17 +64,6 @@ MODEL_SIZE_MAP = {
     "MTR": "27.2M",  # This is the size with d_model=256. The original MTR with d_model=512 has 65M parameters.
 }
 
-BENCHMARK_NAME_MAP = {
-    "causal-benchmark-labeled": "CausalAgents",
-    "ego-safeshift-causal-benchmark": "EgoSafeShift",
-    "environments-benchmark": "Environments",
-}
-
-SPLIT_NAME_MAP = {
-    "test/waymo-mini-causal-testing": "CausalAgents/ID",
-    "test/waymo-remove-noncausal-testing": "CausalAgents/OOD",
-}
-
 
 def relative_gap_pct(value: float | NDArray, reference: float | NDArray) -> float | NDArray:
     """Compute ``(value - reference) / |reference| * 100``. Works for scalars and numpy arrays."""
@@ -113,12 +102,6 @@ def set_yaxis_limits(
     ymin, ymax = np.nanmin(values), np.nanmax(values)
     padding = padding_factor * (ymax - ymin) if ymax > ymin else min_padding
     ax.set_ylim(ymin - padding * lower_factor, ymax + padding)
-
-
-def symmetric_vrange(values: list[float]) -> tuple[float, float]:
-    """Return ``(-vabs, +vabs)`` where ``vabs = max(|min|, |max|)`` of *values*."""
-    vabs = max(abs(np.nanmin(values)), abs(np.nanmax(values)))
-    return -vabs, vabs
 
 
 def flatten_metrics(data: dict, prefix: str = "") -> dict[str, float | int | str | bool | None]:

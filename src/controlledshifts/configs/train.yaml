@@ -52,12 +52,4 @@ seed: 42
 sweep_type: ''
 exp_name: ${paths.tag}_${model.config.model_name}${sweep_type}
 
-# sample selection
-# either of 'all', 'random_drop', 'kmeans_random_drop', 'simple_kmeans_cosine_drop', 'gumbel_kmeans_cosine_drop'
-sample_selection_strategy: all
-sample_selection_path: null # need to specify the path where the sample selection file is saved to
-percentage: 0.45
-sample_selection_filepath: ${sample_selection_path}/sample_selection_${sample_selection_strategy}_${percentage}.json
-sample_selection_intention_points_filepath: ${sample_selection_path}/sample_selection_intention_points_${sample_selection_strategy}_${percentage}.pkl
-
 autolabel_agents: false

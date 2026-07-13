@@ -28,9 +28,6 @@ config:
   val_sources: ${paths.val_sources}
   test_sources: ${paths.test_sources}
 
-  sample_selection_strategy: ${sample_selection_strategy}
-  sample_selection_filepath: ${sample_selection_filepath}
-
   store_data_in_memory: false
 
   masked_attributes: ['z_axis', 'size']

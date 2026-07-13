@@ -176,8 +176,6 @@ class MTR(BaseModel):
         loss, _, _ = self.motion_decoder.get_loss()
 
         self.log_info(batch["input_dict"], model_output, loss, status=status)
-        if self.sample_selection:
-            save_cache(model_output, self.batch_cache_path, "train")
-        elif status != ModelStatus.TRAIN and self.cache_batch and batch_idx % self.cache_every_batch_idx == 0:
+        if status != ModelStatus.TRAIN and self.cache_batch and batch_idx % self.cache_every_batch_idx == 0:
             save_cache(model_output, self.batch_cache_path, f"{status}")
         return loss

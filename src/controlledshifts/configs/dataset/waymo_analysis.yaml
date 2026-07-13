@@ -18,8 +18,6 @@ config:
   train_sources: null
   val_sources: null
   test_sources: null
-  sample_selection_strategy: all
-  sample_selection_filepath: null
   max_num_agents: null
   max_num_roads: null
   max_points_per_lane: null
