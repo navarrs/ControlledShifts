@@ -2,72 +2,61 @@
 
 ## Training a single experiment
 
-To run a training experiment:
 ```bash
 uv run -m controlledshifts.train model=[model_name]
 ```
-where `model_name`: either of `wayformer`, `scenetransformer`, `mtr`, `autobot`, `cvm`, or `naive`. The model name needs to be specified.
+`model` is required; see [Model types](#model-types). Additional config groups (all under [`src/controlledshifts/configs/`](../src/controlledshifts/configs/)):
 
-Additional command line arguments:
-* `logger`: either of `mlflow`, `neptune`, `tensorboard`, `wandb`, `csv` or `many_loggers` (which will use both `mlflow` and `csv`). Specific parameters might need to be set for some loggers. **Default** value is `many_loggers`.
-* `scenario`: either of `waymo` or `nuscenes`. This will simply set the scenario sequence partition. **Default** value is `waymo`, which will partition the scenario into 1.1 seconds of history and 8 seconds for prediction.
-* `paths`: either of `waymo`, `causal_agents`, `safeshift`, `safeshift_causal`, or `ego_safeshift_causal`. Each specifies the paths to the train/val/test data. **Default** value is `waymo`.
-* `trainer`: either of `cpu`, `ddp`, `gpu` or `mps`. **Default** value is `gpu'.
-* `dataset`: This specifies the input data representation. Currently, the only supported value is `waymo`. See this [doc](./DATA_PREPARATION.md) for more details on how to prepare the data.
+* `paths`: the benchmark whose split and variant caches to train on — `uniform`, `causal_agents`, `causal_agents_all`, `causal_agents_hard`, `safeshift`, `safeshift_original`, `ego_safeshift`, `environments`, or `mini`. See [BENCHMARKS.md](BENCHMARKS.md). **Default:** `causal_agents`.
+* `logger`: `csv`, `mlflow`, `neptune`, `tensorboard`, `wandb`, or `many_loggers` (`csv` + `wandb`). **Default:** `many_loggers`.
+* `trainer`: `cpu`, `gpu`, `ddp`, `ddp_sim`, or `mps`. **Default:** `gpu`.
+* `scenario`: sets the sequence partition — `waymo` (1.1 s history, 8 s prediction) or `nuscenes` (2.1 s / 6 s). **Default:** `waymo`.
+* `dataset`: the input data representation. `waymo` for train/eval; `waymo_analysis` is used by the analysis and visualization entrypoints. See [DATA_PREPARATION.md](DATA_PREPARATION.md).
 
+## Model types
 
-## Logging Details
+| `model=` | Type | Reference | Description | Notes |
+|---|---|---|---|---|
+| `cvm` | Baseline (non-learned) | — | Constant-velocity extrapolation of the ego from the velocity over its last two valid history steps. | `map_aware` (**default `true`**) snaps the ego onto nearby lane centerlines and advances along each lane's arc-length at the observed speed, producing one mode per candidate lane; set `false` for plain straight-line extrapolation. Tuned by `lane_search_radius`, `min_speed`, `score_temperature`, `alignment_weight`. |
+| `naive` | Baseline (learned) | — | MLP over the ego's own (x, y) history — no map, no other agents, no attention. | Lower bound that isolates the value added by map and social context. |
+| `autobot` | Learned | [Girgis et al., ICLR 2022](https://arxiv.org/abs/2104.00563) | Factorized temporal and social attention. | Adapted from [UniTraj](https://github.com/vita-epfl/UniTraj). Uses its own AutoBot criterion. |
+| `wayformer` | Learned | [Nayakanti et al., ICRA 2023](https://arxiv.org/abs/2207.05844) | Perceiver-IO scene encoder with a trajectory decoder. | Adapted from [UniTraj](https://github.com/vita-epfl/UniTraj). |
+| `scenetransformer` | Learned | [Ngiam et al., ICLR 2022](https://arxiv.org/abs/2106.08417) | Factorized social x temporal attention over a unified scene representation. | Adapted from [AmeliaTF](https://github.com/AmeliaCMU/AmeliaTF/). |
+| `mtr` | Learned | [Shi et al., NeurIPS 2022](https://arxiv.org/abs/2209.13508) | PointNet polyline encoder, global transformer, and intention-point-conditioned motion queries. | Intention points are computed from the training data and cached on the first run. |
+| `mtr_mini` | Learned | *(as `mtr`)* | Smaller MTR preset: `d_model` 96, 4 attention layers, no local attention. | Hyperparameters mirrored from [SafeShift](https://github.com/cmubig/SafeShift). |
 
-#### CSV (Default)
-Outputs are saved under the per-run folder `<base_path>/model_cache/<benchmark>/<model>/<date_time>/logs/<task>/csv`, where `<base_path>` is `/data/driving/<dataset>` and `<task>` is `train` or `eval`.
-
-####  MLflow (Default)
-Currently, it needs **tracking_uri** specification, as:
-```bash
-uv run -m controlledshifts.train model=wayformer logger.mlflow.tracking_uri=[uri]
-```
-
-#### Tensorboard
-To visualize logs:
-```bash
-uv run tensorboard --logdir out/ --host [host-address] --port [port]
-```
-
-#### Other
-The other loggers (`neptune`, `wandb`) have not been configured yet, but have pytorch-lightning support. See this [link](https://lightning.ai/docs/pytorch/stable/api_references.html#loggers) for reference.
+Most models train with the `TrajectoryPrediction` GMM criterion; `autobot` uses its own variant, and the MTR presets compute their loss internally (`criterion: null`).
 
 ## Evaluating a single experiment
-To run an evaluation, specify any additional config arguments as above and a checkpoint name.
+
+Pass the checkpoint **name** — the full path is resolved as `${paths.ckpt_path}/${ckpt_name}.ckpt`:
 ```bash
-uv run -m controlledshifts.eval ckpt_path=/path/to/the/ckpt.pth model=[model_name]
+uv run -m controlledshifts.eval model=[model_name] ckpt_name=[ckpt_name]
 ```
 
-## Debugging
-There are various debugging configurations which can be enabled by adding `debug=[debug_name]` to the command, where `debug_name` is either of:
-* `default`: runs one epoch on debug mode on cpu.
-* `fdr`: runs 1 train, 1 validation and 1 testing step.
-* `limit`: runs n epochs with 1% of the training data dn 5% of the val/test data.
-* `overfit`: runs n epochs to overfit on b batches.
-* `profiler`: runs a performance profiler experiment.
+## Logging
 
-Example, running the profiler:
+* **CSV** and **W&B** run by default (`many_loggers`). CSV outputs land under `<base_path>/model_cache/<benchmark>/<model>/<date_time>/logs/<task>/csv`, where `<base_path>` is `/data/driving/<dataset>` and `<task>` is `train` or `eval`.
+* **MLflow** needs a tracking URI: `uv run -m controlledshifts.train model=wayformer logger=mlflow logger.mlflow.tracking_uri=[uri]`.
+* **Tensorboard**: `uv run tensorboard --logdir out/ --host [host] --port [port]`.
+
+## Debugging
+
+Add `debug=[debug_name]`:
+* `default`: one epoch on CPU with anomaly detection.
+* `fdr`: 1 train, 1 validation and 1 test step.
+* `limit`: 3 epochs on 1% of the training data and 5% of val/test.
+* `overfit`: 20 epochs overfitting 3 batches.
+* `profiler`: a performance profiling run.
+
 ```bash
 uv run -m controlledshifts.train model=wayformer debug=profiler
 ```
 
-# Multirun training (Parameter Sweeps)
+## Multirun training (parameter sweeps)
 
-To run a sweep of experiments use `-m` and specify in the command line the parameter(s) to be sweeped. For example:
+Use `-m` and pass comma-separated values for the parameter(s) to sweep:
 ```bash
 uv run -m controlledshifts.train -m model=[model_name] model.config.num_classes=10,20,50,100
 ```
-This will launch 4 sequential experiments where the value `num_classess` will be set to 10, 20, 50 and 100, respectively. The experiment logs will be saved under the per-run `logs/<task>/multiruns/` folder instead of `logs/<task>/`.
-
-# Model types
-
-- *Constant Velocity* (`model=cvm`): deterministic, non-learning baseline that linearly extrapolates the ego agent's future from the velocity estimated over its last two valid history steps, with a constant output uncertainty. Setting `model.config.map_aware=true` enables a map-aware variant that snaps the ego onto nearby lane centerlines and advances along each lane's arc-length at the observed speed, producing one trajectory mode per candidate lane (weighted by proximity and heading alignment). Samples with no usable lane nearby or an essentially stationary ego fall back to the straight-line extrapolation. The behavior is tuned via `lane_search_radius`, `min_speed`, `score_temperature`, and `alignment_weight`.
-- *Naive* (`model=naive`): minimal learned baseline that regresses the ego agent's future trajectory from its own (x, y) history alone — no map, no other agents, no attention. The flattened history passes through a single-hidden-layer MLP that predicts, per mode, a bivariate-Gaussian distribution over each future step, trained with the same GMM criterion (`TrajectoryPrediction`) as the other models. It serves as a lower bound that isolates the value added by map and social context.
-- *AutoBot* (`model=autobot`): follows the architecture from [Girgis et al., ICLR 2022](https://arxiv.org/abs/2104.00563), adapted from [UniTraj](https://github.com/vita-epfl/UniTraj). Implements multi-modal trajectory prediction with factorized temporal and social attention.
-- *SceneTransformer* (`model=scenetransformer`): follows the architecture from [AmeliaTF](https://github.com/AmeliaCMU/AmeliaTF/).
-- *Wayformer* (`model=wayformer`): follows the architecture from [UniTraj](https://github.com/vita-epfl/UniTraj).
-- *MTR* (`model=mtr`): follows the architecture from [Shi et al., NeurIPS 2022](https://arxiv.org/abs/2209.13508). Implements multi-modal trajectory prediction with a PointNet polyline encoder, a global transformer, and intention-point-conditioned motion queries. On the first training run, intention points are automatically computed from the training data and cached to disk.
+This launches four sequential experiments. Logs are written under `logs/<task>/multiruns/` instead of `logs/<task>/`.
