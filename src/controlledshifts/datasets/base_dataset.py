@@ -21,7 +21,7 @@ from torch.utils.data import Dataset
 
 from controlledshifts.datasets.agent_centric_processor import processing_profile, processing_profile_hash
 from controlledshifts.utils import pylogger
-from controlledshifts.utils.constants import DataSplits, SampleSelection
+from controlledshifts.utils.constants import DataSplits
 
 
 _LOGGER = pylogger.get_pylogger(__name__)
@@ -58,14 +58,6 @@ class BaseDataset(Dataset):
                     error_message = f"Unsupported split value: {self.split}"
                     raise ValueError(error_message)
 
-            self.blacklist = []
-            sample_selection_strategy = SampleSelection(self.config.sample_selection_strategy)
-            if sample_selection_strategy != SampleSelection.ALL:
-                sample_selection_filepath = Path(self.config.sample_selection_filepath)
-                with sample_selection_filepath.open("r") as f:
-                    selected_samples = json.load(f)
-                    self.blacklist = selected_samples["drop"]
-                    _LOGGER.info("Removing %s  samples using %s", len(self.blacklist), sample_selection_strategy)
             self.load_data()
 
     def _cache_dir(self, variant: str) -> Path:
@@ -154,13 +146,8 @@ class BaseDataset(Dataset):
                 num_empty,
             )
 
-        # Blacklisting lets a single cache serve every sample-selection variant without rebuilding.
-        if self.blacklist:
-            blacklist = set(self.blacklist)
-            self.data_loaded = {k: v for k, v in self.data_loaded.items() if v["scenario_id"] not in blacklist}
-
         if not self.data_loaded:
-            err_msg = f"No samples loaded for split {self.split} (after blacklist)."
+            err_msg = f"No samples loaded for split {self.split}."
             raise RuntimeError(err_msg)
 
         # Shuffle deterministically (seed-driven) so all DDP ranks agree on ordering and the train-only subsample.

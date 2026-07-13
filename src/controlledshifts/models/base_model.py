@@ -57,7 +57,6 @@ class BaseModel(LightningModule, ABC):
         self.cache_batch = config.cache_batch
         self.cache_every_batch_idx = config.cache_every_batch_idx
         self.batch_cache_path = Path(config.batch_cache_path)
-        self.sample_selection = config.get("sample_selection", False)
         self.batch_cache_path.mkdir(parents=True, exist_ok=True)
 
     @abstractmethod
@@ -126,9 +125,7 @@ class BaseModel(LightningModule, ABC):
         model_output = self.forward(batch)
         loss = self.criterion(model_output)
         self.log_info(batch["input_dict"], model_output, loss, status=status)
-        if self.sample_selection:
-            save_cache(model_output, self.batch_cache_path, "train")
-        elif status != ModelStatus.TRAIN and self.cache_batch and batch_idx % self.cache_every_batch_idx == 0:
+        if status != ModelStatus.TRAIN and self.cache_batch and batch_idx % self.cache_every_batch_idx == 0:
             save_cache(model_output, self.batch_cache_path, f"{status}")
         return loss
 

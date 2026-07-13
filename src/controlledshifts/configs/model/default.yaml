@@ -3,7 +3,6 @@ config:
   eval: null
   model_name: null
   extra_tags: null
-  sample_selection: false
 
   # Training parameters
   max_epochs: 200

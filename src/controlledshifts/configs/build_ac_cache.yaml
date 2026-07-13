@@ -27,6 +27,4 @@ dataset:
     val_sources: null
     test_sources: null
     seed: 0
-    sample_selection_strategy: all
-    sample_selection_filepath: null
     autolabel_agents: false

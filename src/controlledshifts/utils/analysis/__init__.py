@@ -4,10 +4,6 @@ from controlledshifts.utils.analysis.distribution_shift import run_distribution_
 from controlledshifts.utils.analysis.environments_distribution import run_environments_distribution_analysis
 from controlledshifts.utils.analysis.model import compute_dimensionality_reduction
 from controlledshifts.utils.analysis.robustness_scores import run_robustness_scores_analysis
-from controlledshifts.utils.analysis.sample_selection import (
-    plot_sample_selection_sweep_heatmap,
-    plot_sample_selection_sweep_lineplot,
-)
 from controlledshifts.utils.analysis.scenario_overlap import run_scenario_overlap_analysis
 from controlledshifts.utils.analysis.score_distribution import run_score_distribution_analysis
 from controlledshifts.utils.analysis.unshifted_generalization import run_unshifted_generalization_analysis
@@ -16,8 +12,6 @@ from controlledshifts.utils.analysis.unshifted_generalization import run_unshift
 __all__ = [
     "compute_dimensionality_reduction",
     "plot_heatmap",
-    "plot_sample_selection_sweep_heatmap",
-    "plot_sample_selection_sweep_lineplot",
     "run_causal_distribution_analysis",
     "run_distribution_shift_analysis",
     "run_environments_distribution_analysis",

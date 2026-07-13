@@ -97,21 +97,6 @@ the analyses can be run one at a time or all together.
 
 <img src="../assets/scenario_tsne.png">
 
-## Model Metric Analysis
-
-
-The file `configs/model_metric_analysis.yaml` specifies the configuration to compare the metrics from different models.
-
-Run a scenario visualizer as:
-```bash
-uv run -m controlledshifts.model_metric_analysis group_name=[experiment_group]
-```
-
-An example of an expected input to this script is `assets/group.csv`, and an example of a corresponding result is shown below:
-
-<img src="../assets/group_metric.png">
-
-
 ## Distribution Shift Analysis
 
 The file `configs/analysis/distribution_shift.yaml` configures the in-distribution (ID) vs out-of-distribution (OOD)

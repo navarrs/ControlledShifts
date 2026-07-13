@@ -32,9 +32,8 @@ _LOGGER = pylogger.get_pylogger(__name__)
 # Config keys that change the agent-centric tensors. The cache directory is keyed by a hash of these (see
 # ``processing_profile``); any key that alters ``process_agent_centric_scenario`` / ``get_centered_*`` /
 # ``characterize_scenario`` / the profile-shaping in ``shape_scenario`` MUST appear here, or training could silently
-# read a mismatched cache (a unit test guards this list). Keys that only affect selection (sample_selection,
-# num_data_to_consider, blacklist) or labelling (the per-source tag) are deliberately excluded so they do not fragment
-# the cache.
+# read a mismatched cache (a unit test guards this list). Keys that only affect selection (num_data_to_consider) or
+# labelling (the per-source tag) are deliberately excluded so they do not fragment the cache.
 PROFILE_KEYS: tuple[str, ...] = (
     "past_len",
     "future_len",
