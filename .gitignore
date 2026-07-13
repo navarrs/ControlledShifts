@@ -220,7 +220,6 @@ __marimo__/
 
 # Ignore for now:
 
-# Sample selection
 tests/
 meta/
 outputs/
