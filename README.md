@@ -36,3 +36,4 @@ uv run pre-commit install
 
 Run `uv sync --frozen --all-groups` to set up the environment.
 Run `pre-commit run --all-files` to run all hooks on all files.
+Run `./tests/run_tests.sh` to run the test suite (`-c <category>` for a single category, `-h` for options).
