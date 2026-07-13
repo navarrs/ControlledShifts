@@ -27,7 +27,26 @@ See **[BENCHMARKS.md](BENCHMARKS.md)** for how splits, perturbed variants, and c
 
 ## Pipeline
 
-End-to-end flow. Each step is tagged with the environment it runs in (`[3.12]` / `[3.10]`).
+```mermaid
+flowchart LR
+    raw[("Raw WOMD<br/>protos")]
+    base[("variants/base")]
+    splits["splits/&lt;benchmark&gt;.json"]
+    pert[("variants/&lt;perturbation&gt;")]
+    cache[("ac_cache/&lt;variant&gt;")]
+    runs[("model_cache/&lt;run&gt;")]
+
+    raw -->|"preprocessor.py (py3.10)"| base
+    base -->|create_benchmark| splits
+    base -->|create_benchmark| pert
+    base --> cache
+    pert --> cache
+    cache -->|build_ac_cache| runs
+    splits --> runs
+    runs -->|"train / eval"| out["run_analysis<br/>run_scenario_visualization"]
+```
+
+Each step below is tagged with the environment it runs in (`[3.12]` / `[3.10]`).
 
 1. **`[3.12]` Install the main environment** — see *Installation* in the [README](../README.md).
 
@@ -61,7 +80,8 @@ End-to-end flow. Each step is tagged with the environment it runs in (`[3.12]` /
    python src/controlledshifts/datasets/waymo/preprocessor.py --raw_data_path /data/driving/waymo/raw/mini --proc_data_path /data/driving/waymo/variants/base --split validation
    python src/controlledshifts/datasets/waymo/preprocessor.py --raw_data_path /data/driving/waymo/raw/mini --proc_data_path /data/driving/waymo/variants/base --split testing
    ```
-   **NOTE:** Training defaults expect data under `/data/driving` (see [`default.yaml`](../src/controlledshifts/configs/paths/default.yaml)); adjust `base_path` to match your data location.
+   > [!IMPORTANT]
+   > Training defaults expect data under `/data/driving` (see [`default.yaml`](../src/controlledshifts/configs/paths/default.yaml)); adjust `base_path` to match your data location.
 
 5. **`[3.12]` Create a benchmark and build the agent-centric cache.** A benchmark partitions `variants/base` into train/val/test (and, for shift benchmarks, generates perturbed variants); `build_ac_cache` then turns a variant into model-ready tensors. There are **six** benchmarks — see **[BENCHMARKS.md](BENCHMARKS.md)** for the full list, options, and which processing profiles share a cache.
    ```bash
@@ -119,9 +139,8 @@ Prepares the per-scenario causal labels that the `causal_agents` benchmark consu
    uv run -m controlledshifts.build_ac_cache variant=remove_noncausal model=autobot
    ```
 
-### SafeShift (WOMD)
-
-> **Not used in this project**, kept for reference.
+<details>
+<summary><b>SafeShift (WOMD)</b> — not used in this project, kept for reference.</summary>
 
 1. Download the processed splits from [Box](https://cmu.app.box.com/s/ptl5vlsi5uwt6drejnrpcp8a9utfwuzo) (`mtr_process_splits.zip`, the SafeShift scoring splits) and unzip into `/datasets/`.
 
@@ -139,3 +158,5 @@ Prepares the per-scenario causal labels that the `causal_agents` benchmark consu
    ```
 
 4. Re-split into a safety-critical ID/OOD benchmark via `create_benchmark benchmark=safeshift` (or `ego_safeshift`). See **[BENCHMARKS.md](BENCHMARKS.md)** for its options.
+
+</details>

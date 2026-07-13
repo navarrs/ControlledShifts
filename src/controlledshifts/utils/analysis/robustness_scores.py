@@ -30,7 +30,10 @@ with no second reference. Higher is better and ``1.0`` means on par with the ref
 demotes the Naive baseline (pinned at ``1.0``, since it is its own reference) and keeps a model genuinely worse than
 Naive below it. Under ``uniform_relative`` the combined is a *stability* view: because the reference is the model's own
 Uniform row, the most *consistent* model (the input-agnostic Naive) ranks high there -- expected for a self-relative
-stability score, not a downstream-performance ranking. See `docs/ANALYSIS.md`.
+stability score, not a downstream-performance ranking.
+
+This docstring is the reference for the *methodology*; see `docs/ANALYSIS.md` for how to run the analysis and what it
+writes.
 """
 
 import math
