@@ -777,14 +777,16 @@ class DynamicSampler(Sampler):
         self.idx = idx
 
 
-def resplit_batch(batch: output.ModelOutput) -> dict[str, output.ModelOutput]:
+def resplit_batch(batch: output.ModelOutput) -> dict[tuple[str, str], output.ModelOutput]:
     """Splits a batched `ModelOutput` into per-scenario `ModelOutput` objects on CPU.
 
     Args:
         batch: a batched model output covering several scenarios.
 
     Returns:
-        Maps each scenario id to its detached, CPU-resident output.
+        Maps each (dataset name, scenario id) pair to its detached, CPU-resident output. A benchmark can evaluate the
+        same scenario under several sources (e.g. causal-agents tests the `base` and `remove_noncausal` variants of one
+        scene), so the source is part of the key: keying on the scenario id alone would drop all but one variant.
     """
     batch_resplit = {}
 
@@ -798,10 +800,16 @@ def resplit_batch(batch: output.ModelOutput) -> dict[str, output.ModelOutput]:
     batch_agent_ids = batch.agent_ids.value
     batch_scene_score = batch.scenario_scores
 
+    # Optional leaves: a model omits these when it does not produce them (cvm/naive emit no scenario_enc, mtr emits no
+    # mode_logits), so they must be indexed only when present rather than dereferenced unconditionally.
+    batch_scenario_enc = batch_scenario_embedding.scenario_enc
+    batch_mode_logits = None if batch_trajectory_output is None else batch_trajectory_output.mode_logits
+    batch_causal_logits = None if batch_causal_output is None else batch_causal_output.causal_logits
+
     for n, scenario_id in enumerate(batch.scenario_id):
         # Scenario Embedding
         scenario_embedding = output.ScenarioEmbedding(
-            scenario_enc=batch_scenario_embedding.scenario_enc.value[n].detach().cpu(),  # pyright: ignore[reportArgumentType, reportOptionalMemberAccess]
+            scenario_enc=None if batch_scenario_enc is None else batch_scenario_enc.value[n].detach().cpu(),  # pyright: ignore[reportArgumentType]
             scenario_dec=batch_scenario_embedding.scenario_dec.value[n].detach().cpu(),  # pyright: ignore[reportArgumentType]
         )
         trajectory_decoder_output = None
@@ -809,7 +817,7 @@ def resplit_batch(batch: output.ModelOutput) -> dict[str, output.ModelOutput]:
             trajectory_decoder_output = output.TrajectoryDecoderOutput(
                 decoded_trajectories=batch_trajectory_output.decoded_trajectories.value[n].detach().cpu(),  # pyright: ignore[reportArgumentType]
                 mode_probabilities=batch_trajectory_output.mode_probabilities.value[n].detach().cpu(),  # pyright: ignore[reportArgumentType]
-                mode_logits=batch_trajectory_output.mode_logits.value[n].detach().cpu(),  # pyright: ignore[reportArgumentType, reportOptionalMemberAccess]
+                mode_logits=None if batch_mode_logits is None else batch_mode_logits.value[n].detach().cpu(),  # pyright: ignore[reportArgumentType]
             )
         causal_output = None
         if batch_causal_output is not None:
@@ -817,7 +825,7 @@ def resplit_batch(batch: output.ModelOutput) -> dict[str, output.ModelOutput]:
                 causal_gt=batch_causal_output.causal_gt.value[n].detach().cpu(),  # pyright: ignore[reportArgumentType]
                 causal_pred=batch_causal_output.causal_pred.value[n].detach().cpu(),  # pyright: ignore[reportArgumentType]
                 causal_pred_probs=batch_causal_output.causal_pred_probs.value[n].detach().cpu(),  # pyright: ignore[reportArgumentType]
-                causal_logits=batch_causal_output.causal_logits.value[n].detach().cpu(),  # pyright: ignore[reportArgumentType, reportOptionalMemberAccess]
+                causal_logits=None if batch_causal_logits is None else batch_causal_logits.value[n].detach().cpu(),  # pyright: ignore[reportArgumentType]
             )
         scenario_scores = None
         if batch_scene_score is not None:
@@ -829,7 +837,7 @@ def resplit_batch(batch: output.ModelOutput) -> dict[str, output.ModelOutput]:
             )
 
         # Output
-        batch_resplit[scenario_id] = output.ModelOutput(
+        batch_resplit[batch_dataset_name[n], scenario_id] = output.ModelOutput(
             scenario_embedding=scenario_embedding,
             trajectory_decoder_output=trajectory_decoder_output,
             causal_output=causal_output,
@@ -848,6 +856,7 @@ def _load_all_batches(
     base_data_path: str | Path,
     num_batches: int | None,
     tag: str = "val",
+    source: str | None = None,
 ) -> dict[str, output.ModelOutput]:
     """Loads pickled per-scenario model outputs from disk, keyed by scenario id (no sampling).
 
@@ -855,6 +864,9 @@ def _load_all_batches(
         base_data_path: root cache directory holding one per-split subdirectory per ``tag``.
         num_batches: maximum number of per-scenario files to load; None loads all (capped at `MAX_NUM_BATCHES`).
         tag: split subdirectory to load from (e.g. ``val``).
+        source: load only this source (``dataset_name``, e.g. ``waymo-remove-noncausal-testing``); None loads every
+            source under ``tag``. Splits that evaluate one scenario under several sources need this to disambiguate:
+            the returned mapping is keyed by scenario id, so it can only hold one output per scenario.
 
     Returns:
         Maps every loaded scenario id to its per-scenario outputs.
@@ -862,29 +874,46 @@ def _load_all_batches(
     Raises:
         ValueError: if no per-scenario files are found under the `tag` subdirectory.
     """
-    _LOGGER.info("Loading scenario outputs from %s", Path(base_data_path) / tag)
+    split_dir = Path(base_data_path) / tag
+    search_dir = split_dir if source is None else split_dir / source
+    _LOGGER.info("Loading scenario outputs from %s", search_dir)
     num_batches = MAX_NUM_BATCHES if num_batches is None else min(num_batches, MAX_NUM_BATCHES)
 
-    batches = {}
-    for n, scenario_file in enumerate((Path(base_data_path) / tag).glob("*.pkl")):
-        if n >= num_batches:
-            break
+    # Outputs are namespaced by source (`tag/<dataset_name>/<scenario_id>.pkl`). Sort before capping so a capped load is
+    # deterministic and spans every source, rather than draining whichever source the filesystem walks first.
+    scenario_files = sorted(search_dir.glob("*.pkl") if source is not None else search_dir.glob("*/*.pkl"))
+
+    batches: dict[str, output.ModelOutput] = {}
+    dropped: set[str] = set()
+    for scenario_file in scenario_files[:num_batches]:
         with scenario_file.open("rb") as f:
-            scenario_output: output.ModelOutput = pickle.load(f)
-        batches[scenario_output.scenario_id[0]] = scenario_output
+            scenario_output: output.ModelOutput = pickle.load(f)  # nosec B301
+        scenario_id = scenario_output.scenario_id[0]
+        if scenario_id in batches:
+            dropped.add(scenario_file.parent.name)
+        batches[scenario_id] = scenario_output
+
+    if dropped:
+        _LOGGER.warning(
+            "Scenario ids under '%s' are present in more than one source; keyed by scenario id, only one output per "
+            "scenario survives. Pass source= to pick one explicitly (overlapping sources: %s).",
+            tag,
+            ", ".join(sorted(dropped)),
+        )
 
     if not batches:
-        msg = f"No per-scenario files found in {Path(base_data_path) / tag}"
+        msg = f"No per-scenario files found in {search_dir}"
         raise ValueError(msg)
     return batches
 
 
-def load_batches(
+def load_batches(  # noqa: PLR0913
     base_data_path: str | Path,
     num_batches: int | None,
     num_scenarios: int | None,
     seed: int,
     tag: str = "val",
+    source: str | None = None,
 ) -> dict[str, output.ModelOutput]:
     """Loads pickled per-scenario model outputs from disk and returns a random subset of scenarios.
 
@@ -894,6 +923,7 @@ def load_batches(
         num_scenarios: number of scenarios to keep; None keeps all loaded scenarios.
         seed: random seed used to select scenarios.
         tag: split subdirectory to load from (e.g. ``val``).
+        source: load only this source (``dataset_name``); None loads every source under ``tag``.
 
     Returns:
         Maps the selected scenario ids to their per-scenario outputs.
@@ -901,7 +931,7 @@ def load_batches(
     Raises:
         ValueError: if no per-scenario files are found under the `tag` subdirectory.
     """
-    batches = _load_all_batches(base_data_path, num_batches, tag)
+    batches = _load_all_batches(base_data_path, num_batches, tag, source)
     random.seed(seed)
     # Select scenarios
     total_scenarios = len(batches)
@@ -916,6 +946,7 @@ def load_batches_per_model(
     num_scenarios: int | None,
     seed: int,
     tag: str = "val",
+    source: str | None = None,
 ) -> dict[str, dict[str, output.ModelOutput]]:
     """Loads per-scenario outputs for several models, aligned on one sampled scenario set.
 
@@ -929,6 +960,7 @@ def load_batches_per_model(
         num_scenarios: number of scenarios to keep; None keeps the whole intersection.
         seed: random seed used to select scenarios.
         tag: split subdirectory to load from (e.g. ``val``).
+        source: load only this source (``dataset_name``); None loads every source under ``tag``.
 
     Returns:
         Maps each selected scenario id to a mapping of model name to that model's per-scenario output.
@@ -939,7 +971,7 @@ def load_batches_per_model(
     if not model_specs:
         msg = "model_specs must contain at least one (name, cache path) pair."
         raise ValueError(msg)
-    loaded = {name: _load_all_batches(path, num_batches=None, tag=tag) for name, path in model_specs}
+    loaded = {name: _load_all_batches(path, num_batches=None, tag=tag, source=source) for name, path in model_specs}
 
     common_ids = set.intersection(*(set(batches) for batches in loaded.values()))
     if not common_ids:
@@ -1008,16 +1040,18 @@ def load_causal_agents_labels(causal_agents_labels_path: str | Path, scenario_id
 def save_cache(cache_infos: output.ModelOutput, cache_dir: Path, tag: str) -> None:
     """Splits a batched model output per scenario and pickles one file per scenario.
 
-    Each scenario is written to ``cache_dir / tag / f"{scenario_id}.pkl"`` as ``ModelOutput`` (detached, CPU). Files
-    sharing a ``scenario_id`` overwrite, matching ``resplit_batch``'s dict-keyed-by-id behavior.
+    Each scenario is written to ``cache_dir / tag / dataset_name / f"{scenario_id}.pkl"`` as ``ModelOutput`` (detached,
+    CPU). The source (``dataset_name``) namespaces the file because a split can evaluate the same scenario under several
+    sources -- causal-agents tests the ``base`` and ``remove_noncausal`` variants of the same scene ids -- and writing
+    them all as ``tag/<scenario_id>.pkl`` would silently keep only whichever variant was written last.
 
     Args:
         cache_infos: the batched model output covering several scenarios.
-        cache_dir: root cache directory; a per-split subdirectory ``tag`` is created under it.
+        cache_dir: root cache directory; ``tag/<dataset_name>`` subdirectories are created under it.
         tag: split name used as the subdirectory (e.g. ``train``/``val``/``test``).
     """
-    split_dir = cache_dir / tag
-    split_dir.mkdir(parents=True, exist_ok=True)
-    for scenario_id, scenario_output in resplit_batch(cache_infos).items():
-        with (split_dir / f"{scenario_id}.pkl").open("wb") as f:
+    for (dataset_name, scenario_id), scenario_output in resplit_batch(cache_infos).items():
+        source_dir = cache_dir / tag / dataset_name
+        source_dir.mkdir(parents=True, exist_ok=True)
+        with (source_dir / f"{scenario_id}.pkl").open("wb") as f:
             pickle.dump(scenario_output, f)

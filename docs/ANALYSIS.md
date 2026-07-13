@@ -25,7 +25,8 @@ where:
 * `split_filepath`: path to the benchmark split JSON. The visualized scenarios are taken from this file's `training`/`validation`/`testing` lists, and its `benchmark_name` becomes the `split_type` folder in the output path.
 * `splits_to_visualize`: which of `training`/`validation`/`testing` to render (each becomes its own output subfolder).
 * `scenarios_root`: directory holding the scenario pickles, organized into `training/`, `validation/`, `testing/` subdirectories of `<scenario_id>.pkl`.
-* `num_batches` / `num_scenarios`: for the model-based types (`trajpred`, `model_output`), control how many cached scenarios are loaded; scenarios are sampled if more are available than requested. Cached model outputs live as one pickle per scenario under `batch_cache_path/<split>/<scenario_id>.pkl` (split is `train`/`val`/`test`).
+* `num_batches` / `num_scenarios`: for the model-based types (`trajpred`, `model_output`), control how many cached scenarios are loaded; scenarios are sampled if more are available than requested. Cached model outputs live as one pickle per scenario under `batch_cache_path/<split>/<source>/<scenario_id>.pkl`, where `split` is `train`/`val`/`test` and `source` is the `dataset_name` of the split source that produced it (e.g. `waymo-uniform-testing`). The source namespaces the file because a split can evaluate the same scenario under several sources — causal-agents' test split caches both the `base` and `remove_noncausal` variants of the same scene ids — and keying on the scenario id alone would keep only whichever variant was written last.
+* `cache_source`: which `source` to load from the cached split (e.g. `waymo-remove-noncausal-testing`). Leave null when the split has a single source. Cached outputs are returned keyed by scenario id, so when a split holds several sources for the same scenario, set this to choose the variant; otherwise only one arbitrary variant per scenario is loaded (and a warning is logged).
 * `model_experiment`: for generic `model_output` visualizations, the tag used as the output `pane_type` folder.
 * `models`: for `trajpred`, a list of `{name, batch_cache_path}` entries; each model becomes one pane titled with its `name`. Scenarios are sampled once from the intersection of scenario ids available across all listed models, so the panes stay aligned (here `num_scenarios` governs how many aligned scenarios are drawn and `num_batches` is not applied per model). When `models` is null, a single top-level `batch_cache_path` still works and renders a one-model comparison.
 
@@ -38,6 +39,45 @@ where `render` is `static`/`animated` (derived from the visualizer), `split_type
 **Example**: Result using the causal visualizer:
 
 <img src="../assets/causal_scenario.png">
+
+### Producing a model-output cache
+
+The `trajpred` and `model_output` visualizations read cached model outputs, which training does not write by default
+(`model.config.cache_batch` is `False`). To populate the `val`/`test` caches for an already-trained run, re-run its
+checkpoint through `eval` with caching enabled. Override `paths.experiment_dir` with the run's own dated directory so
+the cache lands next to its checkpoint instead of in a fresh `${now:...}` one:
+
+```bash
+uv run -m controlledshifts.eval \
+  model=wayformer \
+  paths=causal_agents \
+  paths.experiment_dir=causal-agents/wayformer/2026-06-12_16-20-11 \
+  ckpt_name=epoch_110 \
+  model.config.cache_batch=true \
+  model.config.cache_every_batch_idx=1
+```
+
+`cache_every_batch_idx` gates which batches are written (`batch_idx % cache_every_batch_idx == 0`); it defaults to `100`,
+so set it to `1` to cache every scenario. Outputs land in `<run_dir>/batch_cache/{val,test}/<source>/<scenario_id>.pkl`.
+Use a single `trainer.devices` — under DDP every rank writes into the same directory.
+
+To cache many runs at once, `run_model_cache_sweep` does the above for every run listed in a W&B results export,
+resolving each run's directory and best checkpoint from the CSV:
+
+```bash
+# Preview the eval command for every run in the CSV.
+uv run -m controlledshifts.run_model_cache_sweep dry_run=true
+
+# Cache them, or resume an interrupted sweep.
+uv run -m controlledshifts.run_model_cache_sweep
+uv run -m controlledshifts.run_model_cache_sweep skip_existing=true
+
+# Restrict to some models/benchmarks.
+uv run -m controlledshifts.run_model_cache_sweep 'models=[wayformer,mtr]' 'benchmarks=[causal_agents]'
+```
+
+A failing run does not abort the sweep; failures are reported in a summary at the end. See
+`configs/model_cache_sweep.yaml` for all options.
 
 ## Model Embedding Analysis
 
@@ -352,20 +392,7 @@ It also writes an `overlaps/` subdirectory holding the overlapping scenario IDs 
 benchmark. Each file mirrors the split JSONs — a `benchmarks` metadata list naming the group, then one sorted array of
 shared scenario IDs per split.
 
-
-# Sample Selection
-
-Cache training set embeddings:
-```bash
-uv run -m controlledshifts.run_sample_selection -m \
-    paths=waymo_causal_labeled model=wayformer ckpt_name=epoch_118 +model.config.sample_selection=true cache=true
 ```
-
-Run training analysis only:
-```bash
-uv run -m controlledshifts.run_sample_selection -m run_analysis=true
-```
-Run training experiment using blacklist created by sample selection experiment.
 
 # Score Distribution Analysis
 

@@ -25,6 +25,12 @@ output_dir: outputs/scenario_viz
 batch_cache_path: null            # directory of cached model-output batches; REQUIRED for trajpred/model_output
 model_experiment: null            # used as the pane_type folder for model_output viz (e.g. "wayformer")
 
+# Which source (dataset_name) to load from the cached split, e.g. waymo-remove-noncausal-testing. Cached outputs are
+# namespaced by source, and a split can hold several sources for the same scenario id (causal-agents' test split caches
+# both the base and remove_noncausal variants of one scene). Leave null when the split has a single source; set it to
+# pick a variant, otherwise only one arbitrary variant per scenario is loaded.
+cache_source: null
+
 # Trajpred multi-model comparison: renders one pane per model, each titled with `name`. When null, trajpred falls
 # back to the single `batch_cache_path` above (rendered as a one-model comparison). Scenarios are sampled once from
 # the intersection of scenario ids available across all listed models, so the panes stay aligned.
