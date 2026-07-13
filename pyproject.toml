@@ -53,6 +53,7 @@ dependencies = [
 dev = [
   "pre-commit>=4.2.0",
   "pyright>=1.1.405",
+  "pytest>=8.0",
 ]
 
 
@@ -151,7 +152,6 @@ exclude = [
     "src/controlledshifts/datasets/base_dataset.py",
     "src/controlledshifts/models/components",
     "src/scripts/causal_labels_pb2.py",
-    "tests/",
 ]
 line-length = 120
 target-version = "py312"
@@ -159,6 +159,28 @@ fix = true
 
 [tool.uv]
 package = true
+
+[tool.ruff.lint.per-file-ignores]
+# Test-code patterns the src/ rules forbid but which are idiomatic in tests.
+"tests/**" = [
+  # keep-sorted start
+  "ANN001",  # missing type annotation for function argument
+  "ANN003",  # missing type annotation for **kwargs
+  "ANN201",  # missing return type for public function
+  "ANN202",  # missing return type for private function
+  "ANN204",  # missing return type for special method
+  "ARG001",  # unused function argument (fakes/stubs)
+  "ARG005",  # unused lambda argument (fakes/stubs)
+  "FBT001",  # boolean type hint in positional argument
+  "FBT002",  # boolean default positional argument
+  "FBT003",  # boolean positional value in call
+  "INP001",  # implicit namespace package (tests have no __init__.py)
+  "PD008",   # use .loc instead of .at
+  "PLR2004", # magic value used in comparison
+  "PT018",   # composite assertion
+  "SLF001",  # private member access (tests exercise internals)
+  # keep-sorted end
+]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

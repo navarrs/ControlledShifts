@@ -1,0 +1,28 @@
+name: tests
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+      - fix/*
+      - bug/*
+      - feature/*
+  push:
+    branches:
+      - develop
+      - fix/*
+      - bug/*
+      - feature/*
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+      - uses: astral-sh/setup-uv@v7
+      # `dev` is an extra, not a dependency group, so --all-groups would not install pytest.
+      - name: Set up Environment
+        run: uv sync --frozen --extra dev
+      - name: Run tests
+        run: uv run --extra dev pytest tests/ -q
