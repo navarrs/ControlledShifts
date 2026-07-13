@@ -34,12 +34,28 @@ variant stores** — it never copies or duplicates the scenario data.
    cache. Unperturbed scenes come from the `base` variant; perturbed test sets come from the perturbation variants —
    both indexed by the **same** split, so a scene is paired with its perturbed counterpart in the same bucket.
 
-Common `create_benchmark` options (see `configs/create_benchmark.yaml`):
+Common `create_benchmark` options (see [`create_benchmark.yaml`](../src/controlledshifts/configs/create_benchmark.yaml)):
 - `input_data_path`: the canonical scenario store to split. Default: `/data/driving/waymo/variants/base`.
 - `splits_path`: directory where the split JSON is written. Default: `/data/driving/waymo/splits`.
 - `seed`: makes the split deterministic. Default: `42`.
 - `overwrite`: if `false` (default), an existing split JSON and already-prepared perturbed variants are reused; set
   `true` to regenerate.
+
+## Supported Benchmarks
+
+| Benchmark | Description |
+|---|---|
+| [Uniform](#uniform) | IID control — random split, no shift. Also the reference split reused by Causal Agents. |
+| [Causal Agents](#causal-agents) | Agent-removal robustness. Reuses the Uniform split and generates four perturbed variants. |
+| [Causal Agents Hard](#causal-agents-hard) | Re-splits by non-causal agent count so the densest scenes form the test set; `remove_noncausal` only. |
+| [SafeShift](#safeshift) | Safety-critical ID→OOD split derived from precomputed SafeShift score metadata. |
+| [Ego-SafeShift](#ego-safeshift) | Ranks scenes by ego-centric safety score; the hardest form the OOD test set. |
+| [Environments](#environments) | Clusters scenes by road topology (NetLSD descriptors); the hardest clusters form the OOD test set. |
+
+Each benchmark is selected at creation with `benchmark=<name>` and at train/eval time with `paths=<name>`. Two
+benchmarks expose more than one `paths` option: `causal_agents` also has `causal_agents_all` (evaluates all four
+perturbations), and `safeshift` also has `safeshift_original` (pure ID→OOD, no perturbation). A separate `paths=mini`
+option evaluates a model trained on the unshifted `mini` variant against several benchmarks' OOD test sets at once.
 
 ## Uniform
 
@@ -52,7 +68,7 @@ and as the **reference split** the perturbation benchmarks reuse.
 uv run -m controlledshifts.create_benchmark benchmark=uniform   # -> splits/uniform.json
 ```
 
-Key options (see `configs/benchmark/uniform.yaml`):
+Key options (see [`benchmark/uniform.yaml`](../src/controlledshifts/configs/benchmark/uniform.yaml)):
 - `split_ratios`: `(train, val, test)` fractions. Default: `[0.70, 0.15, 0.15]`. Deterministic for a fixed `seed`.
 
 **Train / evaluate:**
@@ -84,7 +100,7 @@ uv run -m controlledshifts.create_benchmark benchmark=uniform          # referen
 uv run -m controlledshifts.create_benchmark benchmark=causal_agents    # -> variants/remove_{causal,noncausal,noncausalequal,static}/
 ```
 
-Key options (see `configs/benchmark/causal_agents.yaml`):
+Key options (see [`benchmark/causal_agents.yaml`](../src/controlledshifts/configs/benchmark/causal_agents.yaml)):
 - `reference_benchmark`: benchmark whose split is reused. Default: `uniform` (must exist first).
 - `causal_labels_path`: directory of per-scenario JSON causal labels. Default:
   `/data/driving/waymo/meta/causal_agents/processed_labels/`.
@@ -112,7 +128,7 @@ uv run -m controlledshifts.create_benchmark benchmark=causal_agents_hard
 # -> splits/causal_agents_hard.json (+ variants/remove_noncausal/ if not already present)
 ```
 
-Key options (see `configs/benchmark/causal_agents_hard.yaml`):
+Key options (see [`benchmark/causal_agents_hard.yaml`](../src/controlledshifts/configs/benchmark/causal_agents_hard.yaml)):
 - `causal_labels_path`: directory of per-scenario JSON causal labels.
 - `perturbed_data_path`: `remove_noncausal` variant store to reuse/populate. Default: `/data/driving/waymo/variants/remove_noncausal/`.
 - `split_ratios`: `(train, val, test)` fractions; scenes with the most non-causal agents form the test set. Default: `[0.70, 0.15, 0.15]`.
@@ -133,7 +149,7 @@ subset. The scenario *data* is still the `base` variant — only the split assig
 uv run -m controlledshifts.create_benchmark benchmark=safeshift   # -> splits/safeshift.json
 ```
 
-Key options (see `configs/benchmark/safeshift.yaml`):
+Key options (see [`benchmark/safeshift.yaml`](../src/controlledshifts/configs/benchmark/safeshift.yaml)):
 - `scores_path`: directory of SafeShift score metadata (`*_infos.pkl`). Default: `/data/driving/waymo/meta/safeshift/mtr_process_splits`.
 - `prefix`: filename prefix for the metadata files. Default: `score_asym_combined_80_`.
 
@@ -167,18 +183,17 @@ using the SafeShift characterization API (the shared `scoring` config group), wr
 `${splits_path}/ego_safeshift/scenario_to_scores_mapping_<hash>.csv` (keyed by a hash of the scoring config, so changing
 the scoring config writes a new file; reused on re-runs unless `overwrite=true`).
 
-Key options (see `configs/benchmark/ego_safeshift.yaml`):
+Key options (see [`benchmark/ego_safeshift.yaml`](../src/controlledshifts/configs/benchmark/ego_safeshift.yaml)):
 - `scenario_score_mapping_filepath`: CSV with a `scenario_ids` column and a score column. If null/missing, scores are computed (see above).
 - `score_type`: column to rank by (higher = harder = test). Default: `gt_critical_continuous_safeshift`. Computed CSVs contain `gt_critical_continuous_{safeshift,individual,interaction}`.
 - `split_ratios`: `(train, val, test)` fractions; the hardest scenes form the test set. Default: `[0.70, 0.15, 0.15]`.
-- `split_name`: split JSON filename stem. When null, an `ego_safeshift_<tag>` name is auto-derived (keyed by the score source, `score_type`, `split_ratios` and `seed`) so multiple score CSVs each get their own split file. Set it (e.g. `ego_safeshift_scores8`) to reference the split deterministically from `configs/paths/`.
+- `split_name`: split JSON filename stem. When null, an `ego_safeshift_<tag>` name is auto-derived (keyed by the score source, `score_type`, `split_ratios` and `seed`) so multiple score CSVs each get their own split file. Set it (e.g. `ego_safeshift_scores8`) to reference the split deterministically from [`configs/paths/`](../src/controlledshifts/configs/paths/).
 
-**Producing the score file (optional):** instead of letting the benchmark compute scores, you can supply a precomputed
-`scenario_to_scores_mapping.csv` from the [ScenarioCharacterization](https://github.com/navarrs/ScenarioCharacterization/)
-package, which scores each scene from the perspective of the ego agent. Follow its scoring
-[instructions](https://github.com/navarrs/ScenarioCharacterization/blob/main/docs/CHARACTERIZATION.md) to produce a CSV
-with a `scenario_ids` column plus the score column named by `score_type`, e.g. at `meta/ego-safeshift/scores_8/scenario_to_scores_mapping.csv`.
-A precomputed file is available [here](https://drive.google.com/file/d/1Ptv1JIM0qymo7180_a5svLZJXWn03yQx/view?usp=drive_link); place it in the `./meta` folder.
+**Producing the score file (optional):** the score CSV can instead come from
+[ScenarioCharacterization](https://github.com/navarrs/ScenarioCharacterization/) — see its
+[scoring instructions](https://github.com/navarrs/ScenarioCharacterization/blob/main/docs/CHARACTERIZATION.md). A
+precomputed CSV is available [here](https://drive.google.com/file/d/1Ptv1JIM0qymo7180_a5svLZJXWn03yQx/view?usp=drive_link);
+place it under `./meta`.
 
 **Train / evaluate:**
 ```bash
@@ -197,7 +212,7 @@ descriptors) and clusters are ranked by hardness; the hardest clusters form the 
 uv run -m controlledshifts.create_benchmark benchmark=environments   # -> splits/environments.json
 ```
 
-Key options (see `configs/benchmark/environments.yaml`):
+Key options (see [`benchmark/environments.yaml`](../src/controlledshifts/configs/benchmark/environments.yaml)):
 - `clustering_algorithm`: `kmeans` / `ward` / `spectral` / etc. Default: `ward`.
 - `n_clusters`: number of clusters. Default: `10`.
 - `hardness_metric`: how cluster hardness is ranked — `silhouette` (lowest = hardest) or `dbi` (highest = hardest). Default: `silhouette`.
