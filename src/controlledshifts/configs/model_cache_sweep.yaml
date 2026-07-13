@@ -1,0 +1,37 @@
+# @package _global_
+# NOTE: the experiment-centric `paths` group is intentionally NOT composed here. Its `experiment_dir` interpolates
+# ${model.config.model_name} and ${sweep_type}, so print_config_tree(resolve=True) could not resolve it without also
+# composing a model group. This sweep spawns one `controlledshifts.eval` job per run and each of those composes `paths`
+# itself; the only path this script needs is the model_cache root, exposed directly below.
+defaults:
+  - scenario: waymo
+  - _self_
+
+task_name: model_cache_sweep
+
+# W&B results export listing the runs to cache: one row per run, whose dataset/model/timestamp columns locate its
+# run directory.
+csv_filepath: ./meta/runs/distribution_shift_results.csv
+
+# Root holding the per-run directories (<cache_root>/<dataset>/<model>/<timestamp>); mirrors paths.experiment_cache_path.
+cache_root: /data/driving/${scenario.dataset_name}/model_cache
+
+# Optional filters over the CSV rows. null runs every row.
+models: null                # e.g. [wayformer, mtr]
+benchmarks: null            # e.g. [causal_agents]; accepts either `causal_agents` or `causal-agents`
+
+# Single GPU on purpose: under DDP every rank writes into the same batch_cache directory.
+devices: 0
+
+# Which checkpoint to load from each run: `best` picks its epoch_XXX.ckpt (save_top_k=1 on val/brierFDE, i.e. the
+# weights the CSV metrics were computed from); `last` picks last.ckpt.
+ckpt: best
+
+# base_model.model_step caches a batch when `batch_idx % cache_every_batch_idx == 0`; 1 caches every scenario.
+cache_every_batch_idx: 1
+
+# Skip runs whose val/ and test/ caches already exist, so an interrupted sweep can be resumed.
+skip_existing: false
+
+# Print the eval command for each run without running it.
+dry_run: false

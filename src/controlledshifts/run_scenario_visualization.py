@@ -236,12 +236,15 @@ def load_split_model_outputs(
     """
     batches: dict[str, ModelOutput] | None = None
     scenario_to_models: dict[str, dict[str, ModelOutput]] | None = None
+    cache_source = config.get("cache_source", None)
     if viz_type == VizType.TRAJPRED:
-        scenario_to_models = utils.load_batches_per_model(trajpred_models, config.num_scenarios, config.seed, split_tag)
+        scenario_to_models = utils.load_batches_per_model(
+            trajpred_models, config.num_scenarios, config.seed, split_tag, cache_source
+        )
         scenario_ids = [scenario_id for scenario_id in scenario_ids if scenario_id in scenario_to_models]
     elif viz_type == VizType.MODEL_OUTPUT:
         batches = utils.load_batches(
-            config.batch_cache_path, config.num_batches, config.num_scenarios, config.seed, split_tag
+            config.batch_cache_path, config.num_batches, config.num_scenarios, config.seed, split_tag, cache_source
         )
         scenario_ids = [scenario_id for scenario_id in scenario_ids if scenario_id in batches]
     elif config.num_scenarios is not None and len(scenario_ids) > config.num_scenarios:
