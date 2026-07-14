@@ -1,3 +1,27 @@
+# Session Rules
+
+- Do NOT guess next steps or proceed with unrequested implementation.
+- Before making code modifications, outline a step-by-step plan for approval. Plans are bullet lists, that include: what changes, which file, why. Keep them short and state explicitly what you are NOT touching.
+- A plan with more than ~5 steps means the change is too big. Propose a smaller first increment instead.
+- Do NOT modify core architecture or delete existing functional flows without explicit permission.
+- Approval of a plan approves that plan, not adjacent work you thought of while implementing. If you discover mid-implementation that the plan was wrong, stop and say so.
+
+# Scope Discipline
+
+- Change the minimum number of lines that solves the stated problem. One logical change per turn.
+- Hard limits per change unless I waive them: ~200 changed lines, 5 files. If exceeded, stop and propose a split into sequential reviewable steps.
+- Do not refactor, rename, reformat, or clean up code you happened to open. If nearby code looks wrong, mention it in one line — don't fix it, unless I approve.
+- Do not add abstractions, config options, error handling, logging, or tests that weren't requested. Don't build for hypothetical future requirements.
+- Do not add or upgrade dependencies without asking.
+- Prefer the reversible, boring option over the clever one.
+
+# Communication
+
+- Default to the shortest correct answer. No preamble, no summary of what you just did, no restating code in prose — the diff is the explanation.
+- Keep your notes on "next steps", "future improvements", or "things to consider" short.
+- Explanations only when asked or when a decision is non-obvious — then one or two sentences.
+- After a change, give one line on how to verify it. If you could not verify, say so plainly. Never imply something works when you haven't checked.
+
 # Development Workflow
 
 - **Always use `uv run`, not python**. For example:
@@ -12,14 +36,12 @@ uv run pre-commit run --all-files
 ```
 
 - Always run `uv run pre-commit run --all-files` before committing and creating a PR. This runs formatting, linting, and type checking. Do not commit code that fails type checking.
-
 - When making user-facing changes, review the documentation inside `docs` and ensure it is up to date.
 
 # Commits and PRs
 
 - Put `Fixes #<number>` at the end of the commit message body, not in the title.
-- PR body should be plain, concise prose. No section headers, checklists, or structured templates. Describe the problem, what the change does, and any non-obvious tradeoffs. A good PR description reads like a short
-  paragraph to a colleague, not a form.
+- PR body should be plain, concise prose. No section headers, checklists, or structured templates. Describe the problem, what the change does, and any non-obvious tradeoffs. A good PR description reads like a short paragraph to a colleague, not a form.
 - PR and commit messages are rendered on GitHub, so don't hard-wrap them at 88 columns. Let each sentence flow on one line.
 
 # Code Guidelines
@@ -42,8 +64,7 @@ uv run pre-commit run --all-files
 
 ## Reuse & utilities
 
-- Don't duplicate logic: before writing new code, check if similar logic already exists in the codebase. Reuse existing functions, especially those in `src/controlledshifts/utils/`, even if it means importing across modules.
-- Before creating any new utilities, search `src/controlledshifts/utils/` for existing library code.
+- Don't duplicate logic: before writing new code, check if similar logic already exists, especially in `src/controlledshifts/utils/`. Reuse it even if it means importing across modules.
 - Extract shared logic into `src/controlledshifts/utils/` if you encounter duplicated code.
 
 ## Tests
