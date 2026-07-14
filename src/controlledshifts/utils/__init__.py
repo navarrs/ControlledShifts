@@ -1,4 +1,4 @@
-from controlledshifts.utils import constants
+from controlledshifts.utils import constants, model_runs
 from controlledshifts.utils.data_utils import (
     load_batches,
     load_batches_per_model,
@@ -28,6 +28,7 @@ __all__ = [
     "load_causal_agent_ids",
     "log_hyperparameters",
     "minmax_scaler",
+    "model_runs",
     "print_config_tree",
     "save_cache",
     "task_wrapper",
