@@ -8,6 +8,8 @@ viz_type: trajpred
 # nulls them, because in dataset/default.yaml they interpolate ${model.config...} and this app does not compose the
 # `model` group. The values mirror configs/model/default.yaml, so the scene is shaped as the models consumed it.
 dataset_overrides:
+  # Keep agent box sizes (mask only z): the trajpred pane draws rotated bounding boxes, which need real length/width.
+  masked_attributes: ['z_axis']
   max_num_agents: 32
   max_num_roads: 384
   max_points_per_lane: 30
