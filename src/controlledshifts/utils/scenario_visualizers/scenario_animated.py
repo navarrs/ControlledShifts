@@ -28,6 +28,8 @@ class ScenarioAnimatedVisualizer(BaseVisualizer):
         output_dir: str = "temp",
         causal_gt_ids: NDArray[np.int_] | None = None,
         model_outputs: dict[str, ModelOutput] | None = None,
+        model_grid: dict[str, dict[str, ModelOutput]] | None = None,
+        row_scenarios: dict[str, AgentCentricScenario] | None = None,
     ) -> None:
         """Visualizes a single scenario and saves the output to a file.
 
@@ -41,8 +43,10 @@ class ScenarioAnimatedVisualizer(BaseVisualizer):
             output_dir: the directory where to save the scenario visualization.
             causal_gt_ids: ground-truth causal agent ids for the GT causal pane.
             model_outputs: unused; animated visualization renders a single model output.
+            model_grid: unused; only the trajpred visualizer renders a grid.
+            row_scenarios: unused; only the trajpred visualizer draws a different scene per row.
         """
-        del model_outputs
+        del model_outputs, model_grid, row_scenarios
         if not isinstance(scenario, Scenario):
             error_message = "Scenario visualization only supported in global frame."
             raise TypeError(error_message)

@@ -113,20 +113,28 @@ class ScenarioTrajpredVisualizer(BaseVisualizer):
         output_dir: str = "temp",
         causal_gt_ids: NDArray[np.int_] | None = None,
         model_outputs: dict[str, ModelOutput] | None = None,
+        model_grid: dict[str, dict[str, ModelOutput]] | None = None,
+        row_scenarios: dict[str, AgentCentricScenario] | None = None,
     ) -> None:
-        """Visualizes a single scenario as one comparison pane per model and saves the output to a file.
+        """Visualizes a single scenario as a grid of comparison panes and saves the output to a file.
 
-        ScenarioTrajpredVisualizer renders N side-by-side panes, one per model in ``model_outputs``. Each pane draws
-        the shared scene context (map, agent history, and the dimmed ground-truth future) plus that model's predicted
-        trajectories, titled with the model's name. A single ``model_output`` is accepted as a one-model fallback.
+        Each pane draws a scene context (map, agent history, and the dimmed ground-truth future) plus one model's
+        predicted trajectories. ``model_grid`` lays the panes out as rows x columns (e.g. training benchmarks x models),
+        labelling rows on the left and columns on top. ``model_outputs`` renders a single unlabelled row, one pane per
+        model; a lone ``model_output`` is accepted as a one-pane fallback.
 
         Args:
-            scenario: encapsulates the scenario to visualize.
+            scenario: encapsulates the scenario to visualize; the scene every row draws unless ``row_scenarios``
+                overrides it.
             scores: encapsulates the scenario and agent scores.
-            model_output: a single model's outputs, used only when ``model_outputs`` is not provided.
+            model_output: a single model's outputs, used only when neither grid nor ``model_outputs`` is provided.
             output_dir: the directory where to save the scenario visualization.
             causal_gt_ids: unused; trajpred does not render causal panes.
-            model_outputs: per-model outputs keyed by model name; each becomes one pane.
+            model_outputs: per-model outputs keyed by model name; each becomes one pane of a single row.
+            model_grid: per-model outputs keyed by row label then column label. Takes precedence over ``model_outputs``.
+            row_scenarios: the scene each row draws, keyed by row label. A benchmark may evaluate a split on a perturbed
+                variant (causal-agents-hard tests on ``remove_noncausal``), so its row must draw the scene its models
+                were actually given rather than the unperturbed one.
         """
         del causal_gt_ids
         if not isinstance(scenario, AgentCentricScenario):
@@ -134,9 +142,11 @@ class ScenarioTrajpredVisualizer(BaseVisualizer):
             raise TypeError(error_message)
 
         models = model_outputs or ({"model": model_output} if model_output is not None else None)
-        if not models:
+        grid = model_grid or ({"": models} if models else None)
+        if not grid:
             error_message = "At least one model output is required for TrajPred scenario visualization."
             raise ValueError(error_message)
+        rows, columns = self._grid_layout(grid)
 
         scenario_id = scenario.scenario_id
         scene_score = BaseVisualizer.get_scenario_score(scores)
@@ -144,31 +154,55 @@ class ScenarioTrajpredVisualizer(BaseVisualizer):
         output_filepath = f"{output_dir}/{scenario_id}{suffix}.png"
         logger.info("Visualizing scenario to %s", output_filepath)
 
-        num_panes = len(models)
         gt_alpha = self.config.get("gt_future_alpha", 0.3)
-        _, axs = plt.subplots(1, num_panes, figsize=(5 * num_panes, 5), sharex=True, sharey=True)
-        axs = np.atleast_1d(axs)
+        pane_size = self.config.get("pane_size", 5)
+        # `constrained` rather than tight_layout: it reserves room for the suptitle, which otherwise overlaps the column
+        # titles once the figure has more than one row.
+        _, axs = plt.subplots(
+            len(rows),
+            len(columns),
+            figsize=(pane_size * len(columns), pane_size * len(rows)),
+            sharex=True,
+            sharey=True,
+            squeeze=False,
+            layout="constrained",
+        )
 
-        for ax, (name, output) in zip(axs, models.items(), strict=True):
-            self._draw_scene_context(ax, scenario, draw_future_gt=True, gt_alpha=gt_alpha)
-            if output is None or output.trajectory_decoder_output is None:
-                logger.warning(
-                    "No trajectory decoder output for model '%s' on scenario %s; drawing scene context only.",
-                    name,
-                    scenario_id,
-                )
-            else:
-                self._draw_predictions(ax, output)
-            ax.set_title(name)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.set_aspect("equal")
-            ax.axis("off")
+        for row_index, row in enumerate(rows):
+            # The scene this row's models were evaluated on, which is not always the unperturbed one.
+            row_scenario = (row_scenarios or {}).get(row, scenario)
+            for column_index, column in enumerate(columns):
+                ax = axs[row_index][column_index]
+                self._draw_scene_context(ax, row_scenario, draw_future_gt=True, gt_alpha=gt_alpha)
+                output = grid[row].get(column)
+                if output is None or output.trajectory_decoder_output is None:
+                    logger.warning(
+                        "No trajectory decoder output for pane '%s' on scenario %s; drawing scene context only.",
+                        f"{row}/{column}" if row else column,
+                        scenario_id,
+                    )
+                else:
+                    self._draw_predictions(ax, output)
+                if row_index == 0:
+                    ax.set_title(column)
+                if column_index == 0 and row:
+                    ax.set_ylabel(row)
+                # Not `ax.axis("off")`: that would also hide the row label drawn as the y-axis label.
+                ax.set_xticks([])
+                ax.set_yticks([])
+                ax.set_aspect("equal")
+                for spine in ax.spines.values():
+                    spine.set_visible(False)
 
         plt.suptitle(f"Scenario: {scenario_id}")
-        plt.subplots_adjust(wspace=0.05)
-        plt.tight_layout()
-        plt.savefig(output_filepath, dpi=300, bbox_inches="tight")
-        for ax in axs:
+        plt.savefig(output_filepath, dpi=self.config.get("dpi", 300), bbox_inches="tight")
+        for ax in axs.flat:
             ax.cla()
         plt.close()
+
+    @staticmethod
+    def _grid_layout(model_grid: dict[str, dict[str, ModelOutput]]) -> tuple[list[str], list[str]]:
+        """Resolves the pane grid into its row and column labels, both in first-seen order."""
+        rows = list(model_grid)
+        columns = list(dict.fromkeys(column for row in model_grid.values() for column in row))
+        return rows, columns

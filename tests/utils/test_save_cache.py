@@ -1,12 +1,23 @@
 """Tests for the per-scenario model-output cache (`save_cache` / `load_batches`)."""
 
 import pickle
+from pathlib import Path
 
 import pytest
 import torch
 
 from controlledshifts.schemas.output_schemas import ModelOutput, ScenarioEmbedding
-from controlledshifts.utils.data_utils import load_batches, load_batches_per_model, save_cache
+from controlledshifts.utils.data_utils import load_batches, load_batches_for_ids, load_batches_per_model, save_cache
+from controlledshifts.utils.model_runs import ModelCacheSpec
+
+
+# `_build_batch` writes under the default `waymo` source; the scenario ids the round-trip tests may request.
+_ALL_IDS = [f"scen{suffix}" for suffix in ("A", "B", "C", "D")] + [f"scen{i}" for i in range(20)]
+
+
+def _specs(**caches: Path) -> list[ModelCacheSpec]:
+    """One flat (unlabelled row) spec per named cache directory."""
+    return [ModelCacheSpec(name=name, cache_path=path, source="waymo") for name, path in caches.items()]
 
 
 def _build_batch(scenario_ids: list[str], dataset_names: list[str] | None = None) -> ModelOutput:
@@ -97,17 +108,37 @@ def test_load_batches_without_source_spans_every_source(tmp_path):
     assert set(loaded) == {"scenA", "scenB"}
 
 
+def test_load_batches_for_ids_loads_only_the_requested_scenarios(tmp_path):
+    save_cache(_build_batch(["scenA", "scenB", "scenC"]), tmp_path, "val")
+
+    loaded = load_batches_for_ids(tmp_path, ["scenA", "scenC", "absent"], tag="val", source="waymo")
+
+    # Absent ids are skipped rather than raising: a pane simply has nothing cached for them.
+    assert set(loaded) == {"scenA", "scenC"}
+
+
 def test_load_batches_per_model_intersects_and_aligns(tmp_path):
     dir_a, dir_b = tmp_path / "modelA", tmp_path / "modelB"
     save_cache(_build_batch(["scenA", "scenB", "scenC"]), dir_a, "val")
     save_cache(_build_batch(["scenB", "scenC", "scenD"]), dir_b, "val")
 
-    result = load_batches_per_model([("A", dir_a), ("B", dir_b)], num_scenarios=None, seed=0, tag="val")
+    result = load_batches_per_model(_specs(A=dir_a, B=dir_b), _ALL_IDS, num_scenarios=None, seed=0, tag="val")
 
-    # Only the shared scenarios are returned, each carrying an output from every model.
+    # Only the scenarios cached by every pane are returned, each carrying an output from every pane.
     assert set(result) == {"scenB", "scenC"}
-    for per_model in result.values():
-        assert set(per_model) == {"A", "B"}
+    for rows in result.values():
+        assert set(rows[""]) == {"A", "B"}
+
+
+def test_load_batches_per_model_samples_within_the_requested_ids(tmp_path):
+    """Sampling must happen inside the whitelist, not across the whole cache and filtered afterwards."""
+    dir_a = tmp_path / "modelA"
+    save_cache(_build_batch([f"scen{i}" for i in range(20)]), dir_a, "val")
+
+    whitelist = ["scen3", "scen7"]
+    for seed in range(8):
+        result = load_batches_per_model(_specs(A=dir_a), whitelist, num_scenarios=1, seed=seed, tag="val")
+        assert set(result) <= set(whitelist)
 
 
 def test_load_batches_per_model_sampling_is_deterministic(tmp_path):
@@ -116,12 +147,28 @@ def test_load_batches_per_model_sampling_is_deterministic(tmp_path):
     save_cache(_build_batch(ids), dir_a, "val")
     save_cache(_build_batch(ids), dir_b, "val")
 
-    specs = [("A", dir_a), ("B", dir_b)]
-    first = load_batches_per_model(specs, num_scenarios=3, seed=0, tag="val")
-    second = load_batches_per_model(specs, num_scenarios=3, seed=0, tag="val")
+    specs = _specs(A=dir_a, B=dir_b)
+    first = load_batches_per_model(specs, ids, num_scenarios=3, seed=0, tag="val")
+    second = load_batches_per_model(specs, ids, num_scenarios=3, seed=0, tag="val")
 
     assert len(first) == 3
     assert first.keys() == second.keys()
+
+
+def test_load_batches_per_model_groups_panes_into_rows_and_columns(tmp_path):
+    dir_a, dir_b = tmp_path / "uniformWayformer", tmp_path / "envWayformer"
+    save_cache(_build_batch(["scenA"]), dir_a, "val")
+    save_cache(_build_batch(["scenA"]), dir_b, "val")
+
+    specs = [
+        ModelCacheSpec(name="wayformer", cache_path=dir_a, source="waymo", group="Uniform"),
+        ModelCacheSpec(name="wayformer", cache_path=dir_b, source="waymo", group="Environments"),
+    ]
+    result = load_batches_per_model(specs, ["scenA"], num_scenarios=None, seed=0, tag="val")
+
+    # One row per benchmark, one column per model within it.
+    assert list(result["scenA"]) == ["Uniform", "Environments"]
+    assert list(result["scenA"]["Uniform"]) == ["wayformer"]
 
 
 def test_load_batches_per_model_raises_without_overlap(tmp_path):
@@ -129,5 +176,5 @@ def test_load_batches_per_model_raises_without_overlap(tmp_path):
     save_cache(_build_batch(["scenA"]), dir_a, "val")
     save_cache(_build_batch(["scenB"]), dir_b, "val")
 
-    with pytest.raises(ValueError, match="shared across all models"):
-        load_batches_per_model([("A", dir_a), ("B", dir_b)], num_scenarios=None, seed=0, tag="val")
+    with pytest.raises(ValueError, match="cached by every pane"):
+        load_batches_per_model(_specs(A=dir_a, B=dir_b), _ALL_IDS, num_scenarios=None, seed=0, tag="val")

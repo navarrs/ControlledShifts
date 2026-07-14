@@ -15,8 +15,9 @@ task_name: scenario_visualization
 split_filepath: ???                                      # path to the benchmark split JSON
 splits_to_visualize: [training, validation, testing]     # subset of the JSON keys to visualize
 
-# Flat directory holding the scenario pickles (<id>.pkl), i.e. a variant store such as variants/base.
-scenarios_root: ???
+# Flat directory holding the scenario pickles (<id>.pkl), i.e. a variant store such as variants/base. Required, except
+# in overlap_grid mode, which picks a variant store per row (see `overlap_grid.variants_root`).
+scenarios_root: null
 
 # Output root. Visualizations are written to: output_dir/<render>/<split_type>/<split>/<pane_type>
 output_dir: outputs/scenario_viz
@@ -41,3 +42,28 @@ models: null
 num_batches: null
 num_scenarios: null
 seed: 42
+
+# Overlap grid: renders each scenario as a benchmarks x models grid instead of a single row. Point `split_filepath` at
+# an overlap JSON (outputs/scenario_overlap_analysis/overlaps/<A>_<B>.json, or all_benchmarks.json) and use
+# visualization=viz_trajpred. Rows are the benchmarks named inside that file -- i.e. the benchmark a run was TRAINED on
+# -- so one figure shows how the same scene is predicted by every model under every training distribution. Columns are
+# `models` below. Each cell resolves its run from the results CSV and loads that run's cache, pinned to the source its
+# `paths` group declares for the split being rendered: a run's test/ cache holds several sources (the seen/ID split is
+# re-evaluated under the test tag alongside the unseen/OOD one), so an unpinned load would silently mix them.
+# Takes precedence over the flat `models` list above. Only validation/testing are supported; training is never cached.
+overlap_grid:
+  enabled: false
+  csv_filepath: ./meta/runs/distribution_shift_results.csv        # the results export run_model_cache_sweep reads
+  cache_root: /data/driving/${scenario.dataset_name}/model_cache  # mirrors paths.experiment_cache_path
+  models: [wayformer, mtr, autobot, scenetransformer, cvm, naive]  # column order, left to right
+  # Overlap-file display name -> hydra `paths` group. NOTE: the scenario_overlap analysis maps the display name
+  # `CausalAgents` to the causal_agents_hard split, so it resolves to the causal-agents-hard runs.
+  benchmark_paths_groups:
+    Uniform: uniform
+    CausalAgents: causal_agents_hard
+    EgoSafeShift: ego_safeshift
+    Environments: environments
+  # Root of the variant stores (<variant>/<scenario_id>.pkl). Each row draws the scene its models were evaluated on,
+  # which is not always the unperturbed one: causal-agents-hard tests on `remove_noncausal`. Used instead of
+  # `scenarios_root`, since the variant differs per row.
+  variants_root: /data/driving/${scenario.dataset_name}/variants

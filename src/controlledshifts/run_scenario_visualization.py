@@ -39,11 +39,19 @@ Example usage:
         split_filepath=... scenarios_root=... \
         batch_cache_path=/data/.../wayformer num_scenarios=3
 
+    # Trajpred overlap grid: scenarios shared by two benchmarks, rendered as benchmarks (rows) x models (columns).
+    # Each row draws the scene variant its models were evaluated on, so it needs no scenarios_root.
+    uv run -m controlledshifts.run_scenario_visualization \
+        visualization=viz_trajpred overlap_grid.enabled=true \
+        split_filepath=outputs/scenario_overlap_analysis/overlaps/Uniform_CausalAgents.json \
+        splits_to_visualize=[validation,testing] num_scenarios=5
+
 See ``docs/ANALYSIS.md`` for more details.
 """
 
 import random
 from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 from time import time
 from typing import NamedTuple
@@ -53,27 +61,22 @@ import numpy as np
 import pyrootutils
 from characterization.schemas import Scenario, ScenarioScores
 from numpy.typing import NDArray
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 from controlledshifts import benchmarks, utils
 from controlledshifts.datasets.agent_centric_processor import AgentCentricProcessor
 from controlledshifts.datasets.waymo.repacker import load_scenario
 from controlledshifts.schemas import AgentCentricScenario, ModelOutput
-from controlledshifts.utils.constants import ModelStatus, VizType
+from controlledshifts.utils import model_runs
+from controlledshifts.utils.constants import VizType
+from controlledshifts.utils.model_runs import SPLIT_TAGS, ModelCacheSpec
 from controlledshifts.utils.plotting import configure_fonts
 from controlledshifts.utils.scenario_visualizers.base_visualizer import BaseVisualizer
 
 
 log = utils.get_pylogger(__name__)
 
-pyrootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
-
-# Maps a benchmark split JSON key to the ``ModelStatus`` tags used in the output path and as the batch-file tag.
-SPLIT_TAGS: dict[str, str] = {
-    "training": ModelStatus.TRAIN,
-    "validation": ModelStatus.VALIDATION,
-    "testing": ModelStatus.TEST,
-}
+PROJECT_ROOT = pyrootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
 # Default output pane folder for each visualization type (model_output uses the model_experiment tag instead).
 DEFAULT_PANE_TYPES: dict[VizType, str] = {
@@ -92,6 +95,8 @@ class PreparedScenario(NamedTuple):
     model_output: ModelOutput | None = None
     causal_gt_ids: NDArray[np.int_] | None = None
     model_outputs: dict[str, ModelOutput] | None = None
+    model_grid: dict[str, dict[str, ModelOutput]] | None = None
+    row_scenarios: dict[str, AgentCentricScenario] | None = None
 
 
 def _to_agent_centric(
@@ -203,46 +208,128 @@ def build_output_dir(output_dir: Path, render: str, split_type: str, split: str,
     return resolved
 
 
-def resolve_trajpred_models(config: DictConfig) -> list[tuple[str, str | Path]]:
-    """Resolves the ``(name, cache_path)`` model specs for trajpred, one per comparison pane.
+def resolve_trajpred_specs(config: DictConfig, split_filepath: Path, split_key: str) -> list[ModelCacheSpec]:
+    """Resolves one ``ModelCacheSpec`` per trajpred pane, for the split about to be rendered.
 
-    Uses the ``models`` list when provided; otherwise falls back to the single ``batch_cache_path`` (labelled by
-    ``model_experiment``, else the cache directory name) so existing one-model runs keep working. Returns an empty
-    list when neither is configured.
+    Grid mode (``overlap_grid.enabled``) reads the benchmarks out of the overlap file and pairs each with every
+    configured model, resolving that (benchmark, model) run from the results CSV. Each row is pinned to the cache
+    source its benchmark declares for this split, so the specs are split-specific.
+
+    Otherwise the flat ``models`` list is used, falling back to the single ``batch_cache_path`` (labelled by
+    ``model_experiment``, else the cache directory name) so existing one-model runs keep working. Both flat forms
+    render as one unlabelled row. Returns an empty list when nothing is configured.
+
+    Raises:
+        ValueError: in grid mode, if the split has no cached outputs or a cell cannot be resolved to a single run.
     """
+    grid_config = config.get("overlap_grid", None)
+    if grid_config is not None and grid_config.get("enabled", False):
+        if SPLIT_TAGS.get(split_key) not in model_runs.CACHE_SPLITS:
+            error_message = (
+                f"overlap_grid cannot render split '{split_key}': training outputs are never cached. Use "
+                f"splits_to_visualize=[validation,testing]."
+            )
+            raise ValueError(error_message)
+
+        csv_filepath = model_runs.resolve_csv_filepath(grid_config.csv_filepath, PROJECT_ROOT)
+        paths_groups = {str(name): str(group) for name, group in grid_config.benchmark_paths_groups.items()}
+        runs = model_runs.read_runs(csv_filepath, Path(grid_config.cache_root))
+        return model_runs.build_grid_specs(
+            benchmarks=benchmarks.load_overlap_benchmarks(split_filepath),
+            models=list(grid_config.models),
+            split_key=split_key,
+            runs=runs,
+            paths_groups=paths_groups,
+        )
+
+    cache_source = config.get("cache_source", None)
     models = config.get("models", None)
     if models:
-        return [(model.name, model.batch_cache_path) for model in models]
+        return [
+            ModelCacheSpec(name=model.name, cache_path=Path(model.batch_cache_path), source=cache_source)
+            for model in models
+        ]
     if config.batch_cache_path is not None:
         name = config.get("model_experiment", None) or Path(config.batch_cache_path).name or "model"
-        return [(name, config.batch_cache_path)]
+        return [ModelCacheSpec(name=name, cache_path=Path(config.batch_cache_path), source=cache_source)]
     return []
+
+
+def resolve_scenario_roots(config: DictConfig, specs: list[ModelCacheSpec]) -> dict[str, Path]:
+    """Maps each scene variant the panes need to the variant store it is loaded from.
+
+    A grid row draws the scene its models were evaluated on, which is not always the unperturbed one --
+    causal-agents-hard tests on ``remove_noncausal`` -- so the variants come off the specs and resolve under
+    ``overlap_grid.variants_root``. Every other mode draws one scene, from the single ``scenarios_root``.
+
+    Raises:
+        ValueError: if ``scenarios_root`` is needed but not set.
+    """
+    if specs and config.overlap_grid.enabled:
+        variants_root = Path(config.overlap_grid.variants_root)
+        return {spec.variant: variants_root / spec.variant for spec in specs}
+
+    if config.scenarios_root is None:
+        error_message = "scenarios_root must be set: the flat variant store holding the <scenario_id>.pkl scenarios."
+        raise ValueError(error_message)
+    return {"": Path(config.scenarios_root)}
+
+
+def prepare_scenario_variants(
+    scenario_id: str,
+    scenario_roots: dict[str, Path],
+    processor: AgentCentricProcessor,
+    prepare_one: Callable[[Scenario, ModelOutput | None], PreparedScenario | None],
+    model_output: ModelOutput | None,
+) -> dict[str, PreparedScenario] | None:
+    """Loads and prepares one scenario from each variant store the panes need.
+
+    Returns:
+        The prepared scenario per variant, or None when any variant is missing on disk or cannot be drawn -- the panes
+        must stay aligned, so a scenario is rendered only if every variant it needs is available.
+    """
+    prepared_variants: dict[str, PreparedScenario] = {}
+    for variant, root in scenario_roots.items():
+        scenario_path = root / f"{scenario_id}.pkl"
+        if not scenario_path.exists():
+            log.warning("Scenario %s not found at %s, skipping.", scenario_id, scenario_path)
+            return None
+
+        # Apply the same profile shaping the cache builder uses, then run the per-type prep (scoring, agent-centric
+        # transform, etc.). prepare_one() returns None when the scenario cannot be drawn.
+        prepared = prepare_one(processor.shape_scenario(load_scenario(scenario_path)), model_output)
+        if prepared is None:
+            log.warning("Could not prepare scenario %s (variant '%s'), skipping.", scenario_id, variant or "base")
+            return None
+        prepared_variants[variant] = prepared
+    return prepared_variants
 
 
 def load_split_model_outputs(
     config: DictConfig,
     viz_type: VizType,
-    trajpred_models: list[tuple[str, str | Path]],
+    trajpred_specs: list[ModelCacheSpec],
     scenario_ids: list[str],
     split_tag: str,
-) -> tuple[dict[str, ModelOutput] | None, dict[str, dict[str, ModelOutput]] | None, list[str]]:
+) -> tuple[dict[str, ModelOutput] | None, dict[str, dict[str, dict[str, ModelOutput]]] | None, list[str]]:
     """Loads a split's cached model outputs and filters/samples its scenario ids accordingly.
 
-    TRAJPRED loads one cache per model aligned on a shared scenario set; MODEL_OUTPUT loads a single cache; both keep
-    only scenarios that have an output. Other viz types load nothing and sample the split's ids down to num_scenarios.
+    TRAJPRED loads one cache per pane, sampling from the scenarios cached by all of them; MODEL_OUTPUT loads a single
+    cache; both keep only scenarios that have an output. Other viz types load nothing and sample the split's ids down
+    to num_scenarios.
 
     Returns:
-        ``(single-model batches, per-model outputs keyed by scenario then model, filtered scenario ids)``.
+        ``(single-model batches, per-scenario pane outputs keyed by row then model, filtered scenario ids)``.
     """
     batches: dict[str, ModelOutput] | None = None
-    scenario_to_models: dict[str, dict[str, ModelOutput]] | None = None
-    cache_source = config.get("cache_source", None)
+    scenario_grid: dict[str, dict[str, dict[str, ModelOutput]]] | None = None
     if viz_type == VizType.TRAJPRED:
-        scenario_to_models = utils.load_batches_per_model(
-            trajpred_models, config.num_scenarios, config.seed, split_tag, cache_source
+        scenario_grid = utils.load_batches_per_model(
+            trajpred_specs, scenario_ids, config.num_scenarios, config.seed, split_tag
         )
-        scenario_ids = [scenario_id for scenario_id in scenario_ids if scenario_id in scenario_to_models]
+        scenario_ids = [scenario_id for scenario_id in scenario_ids if scenario_id in scenario_grid]
     elif viz_type == VizType.MODEL_OUTPUT:
+        cache_source = config.get("cache_source", None)
         batches = utils.load_batches(
             config.batch_cache_path, config.num_batches, config.num_scenarios, config.seed, split_tag, cache_source
         )
@@ -250,7 +337,7 @@ def load_split_model_outputs(
     elif config.num_scenarios is not None and len(scenario_ids) > config.num_scenarios:
         random.seed(config.seed)
         scenario_ids = random.sample(scenario_ids, config.num_scenarios)
-    return batches, scenario_to_models, scenario_ids
+    return batches, scenario_grid, scenario_ids
 
 
 @hydra.main(version_base="1.3", config_path="configs", config_name="scenario_visualization.yaml")
@@ -261,31 +348,30 @@ def main(config: DictConfig) -> None:
     start = time()
 
     visualizer = hydra.utils.instantiate(config.visualization.visualizer)
-    processor = AgentCentricProcessor(config.dataset.config)
 
-    scenarios_root = Path(config.scenarios_root)
+    # A visualization config may carry the dataset params its prep needs (trajpred's agent-centric transform reads the
+    # ones the analysis profile nulls, since they normally interpolate ${model.config...}).
+    processor_config = config.dataset.config
+    dataset_overrides = config.visualization.get("dataset_overrides", None)
+    if dataset_overrides is not None:
+        processor_config = OmegaConf.merge(processor_config, dataset_overrides)
+    processor = AgentCentricProcessor(processor_config)
+
     output_root = Path(config.output_dir)
 
     # The chosen visualization config self-describes the run: its viz_type drives the per-scenario data prep, and the
     # split JSON's benchmark_name becomes the split_type folder in the output path (falling back to the file stem).
     viz_type = VizType(config.visualization.viz_type)
-    split = benchmarks.load_benchmark_split(Path(config.split_filepath))
-    split_type = split.benchmark_name or Path(config.split_filepath).stem
+    split_filepath = Path(config.split_filepath)
+    split = benchmarks.load_benchmark_split(split_filepath)
+    split_type = split.benchmark_name or split_filepath.stem
 
     # Resolve everything that is constant across all scenarios once: the render style (derived from the visualizer),
     # the output pane folder, the per-type prep function, and whether this type needs cached model outputs.
     render = "animated" if visualizer.is_animated else "static"
     pane_type = pane_type_for(viz_type, config)
-    prepare = SCENARIO_PREPARER[viz_type]
+    prepare_one = partial(SCENARIO_PREPARER[viz_type], processor, visualizer)
 
-    # TRAJPRED renders one pane per model (aligned on a shared scenario set); MODEL_OUTPUT loads a single cache.
-    trajpred_models = resolve_trajpred_models(config) if viz_type == VizType.TRAJPRED else []
-    if viz_type == VizType.TRAJPRED and not trajpred_models:
-        error_message = (
-            "viz_type 'trajpred' needs model outputs; set `models` (a list of {name, batch_cache_path}) or the single "
-            "`batch_cache_path`."
-        )
-        raise ValueError(error_message)
     if viz_type == VizType.MODEL_OUTPUT and config.batch_cache_path is None:
         error_message = f"viz_type '{viz_type.value}' needs model outputs; set batch_cache_path to the cached batches."
         raise ValueError(error_message)
@@ -298,37 +384,47 @@ def main(config: DictConfig) -> None:
         split_tag = SPLIT_TAGS[split_key]
         scenario_ids = list(getattr(split, split_key))
 
+        # TRAJPRED panes are resolved per split: a benchmark evaluates validation and testing under different cache
+        # sources (and sometimes different scene variants), so the specs differ between them.
+        trajpred_specs: list[ModelCacheSpec] = []
+        if viz_type == VizType.TRAJPRED:
+            trajpred_specs = resolve_trajpred_specs(config, split_filepath, split_key)
+            if not trajpred_specs:
+                error_message = (
+                    "viz_type 'trajpred' needs model outputs; enable `overlap_grid`, or set `models` (a list of "
+                    "{name, batch_cache_path}) or the single `batch_cache_path`."
+                )
+                raise ValueError(error_message)
+
         # Model-based types load this split's cached outputs and keep only scenarios that have one; the other types
         # load nothing and sample the split's ids down to num_scenarios.
-        batches, scenario_to_models, scenario_ids = load_split_model_outputs(
-            config, viz_type, trajpred_models, scenario_ids, split_tag
+        batches, scenario_grid, scenario_ids = load_split_model_outputs(
+            config, viz_type, trajpred_specs, scenario_ids, split_tag
         )
 
-        # Map each scenario id to its pickle in the flat variant store and build the destination folder for this split.
-        id_to_path = {scenario_id: scenarios_root / f"{scenario_id}.pkl" for scenario_id in scenario_ids}
+        scenario_roots = resolve_scenario_roots(config, trajpred_specs)
         output_dir = build_output_dir(output_root, render, split_type, split_tag, pane_type)
         log.info("Visualizing %d scenarios for split '%s' -> %s", len(scenario_ids), split_key, output_dir)
 
         for scenario_id in scenario_ids:
-            # Skip ids listed in the split whose pickle is missing on disk rather than aborting the whole run.
-            scenario_path = id_to_path[scenario_id]
-            if not scenario_path.exists():
-                log.warning("Scenario %s not found at %s, skipping.", scenario_id, scenario_path)
-                continue
-
-            # Load the canonical Scenario, apply the same profile shaping the cache builder uses, then run the per-type
-            # prep (scoring, agent-centric transform, etc.). prepare() returns None when the scenario can't be drawn.
-            scenario = processor.shape_scenario(load_scenario(scenario_path))
             model_output = batches.get(scenario_id) if batches is not None else None
-
-            prepared = prepare(processor, visualizer, scenario, model_output)
-            if prepared is None:
-                log.warning("Could not prepare scenario %s for %s, skipping.", scenario_id, viz_type.value)
+            prepared_variants = prepare_scenario_variants(
+                scenario_id, scenario_roots, processor, prepare_one, model_output
+            )
+            if prepared_variants is None:
                 continue
+            # Every mode but the grid loads a single scene; the grid's rows share the figure's scenario id anyway.
+            prepared = next(iter(prepared_variants.values()))
 
-            # TRAJPRED attaches this scenario's per-model outputs (guaranteed present: ids were filtered above).
-            if scenario_to_models is not None:
-                prepared = prepared._replace(model_outputs=scenario_to_models[scenario_id])
+            # TRAJPRED attaches this scenario's pane outputs (guaranteed present: ids were filtered above). The flat
+            # forms produce a single unlabelled row, which renders exactly as it did before the grid existed.
+            if scenario_grid is not None:
+                grid = scenario_grid[scenario_id]
+                if set(grid) == {""}:
+                    prepared = prepared._replace(model_outputs=grid[""])
+                else:
+                    row_scenarios = {spec.group: prepared_variants[spec.variant].scenario for spec in trajpred_specs}
+                    prepared = prepared._replace(model_grid=grid, row_scenarios=row_scenarios)
 
             visualizer.visualize_scenario(
                 prepared.scenario,
@@ -337,6 +433,8 @@ def main(config: DictConfig) -> None:
                 output_dir=str(output_dir),
                 causal_gt_ids=prepared.causal_gt_ids,
                 model_outputs=prepared.model_outputs,
+                model_grid=prepared.model_grid,
+                row_scenarios=prepared.row_scenarios,
             )
 
     log.info("Total time: %.2f seconds", time() - start)

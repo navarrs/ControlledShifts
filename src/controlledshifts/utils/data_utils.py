@@ -3,7 +3,7 @@ import math
 import os
 import pickle
 import random
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -14,7 +14,7 @@ from scipy.interpolate import interp1d
 from torch.utils.data import Sampler
 
 from controlledshifts.schemas import output_schemas as output
-from controlledshifts.utils import pylogger
+from controlledshifts.utils import model_runs, pylogger
 from controlledshifts.utils.constants import TrajectoryType
 
 
@@ -941,51 +941,102 @@ def load_batches(  # noqa: PLR0913
     return {scenario: batches[scenario] for scenario in selected_scenarios}
 
 
+def _scenario_cache_file(cache_path: str | Path, tag: str, scenario_id: str, source: str | None) -> Path | None:
+    """Returns the path of one scenario's cached pickle, or None when it is absent.
+
+    Cached files are named ``<scenario_id>.pkl``, so the path is constructed rather than globbed: with a whitelist of
+    ids this turns loading into one stat per (scenario, model) instead of unpickling every file in the cache.
+    """
+    split_dir = Path(cache_path) / tag
+    if source is not None:
+        scenario_file = split_dir / source / f"{scenario_id}.pkl"
+        return scenario_file if scenario_file.is_file() else None
+    # Without a pinned source the scenario may sit under any of them; take the first, mirroring _load_all_batches.
+    return next(iter(sorted(split_dir.glob(f"*/{scenario_id}.pkl"))), None)
+
+
+def load_batches_for_ids(
+    base_data_path: str | Path,
+    scenario_ids: Iterable[str],
+    tag: str = "val",
+    source: str | None = None,
+) -> dict[str, output.ModelOutput]:
+    """Loads the cached outputs of specific scenarios, skipping any whose pickle is absent.
+
+    Args:
+        base_data_path: root cache directory holding one per-split subdirectory per ``tag``.
+        scenario_ids: the scenarios to load.
+        tag: split subdirectory to load from (e.g. ``val``).
+        source: load only this source (``dataset_name``); None takes whichever source holds the scenario.
+
+    Returns:
+        Maps each found scenario id to its per-scenario outputs.
+    """
+    batches: dict[str, output.ModelOutput] = {}
+    for scenario_id in scenario_ids:
+        scenario_file = _scenario_cache_file(base_data_path, tag, scenario_id, source)
+        if scenario_file is None:
+            continue
+        with scenario_file.open("rb") as f:
+            batches[scenario_id] = pickle.load(f)  # nosec B301
+    return batches
+
+
 def load_batches_per_model(
-    model_specs: list[tuple[str, str | Path]],
+    specs: Sequence[model_runs.ModelCacheSpec],
+    scenario_ids: Sequence[str],
     num_scenarios: int | None,
     seed: int,
     tag: str = "val",
-    source: str | None = None,
-) -> dict[str, dict[str, output.ModelOutput]]:
-    """Loads per-scenario outputs for several models, aligned on one sampled scenario set.
+) -> dict[str, dict[str, dict[str, output.ModelOutput]]]:
+    """Loads per-scenario outputs for every pane of a trajpred figure, aligned on one sampled scenario set.
 
-    Each model's outputs are loaded in full, then a single scenario set is sampled from the intersection of the
-    scenario ids available across all models, so every returned scenario carries an output from every model. This
-    keeps the multi-model trajpred panes aligned on the same scenarios. ``num_batches`` is intentionally not applied
-    per model here: capping the per-model glob would shrink the intersection unpredictably.
+    Sampling happens *within* ``scenario_ids``: the candidates are the requested ids whose pickle exists in every
+    spec's cache, so every rendered figure is complete and no pane is missing. Only the sampled ids are unpickled --
+    with a whitelist this is a handful of loads rather than the whole cache.
 
     Args:
-        model_specs: (name, cache path) pairs; ``name`` labels the model in the returned mapping.
-        num_scenarios: number of scenarios to keep; None keeps the whole intersection.
+        specs: one spec per pane, each naming its cache, source, row (``group``) and column (``name``).
+        scenario_ids: the scenarios to consider, e.g. a benchmark split's or an overlap file's ids.
+        num_scenarios: number of scenarios to keep; None keeps every candidate.
         seed: random seed used to select scenarios.
         tag: split subdirectory to load from (e.g. ``val``).
-        source: load only this source (``dataset_name``); None loads every source under ``tag``.
 
     Returns:
-        Maps each selected scenario id to a mapping of model name to that model's per-scenario output.
+        Maps each selected scenario id to its rows (``group``), each holding that row's per-model outputs.
 
     Raises:
-        ValueError: if ``model_specs`` is empty or no scenario id is shared across all models.
+        ValueError: if ``specs`` is empty or no requested scenario is cached by every spec.
     """
-    if not model_specs:
-        msg = "model_specs must contain at least one (name, cache path) pair."
+    if not specs:
+        msg = "specs must contain at least one ModelCacheSpec."
         raise ValueError(msg)
-    loaded = {name: _load_all_batches(path, num_batches=None, tag=tag, source=source) for name, path in model_specs}
 
-    common_ids = set.intersection(*(set(batches) for batches in loaded.values()))
-    if not common_ids:
-        model_names = ", ".join(loaded)
-        msg = f"No scenario ids are shared across all models ({model_names}) for tag '{tag}'."
+    candidates = [
+        scenario_id
+        for scenario_id in scenario_ids
+        if all(_scenario_cache_file(spec.cache_path, tag, scenario_id, spec.source) for spec in specs)
+    ]
+    if not candidates:
+        panes = ", ".join(f"{spec.group}/{spec.name}" if spec.group else spec.name for spec in specs)
+        msg = f"None of the {len(scenario_ids)} requested scenarios are cached by every pane ({panes}) for tag '{tag}'."
         raise ValueError(msg)
 
     random.seed(seed)
-    total_scenarios = len(common_ids)
-    num_scenarios = total_scenarios if num_scenarios is None else max(1, min(num_scenarios, total_scenarios))
-    _LOGGER.info("Selecting %s / %s scenarios shared across %s models", num_scenarios, total_scenarios, len(loaded))
-    # Sample from a sorted list so the selection is reproducible under the seed (set order is nondeterministic).
-    selected = random.sample(sorted(common_ids), num_scenarios)
-    return {scenario_id: {name: loaded[name][scenario_id] for name in loaded} for scenario_id in selected}
+    num_scenarios = len(candidates) if num_scenarios is None else max(1, min(num_scenarios, len(candidates)))
+    _LOGGER.info(
+        "Selecting %s / %s requested scenarios cached across %s panes", num_scenarios, len(candidates), len(specs)
+    )
+    # Sample from a sorted list so the selection is reproducible under the seed, then restore the requested order.
+    sampled = set(random.sample(sorted(candidates), num_scenarios))
+    selected = [scenario_id for scenario_id in candidates if scenario_id in sampled]
+
+    batches: dict[str, dict[str, dict[str, output.ModelOutput]]] = {scenario_id: {} for scenario_id in selected}
+    for spec in specs:
+        loaded = load_batches_for_ids(spec.cache_path, selected, tag=tag, source=spec.source)
+        for scenario_id, scenario_output in loaded.items():
+            batches[scenario_id].setdefault(spec.group, {})[spec.name] = scenario_output
+    return batches
 
 
 def load_scenario_scores(scores_paths: str | Path, scenario_ids: Iterable[str]) -> dict[str, dict[str, Any]]:

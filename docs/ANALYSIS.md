@@ -29,15 +29,50 @@ Key options:
 
 | Option | Purpose |
 |---|---|
-| `split_filepath` | The benchmark split JSON. Scenarios come from its `training`/`validation`/`testing` lists, and its `benchmark_name` becomes the `split_type` output folder. |
+| `split_filepath` | The benchmark split JSON. Scenarios come from its `training`/`validation`/`testing` lists, and its `benchmark_name` becomes the `split_type` output folder (falling back to the filename stem). |
 | `splits_to_visualize` | Which of `training`/`validation`/`testing` to render; each becomes its own output subfolder. |
-| `scenarios_root` | Directory of scenario pickles, organized into `training/`, `validation/`, `testing/` subdirectories of `<scenario_id>.pkl`. |
+| `scenarios_root` | Flat directory of `<scenario_id>.pkl` scenario pickles, i.e. a variant store such as `variants/base`. |
 | `num_batches` / `num_scenarios` | For `trajpred` and `model_output`, how many cached scenarios to load. Sampled if more are available than requested. |
 | `cache_source` | Which `source` to load when a split holds several variants of the same scenario (e.g. `waymo-remove-noncausal-testing`). Leave null for single-source splits; otherwise one arbitrary variant per scenario is loaded and a warning is logged. |
 | `model_experiment` | For generic `model_output` visualizations, the tag used as the output `pane_type` folder. |
-| `models` | For `trajpred`, a list of `{name, batch_cache_path}` entries, one pane each. Scenarios are sampled from the intersection of IDs available across all models so the panes stay aligned. When null, a single top-level `batch_cache_path` renders one pane. |
+| `models` | For `trajpred`, a list of `{name, batch_cache_path}` entries, one pane each, rendered as a single row. Scenarios are sampled from the intersection of IDs available across all models so the panes stay aligned. When null, a single top-level `batch_cache_path` renders one pane. |
+| `overlap_grid` | For `trajpred`, renders a **benchmarks x models grid** instead of a single row. See [below](#trajectory-prediction-grids-for-overlapped-scenarios). |
 
 Outputs are written under `output_dir/<render>/<split_type>/<split>/<pane_type>`, where `render` is `static`/`animated`, `split_type` is the benchmark name, `split` is `train`/`val`/`test`, and `pane_type` is one of `scenario`, `scenario_scored`, `causal_scenario`, `causal_scenario_gt`, `trajectory_prediction` (or the `model_experiment` tag).
+
+### Trajectory-prediction grids for overlapped scenarios
+
+The [scenario overlap](#scenario-overlap) analysis writes, per benchmark pair, the scenario IDs the benchmarks *share* within a split. Because those scenes sit in several benchmarks' evaluation splits at once, every benchmark's models have cached predictions for them — so the same scene can be compared across training distributions.
+
+Setting `overlap_grid.enabled=true` and pointing `split_filepath` at an overlap file renders one figure per overlapped scenario as a grid: **rows are the benchmarks named inside the overlap file** (the benchmark a run was *trained* on), **columns are `overlap_grid.models`**.
+
+```bash
+uv run -m controlledshifts.run_scenario_visualization \
+    visualization=viz_trajpred overlap_grid.enabled=true \
+    split_filepath=outputs/scenario_overlap_analysis/overlaps/Uniform_CausalAgents.json \
+    splits_to_visualize=[validation,testing] num_scenarios=5
+```
+
+Each cell resolves its run from `overlap_grid.csv_filepath` (the same results export `run_model_cache_sweep` reads) and loads that run's cache. Output lands in `output_dir/static/<overlap_file_stem>/<val|test>/trajectory_prediction/`, so the overlap pair and the subset are both encoded in the path — e.g. `outputs/scenario_viz/static/Uniform_CausalAgents/val/trajectory_prediction/`. The all-benchmarks file yields `all_benchmarks/`.
+
+| Option | Purpose |
+|---|---|
+| `enabled` | Turns the grid on. Takes precedence over the flat `models` list. |
+| `csv_filepath` / `cache_root` | Where the (benchmark, model) runs and their caches are resolved from. |
+| `models` | Column order, left to right. |
+| `benchmark_paths_groups` | Maps an overlap file's benchmark display name to its Hydra `paths` group. **Note:** the overlap analysis maps the display name `CausalAgents` to the `causal_agents_hard` split, so it resolves to the `causal-agents-hard` runs. |
+| `variants_root` | Root of the variant stores. Each row loads its scene from `<variants_root>/<variant>/<id>.pkl`, so grid mode needs no `scenarios_root`. |
+
+Only `validation` and `testing` are supported — training outputs are never cached. A scenario is rendered only when every cell of the grid has it cached, so the panes stay aligned; if a run's cache is missing or partial the run fails with a `ValueError` naming the panes.
+
+> [!NOTE]
+> Each row is pinned, for the split being rendered, to **both** the cache source and the scene variant its benchmark declares in `configs/paths/<group>.yaml`.
+>
+> The source must be pinned because a run's `test/` cache holds *several* of them — the seen/ID split is re-evaluated under the `test` tag alongside the unseen/OOD one — so an unpinned load would silently mix ID and OOD outputs.
+>
+> The variant must be pinned because a benchmark may evaluate a split on a *perturbed* scene: `causal_agents_hard` tests on `remove_noncausal`. That row therefore draws the masked scene its models were actually given, while the other rows draw `base`. Rows of the same figure can show different agents — that is the point, not a bug.
+
+Grid size grows quickly: 4 benchmarks x 6 models is 24 panes, a 30x20in figure (9000x6000px at the default `dpi`). Lower `visualization.visualizer.config.pane_size` or `dpi` in [`viz_trajpred.yaml`](../src/controlledshifts/configs/visualization/viz_trajpred.yaml) for large grids.
 
 <details>
 <summary><b>Producing a model-output cache</b> — needed for the <code>trajpred</code> and <code>model_output</code> visualizations.</summary>
@@ -70,7 +105,7 @@ uv run -m controlledshifts.run_model_cache_sweep skip_existing=true
 uv run -m controlledshifts.run_model_cache_sweep 'models=[wayformer,mtr]' 'benchmarks=[causal_agents]'
 ```
 
-A failing run does not abort the sweep; failures are reported in a summary at the end. See
+A failing run does not abort the sweep; its stderr tail is logged and the failure is reported in a summary at the end. See
 [`model_cache_sweep.yaml`](../src/controlledshifts/configs/model_cache_sweep.yaml) for all options.
 
 </details>

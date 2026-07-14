@@ -208,6 +208,25 @@ def load_benchmark_split(filepath: Path) -> BenchmarkSplit:
     )
 
 
+def load_overlap_benchmarks(filepath: Path) -> list[str]:
+    """Reads the benchmark display names recorded in an overlap JSON (written by the scenario_overlap analysis).
+
+    Overlap files list the scenario IDs shared by a group of benchmarks, per split, so they load as a ``BenchmarkSplit``
+    via ``load_benchmark_split``. That loader drops the ``benchmarks`` key, which names the group; this returns it.
+
+    Raises:
+        ValueError: if the file has no ``benchmarks`` key, i.e. it is not an overlap file.
+    """
+    with filepath.open("r") as f:
+        payload = json.load(f)
+    if "benchmarks" not in payload:
+        error_message = (
+            f"{filepath} has no 'benchmarks' key; expected an overlap file from the scenario_overlap analysis."
+        )
+        raise ValueError(error_message)
+    return list(payload["benchmarks"])
+
+
 def load_split_if_exists(splits_path: Path, benchmark_name: str, *, overwrite: bool) -> BenchmarkSplit | None:
     """Returns the existing split for a benchmark, or None if it should be (re)generated.
 

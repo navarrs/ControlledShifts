@@ -683,6 +683,8 @@ class BaseVisualizer(ABC):
         output_dir: str = "temp",
         causal_gt_ids: NDArray[np.int_] | None = None,
         model_outputs: dict[str, ModelOutput] | None = None,
+        model_grid: dict[str, dict[str, ModelOutput]] | None = None,
+        row_scenarios: dict[str, AgentCentricScenario] | None = None,
     ) -> None:
         """Visualizes a single scenario and saves the output to a file.
 
@@ -699,4 +701,8 @@ class BaseVisualizer(ABC):
                 the causal-label files; used when no model output is available.
             model_outputs: per-model outputs keyed by model name, used by the trajpred visualizer to render one
                 comparison pane per model. Ignored by visualizers that render a single model output.
+            model_grid: per-model outputs keyed by row then column, used by the trajpred visualizer to render a grid of
+                panes (e.g. benchmarks x models). Takes precedence over ``model_outputs``.
+            row_scenarios: the scene each row of the grid draws, keyed by row label. Lets a row whose models were
+                evaluated on a perturbed scene variant draw that variant instead of ``scenario``.
         """

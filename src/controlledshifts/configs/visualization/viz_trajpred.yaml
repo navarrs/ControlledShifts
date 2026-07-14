@@ -2,9 +2,29 @@ defaults:
  - default.yaml
 
 viz_type: trajpred
+
+# Merged over `dataset.config` to build the AgentCentricProcessor. trajpred is the only viz type that runs the
+# agent-centric transform (`is_ego_centric: true`), and that transform needs these params. The analysis dataset profile
+# nulls them, because in dataset/default.yaml they interpolate ${model.config...} and this app does not compose the
+# `model` group. The values mirror configs/model/default.yaml, so the scene is shaped as the models consumed it.
+dataset_overrides:
+  max_num_agents: 32
+  max_num_roads: 384
+  max_points_per_lane: 30
+  map_range: 100
+  manually_split_lane: false
+  point_sampled_interval: 1
+  num_points_each_polyline: 20
+  vector_break_dist_thresh: 1.0
+  center_offset_of_map: [30.0, 0.0]
+
 visualizer:
   _target_: controlledshifts.utils.scenario_visualizers.scenario_trajpred.ScenarioTrajpredVisualizer
   config:
     is_ego_centric: true
+    # Inches per pane. A grid is pane_size*columns x pane_size*rows, so lower this for large grids: an overlap_grid of
+    # 4 benchmarks x 6 models is 30x20in, i.e. a 9000x6000px PNG at dpi 300.
+    pane_size: 5
+    dpi: 300
     panes_to_plot:
       - TRAJECTORY_PREDICTION
