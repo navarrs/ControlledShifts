@@ -27,9 +27,9 @@ BACKGROUND_AGENTS_STRATEGIES: tuple[str, ...] = (
 
 
 class Benchmark(Enum):
-    # Values are on-disk identifiers (split JSON stems, variant dirs) and stay in the legacy causal spelling.
-    BACKGROUND_AGENTS = "causal_agents"
-    BACKGROUND_AGENTS_HARD = "causal_agents_hard"
+    # Values are the benchmark_name / split-JSON stems selected on the CLI (benchmark=<value>).
+    BACKGROUND_AGENTS = "background_agents"
+    BACKGROUND_AGENTS_HARD = "background_agents_hard"
     EGO_SAFESHIFT = "ego_safeshift"
     SAFESHIFT = "safeshift"
     ENVIRONMENTS = "environments"

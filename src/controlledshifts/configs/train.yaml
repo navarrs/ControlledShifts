@@ -8,7 +8,7 @@ defaults:
   - extras: default.yaml
   - logger: many_loggers.yaml # set logger here or use command line (e.g. `python train.py logger=tensorboard`)
   - callbacks: trajpred.yaml
-  - paths: causal_agents.yaml
+  - paths: background_agents.yaml
   - scenario: waymo.yaml
   - dataset: waymo.yaml
   - model: default.yaml

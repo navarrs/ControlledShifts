@@ -21,7 +21,7 @@ benchmarks:
       unseen: "test/waymo-remove-noncausal-testing"
   - background_agents_hard:
       name: BackgroundAgentsHard
-      seen: "test/waymo-causal-agents-hard-original-validation"
+      seen: "test/waymo-background-agents-hard-original-validation"
       unseen: "test/waymo-remove-noncausal-hard-testing"
   - ego_safeshift:
       name: EgoSafeShift

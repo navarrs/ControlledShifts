@@ -18,7 +18,7 @@ cache_root: /data/driving/${scenario.dataset_name}/model_cache
 
 # Optional filters over the CSV rows. null runs every row.
 models: null                # e.g. [wayformer, mtr]
-benchmarks: null            # e.g. [causal_agents]; accepts either `causal_agents` or `causal-agents`
+benchmarks: null            # e.g. [background_agents]; accepts either `background_agents` or `background-agents`
 
 # Single GPU on purpose: under DDP every rank writes into the same batch_cache directory.
 devices: 0

@@ -2,8 +2,8 @@
 defaults:
   - default.yaml
 
-# Retains the legacy "causal_agents" spelling: it is the on-disk split-file stem (splits/causal_agents.json).
-benchmark_name: causal_agents
+# On-disk split-file stem (splits/background_agents.json).
+benchmark_name: background_agents
 
 # Benchmark whose saved split (${splits_path}/<reference_benchmark>.json) this benchmark reuses, so perturbed scenes
 # land in the same train/validation/testing buckets as their unperturbed counterparts. That benchmark must be created

@@ -7,7 +7,7 @@ uv run -m controlledshifts.train model=[model_name]
 ```
 `model` is required; see [Model types](#model-types). Additional config groups (all under [`src/controlledshifts/configs/`](../src/controlledshifts/configs/)):
 
-* `paths`: the benchmark whose split and variant caches to train on — `uniform`, `causal_agents`, `causal_agents_all`, `causal_agents_hard`, `safeshift`, `safeshift_original`, `ego_safeshift`, `environments`, or `mini`. See [BENCHMARKS.md](BENCHMARKS.md). **Default:** `causal_agents`.
+* `paths`: the benchmark whose split and variant caches to train on — `uniform`, `background_agents`, `background_agents_all`, `background_agents_hard`, `safeshift`, `safeshift_original`, `ego_safeshift`, `environments`, or `mini`. See [BENCHMARKS.md](BENCHMARKS.md). **Default:** `background_agents`.
 * `logger`: `csv`, `mlflow`, `neptune`, `tensorboard`, `wandb`, or `many_loggers` (`csv` + `wandb`). **Default:** `many_loggers`.
 * `trainer`: `cpu`, `gpu`, `ddp`, `ddp_sim`, or `mps`. **Default:** `gpu`.
 * `scenario`: sets the sequence partition — `waymo` (1.1 s history, 8 s prediction) or `nuscenes` (2.1 s / 6 s). **Default:** `waymo`.

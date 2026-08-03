@@ -19,13 +19,13 @@ overwrite: false
 
 # Per-scenario quantities to plot, each as its own side-by-side violin, histogram and ridgeline figure. Split colors
 # are fixed in SPLIT_COLOR_MAP (controlledshifts.utils.analysis.common), not a palette.
-quantities: [n_causal, n_noncausal, frac_noncausal, n_total]
+quantities: [n_non_background, n_background, frac_background, n_total]
 
-# split_json values are on-disk split-file stems (splits/<split_json>.json) and keep the legacy causal spelling.
+# split_json values are on-disk split-file stems (splits/<split_json>.json).
 benchmarks:
   - background_agents:
       name: BackgroundAgents
-      split_json: causal_agents
+      split_json: background_agents
   - background_agents_hard:
       name: BackgroundAgentsHard
-      split_json: causal_agents_hard
+      split_json: background_agents_hard

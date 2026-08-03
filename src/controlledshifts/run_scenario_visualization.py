@@ -7,7 +7,7 @@ viz_non_background|viz_trajpred|...``); each type loads/computes only what it ne
     * regular       - just draw the scenarios (static or animated).
     * scored        - compute scenario features -> scores and render the scene score.
     * trajpred      - transform to agent-centric format and render one comparison pane per model.
-    * model_output  - render other cached model outputs (e.g. causal predictions).
+    * model_output  - render other cached model outputs (e.g. non-background predictions).
 
 Outputs are written to ``output_dir/<render>/<split_type>/<split>/<pane_type>``.
 
@@ -80,7 +80,7 @@ DEFAULT_PANE_TYPES: dict[VizType, str] = {
     VizType.REGULAR: "scenario",
     VizType.SCORED: "scenario_scored",
     VizType.TRAJPRED: "trajectory_prediction",
-    VizType.NON_BACKGROUND_GT: "causal_scenario_gt",  # output-dir stem keeps the legacy spelling
+    VizType.NON_BACKGROUND_GT: "non_background_scenario_gt",
 }
 
 
@@ -147,13 +147,14 @@ def prepare_model_output(
 def prepare_non_background_gt(
     processor: AgentCentricProcessor, visualizer: BaseVisualizer, scenario: Scenario, model_output: ModelOutput | None
 ) -> PreparedScenario | None:
-    """Non-background ground-truth visualization: load non-background agent ids from the causal-label files."""
+    """Non-background ground-truth visualization: load non-background agent ids from the label files."""
     del visualizer, model_output
+    # `causal_labels_path` is the on-disk dataset config key holding the non-background agent labels.
     causal_labels_path = processor.config.get("causal_labels_path", None)
     if causal_labels_path is None:
         error_message = (
-            "viz_type 'non_background_gt' needs causal labels; set `dataset.config.causal_labels_path` to the labels "
-            "directory."
+            "viz_type 'non_background_gt' needs non-background labels; set `dataset.config.causal_labels_path` to the "
+            "labels directory."
         )
         raise ValueError(error_message)
 

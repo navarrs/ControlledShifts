@@ -1,9 +1,9 @@
 defaults:
   - default.yaml
 
-tag: 'causal-agents-all'
+tag: 'background-agents-all'
 
-# Training and validation use the unmodified scenes (uniform split reused by the causal_agents benchmark).
+# Training and validation use the unmodified scenes (uniform split reused by the background_agents benchmark).
 train_sources:
   - {variant: base, split_json: uniform, split: training, tag: uniform-training}
 

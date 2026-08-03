@@ -22,7 +22,7 @@ Example usage:
     uv run -m controlledshifts.run_model_cache_sweep skip_existing=true
 
     # Restrict to some models and benchmarks, and pick the GPU.
-    uv run -m controlledshifts.run_model_cache_sweep 'models=[wayformer,mtr]' 'benchmarks=[causal_agents]' devices=1
+    uv run -m controlledshifts.run_model_cache_sweep 'models=[wayformer,mtr]' 'benchmarks=[background_agents]' devices=1
 
     # Use the final-epoch weights and subsample every 10th batch instead of caching every scenario.
     uv run -m controlledshifts.run_model_cache_sweep ckpt=last cache_every_batch_idx=10

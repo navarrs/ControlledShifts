@@ -2,8 +2,8 @@
 defaults:
   - default.yaml
 
-# Retains the legacy "causal_agents_hard" spelling: it is the on-disk split-file stem (splits/causal_agents_hard.json).
-benchmark_name: causal_agents_hard
+# On-disk split-file stem (splits/background_agents_hard.json).
+benchmark_name: background_agents_hard
 
 # Path to the directory containing per-scenario JSON causal labels (used for background counts and on-the-fly
 # generation of the perturbed copies).

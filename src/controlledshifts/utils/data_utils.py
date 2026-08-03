@@ -785,8 +785,8 @@ def resplit_batch(batch: output.ModelOutput) -> dict[tuple[str, str], output.Mod
 
     Returns:
         Maps each (dataset name, scenario id) pair to its detached, CPU-resident output. A benchmark can evaluate the
-        same scenario under several sources (e.g. causal-agents tests the `base` and `remove_noncausal` variants of one
-        scene), so the source is part of the key: keying on the scenario id alone would drop all but one variant.
+        same scenario under several sources (e.g. background-agents tests the `base` and `remove_noncausal` variants of
+        one scene), so the source is part of the key: keying on the scenario id alone would drop all but one variant.
     """
     batch_resplit = {}
 
@@ -1042,8 +1042,8 @@ def save_cache(cache_infos: output.ModelOutput, cache_dir: Path, tag: str) -> No
 
     Each scenario is written to ``cache_dir / tag / dataset_name / f"{scenario_id}.pkl"`` as ``ModelOutput`` (detached,
     CPU). The source (``dataset_name``) namespaces the file because a split can evaluate the same scenario under several
-    sources -- causal-agents tests the ``base`` and ``remove_noncausal`` variants of the same scene ids -- and writing
-    them all as ``tag/<scenario_id>.pkl`` would silently keep only whichever variant was written last.
+    sources -- background-agents tests the ``base`` and ``remove_noncausal`` variants of the same scene ids -- and
+    writing them all as ``tag/<scenario_id>.pkl`` would silently keep only whichever variant was written last.
 
     Args:
         cache_infos: the batched model output covering several scenarios.
