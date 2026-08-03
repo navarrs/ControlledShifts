@@ -8,5 +8,5 @@ visualizer:
   config:
     panes_to_plot:
       - HIGHLIGHT_RELEVANT
-      - CAUSAL_AGENTS_GT
-      - CAUSAL_AGENTS_PRED
+      - NON_BACKGROUND_AGENTS_GT
+      - NON_BACKGROUND_AGENTS_PRED

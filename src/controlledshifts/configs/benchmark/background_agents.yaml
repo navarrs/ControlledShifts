@@ -12,7 +12,7 @@ reference_benchmark: uniform
 
 # Root for the flat perturbed variant stores. The preparation step writes each strategy's perturbed scenes flat to
 # output_data_path/<strategy>/ (e.g. /data/driving/waymo/variants/remove_noncausal, reused by the
-# non_background_agents_hard benchmark). Build the agent-centric cache per variant afterwards via
+# background_agents_hard benchmark). Build the agent-centric cache per variant afterwards via
 # controlledshifts.build_ac_cache.
 output_data_path: /data/driving/waymo/variants
 

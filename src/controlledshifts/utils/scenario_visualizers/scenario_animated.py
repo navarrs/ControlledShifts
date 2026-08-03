@@ -26,7 +26,7 @@ class ScenarioAnimatedVisualizer(BaseVisualizer):
         scores: ScenarioScores | None = None,
         model_output: ModelOutput | None = None,
         output_dir: str = "temp",
-        causal_gt_ids: NDArray[np.int_] | None = None,
+        non_background_gt_ids: NDArray[np.int_] | None = None,
         model_outputs: dict[str, ModelOutput] | None = None,
     ) -> None:
         """Visualizes a single scenario and saves the output to a file.
@@ -39,7 +39,7 @@ class ScenarioAnimatedVisualizer(BaseVisualizer):
             scores: encapsulates the scenario and agent scores.
             model_output: encapsulates model outputs.
             output_dir: the directory where to save the scenario visualization.
-            causal_gt_ids: ground-truth causal agent ids for the GT causal pane.
+            non_background_gt_ids: ground-truth non-background agent ids for the GT non-background pane.
             model_outputs: unused; animated visualization renders a single model output.
         """
         del model_outputs
@@ -64,7 +64,13 @@ class ScenarioAnimatedVisualizer(BaseVisualizer):
             axs_list = np.atleast_1d(axs)
             for ax, pane in zip(axs_list, self.panes_to_plot, strict=True):
                 self.plot_pane(
-                    ax, pane, scenario, scores, model_output, causal_gt_ids=causal_gt_ids, end_timestep=timestep
+                    ax,
+                    pane,
+                    scenario,
+                    scores,
+                    model_output,
+                    non_background_gt_ids=non_background_gt_ids,
+                    end_timestep=timestep,
                 )
                 ax.set_title(PANE_TITLES[pane])
 

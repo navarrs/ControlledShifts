@@ -16,9 +16,9 @@ from controlledshifts.utils.pylogger import get_pylogger
 
 _LOGGER = get_pylogger(__name__)
 
-# Masking strategies generated up front by the non_background_agents benchmark; each becomes a flat perturbed dataset.
+# Masking strategies generated up front by the background_agents benchmark; each becomes a flat perturbed dataset.
 # The strategy strings are on-disk variant directory names, so they retain the legacy causal/noncausal spelling.
-NON_BACKGROUND_AGENTS_STRATEGIES: tuple[str, ...] = (
+BACKGROUND_AGENTS_STRATEGIES: tuple[str, ...] = (
     "remove_causal",
     "remove_noncausal",
     "remove_noncausalequal",
@@ -28,8 +28,8 @@ NON_BACKGROUND_AGENTS_STRATEGIES: tuple[str, ...] = (
 
 class Benchmark(Enum):
     # Values are on-disk identifiers (split JSON stems, variant dirs) and stay in the legacy causal spelling.
-    NON_BACKGROUND_AGENTS = "causal_agents"
-    NON_BACKGROUND_AGENTS_HARD = "causal_agents_hard"
+    BACKGROUND_AGENTS = "causal_agents"
+    BACKGROUND_AGENTS_HARD = "causal_agents_hard"
     EGO_SAFESHIFT = "ego_safeshift"
     SAFESHIFT = "safeshift"
     ENVIRONMENTS = "environments"

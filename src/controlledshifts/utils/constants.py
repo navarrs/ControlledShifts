@@ -25,15 +25,15 @@ class VizType(Enum):
 
     REGULAR visualizes scenarios as-is. SCORED additionally computes scenario features and scores. TRAJPRED transforms
     the scenario into agent-centric format and overlays model trajectory predictions. MODEL_OUTPUT visualizes other
-    cached model outputs (e.g. causal predictions). CAUSAL_GT renders the ground-truth causal agents loaded from the
-    causal-label JSON files, requiring no cached model outputs.
+    cached model outputs (e.g. causal predictions). NON_BACKGROUND_GT renders the ground-truth non-background agents
+    loaded from the causal-label JSON files, requiring no cached model outputs.
     """
 
     REGULAR = "regular"
     SCORED = "scored"
     TRAJPRED = "trajpred"
     MODEL_OUTPUT = "model_output"
-    CAUSAL_GT = "causal_gt"
+    NON_BACKGROUND_GT = "non_background_gt"
 
 
 class DataSplits(Enum):
@@ -66,6 +66,6 @@ class CausalOutputType(Enum):
 class SupportedPanes(Enum):
     ALL_AGENTS = "all_agents"
     HIGHLIGHT_RELEVANT = "highlight_relevant"
-    CAUSAL_AGENTS_GT = "causal_agents_gt"
-    CAUSAL_AGENTS_PRED = "causal_agents_pred"
+    NON_BACKGROUND_AGENTS_GT = "non_background_agents_gt"
+    NON_BACKGROUND_AGENTS_PRED = "non_background_agents_pred"
     TRAJECTORY_PREDICTION = "trajectory_prediction"

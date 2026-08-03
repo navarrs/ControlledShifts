@@ -27,6 +27,10 @@ class TrajectoryDecoderOutput(BaseModel):  # pyright: ignore[reportUntypedBaseCl
 class CausalOutput(BaseModel):  # pyright: ignore[reportUntypedBaseClass]
     """Encapsulates causal output values.
 
+    Terminology: the model's causal-classification task keeps its original ``Causal*`` naming. Read "causal" as
+    "non-background": a *causal* agent is a *non-background* agent (a *non-causal* agent is a *background* agent), which
+    is how the benchmark, analysis and visualization code now refer to them.
+
     Attributes:
         causal_gt (TorchTensor(Float)): contains values in {0, 1} where 0 means not causal and 1 means causal.
             Invalid or padded entries are indicated by causal_mask.

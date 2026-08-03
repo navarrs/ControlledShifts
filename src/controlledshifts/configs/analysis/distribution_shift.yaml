@@ -15,12 +15,12 @@ benchmarks:
       name: Uniform
       seen: "test/waymo-uniform-validation"
       unseen: "test/waymo-uniform-testing"
-  - causal_agents:
-      name: CausalAgents
+  - background_agents:
+      name: BackgroundAgents
       seen: "test/waymo-uniform-testing"
       unseen: "test/waymo-remove-noncausal-testing"
-  - causal_agents_hard:
-      name: CausalAgentsHard
+  - background_agents_hard:
+      name: BackgroundAgentsHard
       seen: "test/waymo-causal-agents-hard-original-validation"
       unseen: "test/waymo-remove-noncausal-hard-testing"
   - ego_safeshift:

@@ -1,4 +1,4 @@
-r"""Benchmark creation for the Non-Background Agents benchmark.
+r"""Benchmark creation for the Background Agents benchmark.
 
 Reuses the split of a reference benchmark (``reference_benchmark``, by default ``uniform``) rather than computing its
 own, so the perturbed scenes land in the same train/validation/testing bucket as their unperturbed counterparts. As a
@@ -14,12 +14,12 @@ The reference split must exist before running this benchmark. Create it first wi
 
 Example usage:
 
-    uv run -m controlledshifts.create_benchmark benchmark=non_background_agents \\
+    uv run -m controlledshifts.create_benchmark benchmark=background_agents \\
         input_data_path=/data/driving/waymo/variants/base \\
         output_data_path=/data/driving/waymo/variants \\
         causal_labels_path=/data/driving/waymo/meta/causal_agents/processed_labels
 
-See configs/benchmark/non_background_agents.yaml for all available options.
+See configs/benchmark/background_agents.yaml for all available options.
 """
 
 import json
@@ -35,7 +35,7 @@ from omegaconf import DictConfig
 from tqdm import tqdm
 
 from controlledshifts.benchmarks.common import (
-    NON_BACKGROUND_AGENTS_STRATEGIES,
+    BACKGROUND_AGENTS_STRATEGIES,
     BenchmarkSplit,
     collect_scenario_filepaths,
     get_background_mask,
@@ -294,7 +294,7 @@ def _prepare_perturbations(  # noqa: PLR0913
         num_workers: Number of parallel worker processes.
         overwrite: If False, scenarios already present in a strategy's directory are skipped. Defaults to False.
     """
-    for strategy in NON_BACKGROUND_AGENTS_STRATEGIES:
+    for strategy in BACKGROUND_AGENTS_STRATEGIES:
         perturbed_path = output_data_path / strategy
         perturbed_path.mkdir(parents=True, exist_ok=True)
         _LOGGER.info("Generating '%s' perturbations for %d scenarios at %s", strategy, len(filepaths), perturbed_path)
@@ -320,7 +320,7 @@ def _prepare_perturbations(  # noqa: PLR0913
             )
 
 
-def create_non_background_agents_benchmark(config: DictConfig) -> BenchmarkSplit:
+def create_background_agents_benchmark(config: DictConfig) -> BenchmarkSplit:
     """Reuses the reference benchmark's split and (optionally) prepares the perturbed datasets.
 
     Loads the split saved by ``config.reference_benchmark`` (by default ``uniform``) from

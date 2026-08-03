@@ -1,6 +1,6 @@
-r"""Benchmark creation for the Non-Background Agents Hard benchmark.
+r"""Benchmark creation for the Background Agents Hard benchmark.
 
-A harder variant of the Non-Background Agents benchmark that focuses on a single perturbation (removing background
+A harder variant of the Background Agents benchmark that focuses on a single perturbation (removing background
 agents) and re-organizes scenarios into train/validation/testing splits by difficulty. Difficulty is the number of
 background agents in a scenario: the scenarios with the most background agents form the test set (following
 ``split_ratios``), mirroring how ego_safeshift/safeshift move the hardest scenarios to test.
@@ -13,12 +13,12 @@ when found.
 
 Example usage:
 
-    uv run -m controlledshifts.create_benchmark benchmark=non_background_agents_hard \\
+    uv run -m controlledshifts.create_benchmark benchmark=background_agents_hard \\
         input_data_path=/data/driving/waymo/variants/base \\
         causal_labels_path=/data/driving/waymo/meta/causal_agents/processed_labels \\
         perturbed_data_path=/data/driving/waymo/variants/remove_noncausal
 
-See configs/benchmark/non_background_agents_hard.yaml for all available options.
+See configs/benchmark/background_agents_hard.yaml for all available options.
 """
 
 import json
@@ -32,6 +32,7 @@ from numpy.random import Generator, default_rng
 from omegaconf import DictConfig
 from tqdm import tqdm
 
+from controlledshifts.benchmarks.background_agents import remove_background
 from controlledshifts.benchmarks.common import (
     BenchmarkSplit,
     collect_scenario_filepaths,
@@ -39,7 +40,6 @@ from controlledshifts.benchmarks.common import (
     split_ids_by_score,
     split_mapping_to_lists,
 )
-from controlledshifts.benchmarks.non_background_agents import remove_background
 from controlledshifts.utils.pylogger import get_pylogger
 
 
@@ -104,8 +104,8 @@ def _prepare_perturbed_scenario(
     remove_background(scenario, causal_labels, output_filepath)
 
 
-def create_non_background_agents_hard_benchmark(config: DictConfig) -> BenchmarkSplit:
-    """Creates the Non-Background Agents Hard benchmark split and prepares the perturbed dataset.
+def create_background_agents_hard_benchmark(config: DictConfig) -> BenchmarkSplit:
+    """Creates the Background Agents Hard benchmark split and prepares the perturbed dataset.
 
     Computes the background agent count for each scenario and splits scenarios into train/validation/testing by that
     count (the scenarios with the most background agents form the test set, following split_ratios). The

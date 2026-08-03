@@ -111,7 +111,7 @@ class ScenarioTrajpredVisualizer(BaseVisualizer):
         scores: ScenarioScores | None = None,
         model_output: ModelOutput | None = None,
         output_dir: str = "temp",
-        causal_gt_ids: NDArray[np.int_] | None = None,
+        non_background_gt_ids: NDArray[np.int_] | None = None,
         model_outputs: dict[str, ModelOutput] | None = None,
     ) -> None:
         """Visualizes a single scenario as one comparison pane per model and saves the output to a file.
@@ -125,10 +125,10 @@ class ScenarioTrajpredVisualizer(BaseVisualizer):
             scores: encapsulates the scenario and agent scores.
             model_output: a single model's outputs, used only when ``model_outputs`` is not provided.
             output_dir: the directory where to save the scenario visualization.
-            causal_gt_ids: unused; trajpred does not render causal panes.
+            non_background_gt_ids: unused; trajpred does not render non-background panes.
             model_outputs: per-model outputs keyed by model name; each becomes one pane.
         """
-        del causal_gt_ids
+        del non_background_gt_ids
         if not isinstance(scenario, AgentCentricScenario):
             error_message = "Scenario needs to be of AgentCentricScenario"
             raise TypeError(error_message)

@@ -1,0 +1,12 @@
+defaults:
+ - default.yaml
+
+viz_type: non_background_gt
+# pane_type is the output-dir stem and keeps the legacy spelling.
+pane_type: causal_scenario_gt  # ground-truth non-background agents, sourced from causal_labels_path JSON
+visualizer:
+  _target_: controlledshifts.utils.scenario_visualizers.scenario.ScenarioVisualizer
+  config:
+    panes_to_plot:
+      - ALL_AGENTS
+      - NON_BACKGROUND_AGENTS_GT
