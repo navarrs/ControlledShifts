@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 from matplotlib.cm import get_cmap
+from matplotlib.patches import Patch
 from numpy.typing import NDArray
 from omegaconf import DictConfig
 from sklearn.manifold import TSNE
@@ -113,7 +114,7 @@ def _build_embedding_frame(config: DictConfig, log: Logger, output_path: Path) -
     return embedding_df
 
 
-def _plot_tsne(frame: pd.DataFrame, output_path: Path, *, show_axes: bool) -> None:
+def _plot_tsne(frame: pd.DataFrame, output_path: Path, *, show_axes: bool, seed: int) -> None:
     """Saves the TSNE embedding coloured by cluster (left) and by split (right), side by side, to ``tsne.png``.
 
     The two panels share the y-axis and each carries its own legend below the panel. When ``show_axes`` is false the
@@ -121,7 +122,7 @@ def _plot_tsne(frame: pd.DataFrame, output_path: Path, *, show_axes: bool) -> No
     """
     labels = frame["cluster_label"].to_numpy()
     n_clusters = int(labels.max()) + 1
-    cmap = get_cmap("tab20", n_clusters)
+    cmap = get_cmap("tab10_r", n_clusters)
 
     fig, (ax_cluster, ax_split) = plt.subplots(1, 2, figsize=(20, 8), sharey=True)
     fig.suptitle("t-SNE of NetLSD Descriptors", color=TEXT_COLOR)
@@ -153,28 +154,33 @@ def _plot_tsne(frame: pd.DataFrame, output_path: Path, *, show_axes: bool) -> No
         labelcolor=TEXT_COLOR,
     )
 
-    for split in SPLIT_ORDER:
-        mask = frame["output_set"] == split
-        if mask.any():
-            ax_split.scatter(
-                frame.loc[mask, "tsne_1"],
-                frame.loc[mask, "tsne_2"],
-                color=SPLIT_COLOR_MAP[split],
-                s=12,
-                alpha=0.6,
-                linewidths=0,
-                label=SPLIT_LABELS[split],
-            )
+    # Plot every split in one scatter over a shuffled row order: drawing split-by-split lets the last split
+    # (validation, then testing) overpaint the training points it is interleaved with, making equal-sized splits
+    # look unequal. A deterministic shuffle removes that draw-order bias so overlapping regions mix fairly.
+    shuffled = np.random.default_rng(seed).permutation(len(frame))
+    ax_split.scatter(
+        frame["tsne_1"].to_numpy()[shuffled],
+        frame["tsne_2"].to_numpy()[shuffled],
+        c=frame["output_set"].map(SPLIT_COLOR_MAP).to_numpy()[shuffled],
+        s=12,
+        alpha=0.6,
+        linewidths=0,
+    )
+    split_counts = frame["output_set"].value_counts()
     ax_split.set_xlabel("t-SNE 1", color=TEXT_COLOR)
     ax_split.set_title("Benchmark splits", color=TEXT_COLOR)
     ax_split.tick_params(colors=TEXT_COLOR)
     ax_split.grid(visible=False)
     ax_split.legend(
+        handles=[
+            Patch(facecolor=SPLIT_COLOR_MAP[split], edgecolor="none", label=f"{SPLIT_LABELS[split]} ({count})")
+            for split in SPLIT_ORDER
+            if (count := int(split_counts.get(split, 0)))
+        ],
         loc="upper center",
         bbox_to_anchor=(0.5, -0.12),
         ncol=len(SPLIT_ORDER),
         framealpha=0.8,
-        markerscale=3,
         labelcolor=TEXT_COLOR,
     )
 
@@ -259,7 +265,7 @@ def run_environments_distribution_analysis(config: DictConfig, log: Logger, outp
         if frame is None:
             return
 
-    _plot_tsne(frame, output_path, show_axes=config.show_axes)
+    _plot_tsne(frame, output_path, show_axes=config.show_axes, seed=config.seed)
     _plot_silhouette(frame, output_path)
 
     print("\n✓ Analysis complete!")

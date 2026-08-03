@@ -1,9 +1,9 @@
-r"""Benchmark creation for the Causal Agents Hard benchmark.
+r"""Benchmark creation for the Background Agents Hard benchmark.
 
-A harder variant of the Causal Agents benchmark that focuses on a single perturbation (removing non-causal agents) and
-re-organizes scenarios into train/validation/testing splits by difficulty. Difficulty is the number of non-causal agents
-in a scenario: the scenarios with the most non-causal agents form the test set (following ``split_ratios``), mirroring
-how ego_safeshift/safeshift move the hardest scenarios to test.
+A harder variant of the Background Agents benchmark that focuses on a single perturbation (removing background
+agents) and re-organizes scenarios into train/validation/testing splits by difficulty. Difficulty is the number of
+background agents in a scenario: the scenarios with the most background agents form the test set (following
+``split_ratios``), mirroring how ego_safeshift/safeshift move the hardest scenarios to test.
 
 The benchmark produces a single split JSON (``splits/causal_agents_hard.json``). The unperturbed scenes are served from
 the ``base`` variant and the perturbed scenes from the ``remove_noncausal`` variant; both are selected by the same split
@@ -13,12 +13,12 @@ when found.
 
 Example usage:
 
-    uv run -m controlledshifts.create_benchmark benchmark=causal_agents_hard \\
+    uv run -m controlledshifts.create_benchmark benchmark=background_agents_hard \\
         input_data_path=/data/driving/waymo/variants/base \\
         causal_labels_path=/data/driving/waymo/meta/causal_agents/processed_labels \\
         perturbed_data_path=/data/driving/waymo/variants/remove_noncausal
 
-See configs/benchmark/causal_agents_hard.yaml for all available options.
+See configs/benchmark/background_agents_hard.yaml for all available options.
 """
 
 import json
@@ -32,11 +32,11 @@ from numpy.random import Generator, default_rng
 from omegaconf import DictConfig
 from tqdm import tqdm
 
-from controlledshifts.benchmarks.causal_agents import remove_noncausal
+from controlledshifts.benchmarks.background_agents import remove_background
 from controlledshifts.benchmarks.common import (
     BenchmarkSplit,
     collect_scenario_filepaths,
-    get_noncausal_mask,
+    get_background_mask,
     split_ids_by_score,
     split_mapping_to_lists,
 )
@@ -46,15 +46,15 @@ from controlledshifts.utils.pylogger import get_pylogger
 _LOGGER = get_pylogger(__name__)
 
 
-def _count_noncausal(input_filepath: Path, causal_labels_path: Path) -> tuple[str, int] | None:
-    """Counts the non-causal agents in a scenario.
+def _count_background(input_filepath: Path, causal_labels_path: Path) -> tuple[str, int] | None:
+    """Counts the background agents in a scenario.
 
     Args:
         input_filepath: Path to the input scenario pkl.
         causal_labels_path: Directory with per-scenario JSON causal labels.
 
     Returns:
-        Tuple of (scenario_id, non-causal count), or None if the scenario or its causal labels are missing.
+        Tuple of (scenario_id, background count), or None if the scenario or its causal labels are missing.
     """
     if not input_filepath.exists():
         return None
@@ -70,8 +70,8 @@ def _count_noncausal(input_filepath: Path, causal_labels_path: Path) -> tuple[st
     with causal_labels_filepath.open("r") as f:
         causal_labels = json.load(f)
 
-    noncausal_mask = get_noncausal_mask(scenario, causal_labels)
-    return scenario_id, int(noncausal_mask.sum())
+    background_mask = get_background_mask(scenario, causal_labels)
+    return scenario_id, int(background_mask.sum())
 
 
 def _prepare_perturbed_scenario(
@@ -101,14 +101,14 @@ def _prepare_perturbed_scenario(
     with causal_labels_filepath.open("r") as f:
         causal_labels = json.load(f)
 
-    remove_noncausal(scenario, causal_labels, output_filepath)
+    remove_background(scenario, causal_labels, output_filepath)
 
 
-def create_causal_agents_hard_benchmark(config: DictConfig) -> BenchmarkSplit:
-    """Creates the Causal Agents Hard benchmark split and prepares the perturbed dataset.
+def create_background_agents_hard_benchmark(config: DictConfig) -> BenchmarkSplit:
+    """Creates the Background Agents Hard benchmark split and prepares the perturbed dataset.
 
-    Computes the non-causal agent count for each scenario and splits scenarios into train/validation/testing by that
-    count (the scenarios with the most non-causal agents form the test set, following split_ratios). The
+    Computes the background agent count for each scenario and splits scenarios into train/validation/testing by that
+    count (the scenarios with the most background agents form the test set, following split_ratios). The
     ``remove_noncausal`` perturbed dataset is generated flat under ``perturbed_data_path`` (a variant store, reusing
     existing files), so both the ``base`` and ``remove_noncausal`` variants share this split. Only the split JSON is
     produced; training/eval select IDs from it and read agent-centric records from the per-variant cache.
@@ -133,12 +133,12 @@ def create_causal_agents_hard_benchmark(config: DictConfig) -> BenchmarkSplit:
         count_results = list(
             tqdm(
                 pool.imap_unordered(
-                    partial(_count_noncausal, causal_labels_path=causal_labels_path),
+                    partial(_count_background, causal_labels_path=causal_labels_path),
                     filepaths,
                     chunksize=chunksize,
                 ),
                 total=len(filepaths),
-                desc="Counting non-causal agents",
+                desc="Counting background agents",
             )
         )
     counts = [result for result in count_results if result is not None]

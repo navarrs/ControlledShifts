@@ -1,10 +1,10 @@
-"""Causal vs non-causal agent distribution analysis across benchmark splits.
+"""Non-background vs background agent distribution analysis across benchmark splits.
 
-Compares, for each causal-agents benchmark, the train/validation/testing distributions of per-scenario agent counts
-(causal, non-causal, fraction non-causal, total). The standard ``causal_agents`` benchmark reuses a random reference
-split, so its distributions should match across splits; ``causal_agents_hard`` ranks scenarios by non-causal agent
-count and sends the hardest scenarios to the test set, so its test distribution should be visibly shifted toward more
-non-causal agents.
+Compares, for each background-agents benchmark, the train/validation/testing distributions of per-scenario agent
+counts (non-background, background, fraction background, total). The standard ``background_agents`` benchmark reuses
+a random reference split, so its distributions should match across splits; ``background_agents_hard`` ranks
+scenarios by background agent count and sends the hardest scenarios to the test set, so its test distribution should be
+visibly shifted toward more background agents.
 
 Counts are intrinsic to a scenario (independent of which benchmark/split it lands in), so they are computed once over
 the union of scenario IDs and then bucketed per benchmark and split.
@@ -23,7 +23,7 @@ import pandas as pd
 from omegaconf import DictConfig
 from tqdm import tqdm
 
-from controlledshifts.benchmarks.common import get_noncausal_mask, load_benchmark_split
+from controlledshifts.benchmarks.common import get_background_mask, load_benchmark_split
 from controlledshifts.utils.analysis.common import (
     SPLIT_COLOR_MAP,
     SPLIT_ORDER,
@@ -33,23 +33,24 @@ from controlledshifts.utils.analysis.common import (
 from controlledshifts.utils.plotting import set_analysis_theme
 
 
+# Keys are the on-disk CSV column names (legacy causal/noncausal spelling); the label strings are display-only.
 _QUANTITY_LABELS: dict[str, str] = {
-    "n_causal": "Causal Agents per Scenario",
-    "n_noncausal": "Non-causal agents per Scenario",
-    "frac_noncausal": "Fraction Non-causal per Scenario",
+    "n_causal": "Non-Background Agents per Scenario",
+    "n_noncausal": "Background Agents per Scenario",
+    "frac_noncausal": "Fraction Background per Scenario",
     "n_total": "Total Agents per Scenario",
 }
 
 
 def _count_agents(input_filepath: Path, causal_labels_path: Path) -> tuple[str, int, int] | None:
-    """Counts the non-causal agents and total agents in a scenario.
+    """Counts the background agents and total agents in a scenario.
 
     Args:
         input_filepath: Path to the input scenario pkl.
         causal_labels_path: Directory with per-scenario JSON causal labels.
 
     Returns:
-        Tuple of (scenario_id, non-causal count, total agent count), or None if the scenario or its causal labels are
+        Tuple of (scenario_id, background count, total agent count), or None if the scenario or its causal labels are
         missing.
     """
     if not input_filepath.exists():
@@ -66,14 +67,14 @@ def _count_agents(input_filepath: Path, causal_labels_path: Path) -> tuple[str, 
     with causal_labels_filepath.open("r") as f:
         causal_labels = json.load(f)
 
-    noncausal_mask = get_noncausal_mask(scenario, causal_labels)
-    return scenario_id, int(noncausal_mask.sum()), int(noncausal_mask.size)
+    background_mask = get_background_mask(scenario, causal_labels)
+    return scenario_id, int(background_mask.sum()), int(background_mask.size)
 
 
 def _collect_counts(
     scenario_ids: list[str], variants_base_path: Path, causal_labels_path: Path, num_workers: int, log: Logger
 ) -> pd.DataFrame:
-    """Computes per-scenario causal/non-causal agent counts for a set of scenarios.
+    """Computes per-scenario non-background/background agent counts for a set of scenarios.
 
     Args:
         scenario_ids: Scenario IDs to count agents for.
@@ -135,7 +136,7 @@ def _build_distribution_frame(config: DictConfig, log: Logger, output_path: Path
 
     Per-scenario counts are loaded from ``per_scenario_counts.csv`` when present (unless ``overwrite`` is set),
     otherwise computed from the scenario pkls and cached. The counts are then bucketed by each benchmark's split and
-    written to ``causal_distribution.csv``.
+    written to ``background_distribution.csv``.
 
     Args:
         config: Analysis configuration (``splits_path``, ``variants_base_path``, ``causal_labels_path``,
@@ -180,16 +181,17 @@ def _build_distribution_frame(config: DictConfig, log: Logger, output_path: Path
         [_build_long_frame(counts_df, name, split_json_path) for name, split_json_path in benchmarks],
         ignore_index=True,
     )
-    long_df.to_csv(output_path / "causal_distribution.csv", index=False)
+    long_df.to_csv(output_path / "background_distribution.csv", index=False)
     return long_df
 
 
-def run_causal_distribution_analysis(config: DictConfig, log: Logger, output_path: Path) -> None:
-    """Compares causal/non-causal agent distributions across train/val/test splits for the causal-agents benchmarks.
+def run_background_distribution_analysis(config: DictConfig, log: Logger, output_path: Path) -> None:
+    """Compares non-background/background agent distributions across train/val/test splits for the background-agents
+    benchmarks.
 
     Renders side-by-side violin and histogram plots (one panel per benchmark) plus a per-benchmark, per-split summary
-    for every configured quantity. The plots are driven entirely by the long-form ``causal_distribution.csv``: when it
-    already exists (and ``overwrite`` is false) it is loaded directly, so re-rendering touches neither the scenario
+    for every configured quantity. The plots are driven entirely by the long-form ``background_distribution.csv``: when
+    it already exists (and ``overwrite`` is false) it is loaded directly, so re-rendering touches neither the scenario
     pkls nor the split JSONs. Otherwise the frame is rebuilt — reusing the cached ``per_scenario_counts.csv`` when
     present, and only falling back to loading scenarios when no cache exists or ``overwrite`` is set.
 
@@ -205,7 +207,7 @@ def run_causal_distribution_analysis(config: DictConfig, log: Logger, output_pat
     output_path.mkdir(parents=True, exist_ok=True)
     quantities = list(config.quantities)
 
-    long_cache = output_path / "causal_distribution.csv"
+    long_cache = output_path / "background_distribution.csv"
     if long_cache.exists() and not config.overwrite:
         log.info("Regenerating plots from cached %s (set overwrite=true to recompute from scenarios)", long_cache)
         long_df = pd.read_csv(long_cache)
@@ -222,4 +224,4 @@ def run_causal_distribution_analysis(config: DictConfig, log: Logger, output_pat
     render_distribution_plots(long_df, quantities, plot_config, log)
 
     print("\n✓ Analysis complete!")
-    log.info("Causal distribution analysis complete!")
+    log.info("Background distribution analysis complete!")

@@ -1,6 +1,6 @@
 
 # viz_type drives the per-type data prep. render (static/animated) is derived from the visualizer's is_animated
-# property; pane_type is derived from viz_type unless explicitly overridden (see viz_causal).
+# property; pane_type is derived from viz_type unless explicitly overridden (see viz_non_background).
 viz_type: null         # regular | scored | trajpred | model_output
 
 visualizer:
@@ -9,8 +9,8 @@ visualizer:
     scenario_type: gt
     is_ego_centric: false
 
-    # Opacity for non-causal agents in the ground-truth causal pane (viz_causal_gt); causal agents and ego stay opaque.
-    non_causal_alpha: 0.2
+    # Opacity of background agents (orange) in the non-background panes; non-background agents and ego stay opaque.
+    background_alpha: 0.6
 
     panes_to_plot:
       - ALL_AGENTS
@@ -50,5 +50,6 @@ visualizer:
       TYPE_CYCLIST: "forestgreen"
       TYPE_VEHICLE: "slategray"
       TYPE_SDC: "dodgerblue"
-      TYPE_RELEVANT: "coral"
+      TYPE_RELEVANT: "coral"       # non-background agents in the non-background panes
       TYPE_RELEVAN: "coral"
+      TYPE_BACKGROUND: "orange"    # background agents in the non-background panes

@@ -4,13 +4,15 @@ A *benchmark* defines a train→test **distribution shift** over the single cano
 
 ## How benchmarks are created and consumed
 
-Benchmark creation only computes a **split** (lists of scenario IDs) and, for the causal benchmarks, writes **perturbed variant stores** — it never copies or duplicates the scenario data.
+Benchmark creation only computes a **split** (lists of scenario IDs) and, for the background benchmarks, writes **perturbed variant stores** — it never copies or duplicates the scenario data.
 
-1. **Create** — `create_benchmark` writes a single split JSON at `${splits_path}/${benchmark_name}.json` with keys `benchmark_name`, `training`, `validation`, `testing` and `invalid`. The three split lists are mutually exclusive; `invalid` holds scenarios that were considered but could not be placed (missing from the input store, missing causal labels, etc.). The `causal_agents` and `causal_agents_hard` benchmarks additionally write perturbed variant stores under `variants/<strategy>/` (one flat `<scenario_id>.pkl` per scene; see [Causal Agents](#causal-agents)).
+1. **Create** — `create_benchmark` writes a single split JSON at `${splits_path}/${benchmark_name}.json` with keys `benchmark_name`, `training`, `validation`, `testing` and `invalid`. The three split lists are mutually exclusive; `invalid` holds scenarios that were considered but could not be placed (missing from the input store, missing causal labels, etc.). The `background_agents` and `background_agents_hard` benchmarks additionally write perturbed variant stores under `variants/<strategy>/` (one flat `<scenario_id>.pkl` per scene; see [Background Agents](#background-agents)).
 
 2. **Build the agent-centric cache** — before training, build the cache for each variant the benchmark uses (`base`, plus any perturbation variants): `uv run -m controlledshifts.build_ac_cache variant=<variant> model=<model>` (see [DATA_PREPARATION.md](DATA_PREPARATION.md) step 5).
 
 3. **Train / evaluate** — `paths=<benchmark>` selects scenario IDs from the split JSON and reads the matching variant's cache. Unperturbed scenes come from the `base` variant; perturbed test sets come from the perturbation variants — both indexed by the **same** split, so a scene is paired with its perturbed counterpart in the same bucket.
+
+> **Naming note.** This benchmark is *created* with `benchmark=background_agents` but *trained/evaluated* with `paths=causal_agents`. On-disk and experiment-tracking identifiers deliberately keep the legacy `causal`/`noncausal` spelling — split-JSON stems (`splits/causal_agents.json`), Hydra `paths` groups/tags (`causal_agents`, `causal-agents`), variant directories (`variants/remove_noncausal/`), per-scenario label keys (`causal_ids`), the distribution-analysis CSV *columns* (`n_causal`, `n_noncausal`, `frac_noncausal`) and W&B metric columns — so existing caches, splits, labels and tracked runs stay valid. Only the code symbols, the `benchmark=`/`analysis=` config-group selectors and the `viz_non_background*` visualization configs were renamed. Throughout the codebase, a *causal* agent is a *non-background* agent and a *non-causal* agent is a *background* agent.
 
 Common `create_benchmark` options (see [`create_benchmark.yaml`](../src/controlledshifts/configs/create_benchmark.yaml)):
 
@@ -25,14 +27,14 @@ Common `create_benchmark` options (see [`create_benchmark.yaml`](../src/controll
 
 | Benchmark | Description |
 |---|---|
-| [Uniform](#uniform) | IID control — random split, no shift. Also the reference split reused by Causal Agents. |
-| [Causal Agents](#causal-agents) | Agent-removal robustness. Reuses the Uniform split and generates four perturbed variants. |
-| [Causal Agents Hard](#causal-agents-hard) | Re-splits by non-causal agent count so the densest scenes form the test set; `remove_noncausal` only. |
+| [Uniform](#uniform) | IID control — random split, no shift. Also the reference split reused by Background Agents. |
+| [Background Agents](#background-agents) | Agent-removal robustness. Reuses the Uniform split and generates four perturbed variants. |
+| [Background Agents Hard](#background-agents-hard) | Re-splits by background agent count so the densest scenes form the test set; `remove_noncausal` only. |
 | [SafeShift](#safeshift) | Safety-critical ID→OOD split derived from precomputed SafeShift score metadata. |
 | [Ego-SafeShift](#ego-safeshift) | Ranks scenes by ego-centric safety score; the hardest form the OOD test set. |
 | [Environments](#environments) | Clusters scenes by road topology (NetLSD descriptors); the hardest clusters form the OOD test set. |
 
-Each benchmark is selected at creation with `benchmark=<name>` and at train/eval time with `paths=<name>`. Two benchmarks expose more than one `paths` option: `causal_agents` also has `causal_agents_all` (evaluates all four perturbations), and `safeshift` also has `safeshift_original` (pure ID→OOD, no perturbation). A separate `paths=mini` option evaluates a model trained on the unshifted `mini` variant against several benchmarks' OOD test sets at once.
+Each benchmark is selected at creation with `benchmark=<name>` and at train/eval time with `paths=<name>` (the `paths` group keeps the legacy spelling — see the naming note above). Two benchmarks expose more than one `paths` option: `causal_agents` also has `causal_agents_all` (evaluates all four perturbations), and `safeshift` also has `safeshift_original` (pure ID→OOD, no perturbation). A separate `paths=mini` option evaluates a model trained on the unshifted `mini` variant against several benchmarks' OOD test sets at once.
 
 ## Uniform
 
@@ -54,19 +56,19 @@ Key options (see [`benchmark/uniform.yaml`](../src/controlledshifts/configs/benc
 uv run -m controlledshifts.train model=[model_name] paths=uniform
 ```
 
-## Causal Agents
+## Background Agents
 
-Evaluates robustness to **agent removal**: does the model rely on the *right* (causal) agents? Rather than computing its own split, it **reuses the `uniform` split** so every perturbed scene stays in the same train/validation/testing bucket as its unperturbed counterpart.
+Evaluates robustness to **agent removal**: does the model rely on the *right* (non-background) agents? Rather than computing its own split, it **reuses the `uniform` split** so every perturbed scene stays in the same train/validation/testing bucket as its unperturbed counterpart.
 
 > [!WARNING]
 > Create the `uniform` benchmark first, or the run aborts with a `FileNotFoundError`.
 
 As preparation it generates a perturbed variant store for **every** masking strategy, written flat under `variants/<strategy>/` with the same scenario IDs as `base` (the selected agents have their trajectories invalidated and are dropped from the prediction targets):
 
-- `variants/remove_causal/` — removes the agents labelled **causal** to the ego.
-- `variants/remove_noncausal/` — removes the agents **not** causal to the ego (keeps only the causal agents + ego).
-- `variants/remove_noncausalequal/` — removes a **random subset of non-causal** agents **equal in number** to the causal
-  agents (a control for *how many* agents are removed).
+- `variants/remove_causal/` — removes the agents labelled **non-background** to the ego.
+- `variants/remove_noncausal/` — removes the **background** agents (keeps only the non-background agents + ego).
+- `variants/remove_noncausalequal/` — removes a **random subset of background** agents **equal in number** to the
+  non-background agents (a control for *how many* agents are removed).
 - `variants/remove_static/` — removes **static** agents (start-to-end displacement below a threshold), keeping the ego.
 
 The unperturbed "original" scenes are not re-stored — they are the `base` variant, paired with the perturbed variants by
@@ -74,11 +76,11 @@ the shared `uniform` split.
 
 **Create:**
 ```bash
-uv run -m controlledshifts.create_benchmark benchmark=uniform          # reference split (run once)
-uv run -m controlledshifts.create_benchmark benchmark=causal_agents    # -> variants/remove_{causal,noncausal,noncausalequal,static}/
+uv run -m controlledshifts.create_benchmark benchmark=uniform                # reference split (run once)
+uv run -m controlledshifts.create_benchmark benchmark=background_agents   # -> variants/remove_{causal,noncausal,noncausalequal,static}/
 ```
 
-Key options (see [`benchmark/causal_agents.yaml`](../src/controlledshifts/configs/benchmark/causal_agents.yaml)):
+Key options (see [`benchmark/background_agents.yaml`](../src/controlledshifts/configs/benchmark/background_agents.yaml)):
 
 | Option | Default | Description |
 |---|---|---|
@@ -94,23 +96,23 @@ uv run -m controlledshifts.train model=[model_name] paths=causal_agents
 uv run -m controlledshifts.train model=[model_name] paths=causal_agents_all
 ```
 
-## Causal Agents Hard
+## Background Agents Hard
 
-A harder variant of Causal Agents focused on a single perturbation (**remove non-causal**) that **re-splits by difficulty** instead of reusing `uniform`. Difficulty is the number of non-causal agents per scene: the scenes with the most non-causal agents form the test set (following `split_ratios`). It writes `splits/causal_agents_hard.json` and generates the `remove_noncausal` perturbed variant store (reusing existing perturbed files when present), so the `base` (original) and `remove_noncausal` versions of the same held-out scenes can be compared.
+A harder variant of Background Agents focused on a single perturbation (**remove background**) that **re-splits by difficulty** instead of reusing `uniform`. Difficulty is the number of background agents per scene: the scenes with the most background agents form the test set (following `split_ratios`). It writes `splits/causal_agents_hard.json` and generates the `remove_noncausal` perturbed variant store (reusing existing perturbed files when present), so the `base` (original) and `remove_noncausal` versions of the same held-out scenes can be compared.
 
 **Create:**
 ```bash
-uv run -m controlledshifts.create_benchmark benchmark=causal_agents_hard
+uv run -m controlledshifts.create_benchmark benchmark=background_agents_hard
 # -> splits/causal_agents_hard.json (+ variants/remove_noncausal/ if not already present)
 ```
 
-Key options (see [`benchmark/causal_agents_hard.yaml`](../src/controlledshifts/configs/benchmark/causal_agents_hard.yaml)):
+Key options (see [`benchmark/background_agents_hard.yaml`](../src/controlledshifts/configs/benchmark/background_agents_hard.yaml)):
 
 | Option | Default | Description |
 |---|---|---|
 | `causal_labels_path` | `/data/driving/waymo/meta/causal_agents/processed_labels/` | Directory of per-scenario JSON causal labels. |
 | `perturbed_data_path` | `/data/driving/waymo/variants/remove_noncausal/` | `remove_noncausal` variant store to reuse or populate. |
-| `split_ratios` | `[0.70, 0.15, 0.15]` | `(train, val, test)` fractions; scenes with the most non-causal agents form the test set. |
+| `split_ratios` | `[0.70, 0.15, 0.15]` | `(train, val, test)` fractions; scenes with the most background agents form the test set. |
 
 **Train / evaluate** (trains on `base` under this split, evaluates `base` vs `remove_noncausal` on the hardest held-out scenes):
 ```bash
@@ -138,7 +140,7 @@ Key options (see [`benchmark/safeshift.yaml`](../src/controlledshifts/configs/be
 ```bash
 # Pure SafeShift ID (train/val) -> OOD (test):
 uv run -m controlledshifts.train model=[model_name] paths=safeshift_original
-# SafeShift OOD combined with the remove_noncausal causal perturbation at test time:
+# SafeShift OOD combined with the remove_noncausal (background-removal) perturbation at test time:
 uv run -m controlledshifts.train model=[model_name] paths=safeshift
 ```
 

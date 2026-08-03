@@ -42,9 +42,9 @@ MODEL_COLOR_MAP = {
 }
 
 SPLIT_COLOR_MAP = {
-    "training": "#355070",
-    "validation": "#8f769f",
-    "testing": "#b56576",
+    "training": "#008A00",
+    "validation": "#99FF33",
+    "testing": "#FF6666",
 }
 
 METRIC_NAME_MAP = {
@@ -164,11 +164,11 @@ def plot_heatmap(  # noqa: PLR0913
 SPLIT_ORDER: tuple[str, ...] = ("training", "validation", "testing")
 SPLIT_LABELS: dict[str, str] = {"training": "Train", "validation": "Val", "testing": "Test"}
 
-_TITLE_FONTSIZE = 16
-_LABEL_FONTSIZE = 15
-_TICK_FONTSIZE = 13
-_SUPTITLE_FONTSIZE = 17
-_LEGEND_FONTSIZE = 14
+_TITLE_FONTSIZE = 17
+_LABEL_FONTSIZE = 17
+_TICK_FONTSIZE = 15
+_SUPTITLE_FONTSIZE = 19
+_LEGEND_FONTSIZE = 15
 TEXT_COLOR = "#808080"
 
 

@@ -19,11 +19,11 @@ The available [`visualization`](../src/controlledshifts/configs/visualization/) 
 |---|---|---|
 | `viz_static` / `viz_animated` | `regular` | The scenarios as-is (static or animated). |
 | `viz_scored` | `scored` | Scenario features → scores, with the scene score drawn. Requires `dataset.config.autolabel_agents=true`. |
-| `viz_causal` / `viz_causal_animated` | `model_output` | Ground-truth and predicted causal agents. Needs cached model outputs. |
-| `viz_causal_gt` | `causal_gt` | Only the ground-truth causal agents, from the causal-label JSONs (`dataset.config.causal_labels_path`). Needs no model outputs. |
+| `viz_non_background` / `viz_non_background_animated` | `model_output` | Ground-truth and predicted non-background agents. Needs cached model outputs. |
+| `viz_non_background_gt` | `non_background_gt` | Only the ground-truth non-background agents, from the causal-label JSONs (`dataset.config.causal_labels_path`). Needs no model outputs. |
 | `viz_trajpred` | `trajpred` | One comparison pane per model: the shared scene context (map, agent history, dimmed ground-truth future) plus that model's predictions. Needs cached model outputs; see `models` below. |
 
-Each config declares a `panes_to_plot` list (values from `SupportedPanes`: `ALL_AGENTS`, `HIGHLIGHT_RELEVANT`, `CAUSAL_AGENTS_GT`, `CAUSAL_AGENTS_PRED`, `TRAJECTORY_PREDICTION`) controlling which panes are rendered, one window per pane.
+Each config declares a `panes_to_plot` list (values from `SupportedPanes`: `ALL_AGENTS`, `HIGHLIGHT_RELEVANT`, `NON_BACKGROUND_AGENTS_GT`, `NON_BACKGROUND_AGENTS_PRED`, `TRAJECTORY_PREDICTION`) controlling which panes are rendered, one window per pane.
 
 Key options:
 
@@ -88,7 +88,7 @@ uv run -m controlledshifts.run_analysis analysis=[analysis_name]
 | `distribution_shift` | Combined results CSV | Per-benchmark ID vs OOD comparison plots and a LaTeX table. |
 | `unshifted_generalization` | Combined results CSV | Gap of every benchmark against one unshifted reference split. |
 | `robustness` | Combined results CSV | Reference-relative quality/stability scores, radar plots, and a ranking. |
-| `causal_distribution` | Scenario pkls + causal labels | How causal/non-causal agent counts distribute across the causal benchmarks' splits. |
+| `background_distribution` | Scenario pkls + causal labels | How non-background/background agent counts distribute across the background benchmarks' splits. |
 | `score_distribution` | Scores CSV | How ego-safeshift criticality scores distribute across splits. |
 | `environments_distribution` | Clustering artifacts | TSNE and silhouette plots of the environments benchmark's clustering. |
 | `scenario_overlap` | Split JSONs | Jaccard overlap between benchmarks' splits. |
@@ -121,7 +121,7 @@ reference:
   split: "val/waymo-mini-id"
 benchmarks:
   - mini_test: {name: Mini-Test, split: "test/waymo-mini-ood"}
-  - causal_agents_hard: {name: CausalAgentsHard, split: "test/waymo-remove-noncausal-hard-testing"}
+  - background_agents_hard: {name: BackgroundAgentsHard, split: "test/waymo-remove-noncausal-hard-testing"}
 ```
 
 Writes a per-benchmark LaTeX table to `<output_path>/results.tex` (cells are `value (gap%)` vs the reference), a grouped bar chart `benchmark_values.png` (the reference is hatched), and a benchmark x model gap heatmap `gap_heatmap.png` (red = worse). The console prints the per-benchmark mean gap and flags the worst benchmark.
@@ -157,21 +157,21 @@ It also writes `<output_path>/robustness_summary.png`: a 3x2 grid whose columns 
 > [!NOTE]
 > The LaTeX tables in these three analyses shade rows with `\rowcolor`, so the consuming document must load `\usepackage[table]{xcolor}` (and `\usepackage{multirow}` for the unshifted-generalization table).
 
-### Causal Agent Distribution
+### Background Agent Distribution
 
-[`analysis/causal_distribution.yaml`](../src/controlledshifts/configs/analysis/causal_distribution.yaml) compares how the two causal-agents benchmarks distribute agents across their splits. `causal_agents` reuses a random reference split, so its per-scenario agent counts should look the same across splits; `causal_agents_hard` sends the scenarios with the most non-causal agents to the test set, so its test split should be visibly shifted.
+[`analysis/background_distribution.yaml`](../src/controlledshifts/configs/analysis/background_distribution.yaml) compares how the two background-agents benchmarks distribute agents across their splits. `background_agents` reuses a random reference split, so its per-scenario agent counts should look the same across splits; `background_agents_hard` sends the scenarios with the most background agents to the test set, so its test split should be visibly shifted.
 
-It reads raw data rather than the results CSV: per-scenario `base` pkls (`variants_base_path`), JSON causal labels (`causal_labels_path`), and the benchmark split JSONs (`splits_path`). Each entry names the split JSON to read:
+It reads raw data rather than the results CSV: per-scenario `base` pkls (`variants_base_path`), JSON causal labels (`causal_labels_path`), and the benchmark split JSONs (`splits_path`). Each entry names the split JSON to read (`split_json` keeps the legacy on-disk spelling):
 
 ```yaml
 benchmarks:
-  - causal_agents: {name: CausalAgents, split_json: causal_agents}
-  - causal_agents_hard: {name: CausalAgentsHard, split_json: causal_agents_hard}
+  - background_agents: {name: BackgroundAgents, split_json: causal_agents}
+  - background_agents_hard: {name: BackgroundAgentsHard, split_json: causal_agents_hard}
 ```
 
-Counts (causal = `causal_ids` + ego; non-causal = everything else, via the same `get_noncausal_mask` the benchmarks use) are intrinsic to a scenario, so they are computed once over `num_workers` processes and cached to `<output_path>/per_scenario_counts.csv`.
+Counts (non-background = `causal_ids` + ego; background = everything else, via the same `get_background_mask` the benchmarks use) are intrinsic to a scenario, so they are computed once over `num_workers` processes and cached to `<output_path>/per_scenario_counts.csv`.
 
-Writes, under `<output_path>/`: the cached `per_scenario_counts.csv`, the bucketed `causal_distribution.csv`, a per-benchmark/per-split `summary.csv`, and the [distribution plots](#shared-conventions) for each quantity in `quantities` (`n_causal`, `n_noncausal`, `frac_noncausal`, `n_total`).
+Writes, under `<output_path>/` (`outputs/background_distribution_analysis/`): the cached `per_scenario_counts.csv`, the bucketed `background_distribution.csv`, a per-benchmark/per-split `summary.csv`, and the [distribution plots](#shared-conventions) for each quantity in `quantities` (`n_causal`, `n_noncausal`, `frac_noncausal`, `n_total` — the column names keep the legacy spelling).
 
 ### Ego-SafeShift Score Distribution
 
@@ -217,12 +217,12 @@ benchmarks:
   - ego_safeshift: {name: EgoSafeShift, split_json: ego_safeshift}
 ```
 
-For each split it builds a symmetric benchmark x benchmark matrix of the Jaccard index `|A ∩ B| / |A ∪ B|` over scenario IDs. Benchmarks built on a shared reference split (e.g. `causal_agents` vs `uniform`) land near 1.0; benchmarks that resample the population (e.g. `causal_agents_hard`) drop well below.
+For each split it builds a symmetric benchmark x benchmark matrix of the Jaccard index `|A ∩ B| / |A ∪ B|` over scenario IDs. Benchmarks built on a shared reference split (e.g. `background_agents` vs `uniform`) land near 1.0; benchmarks that resample the population (e.g. `background_agents_hard`) drop well below.
 
 Writes, under `<output_path>/`: `scenario_overlap.png` (one annotated Jaccard heatmap per split, sharing a colorbar), a tidy `scenario_overlap.csv` with the raw intersection counts, and an `overlaps/` subdirectory holding the overlapping scenario IDs as JSON — one `<BenchmarkA>_<BenchmarkB>.json` per pair plus `all_benchmarks.json` for the intersection common to every benchmark.
 
 ### Shared conventions
 
-**Distribution plots.** The `causal_distribution` and `score_distribution` analyses render, for each quantity listed in `quantities`, the same three side-by-side views with one panel per benchmark: a violin (`<quantity>_violin.png`, splits on the x-axis), a histogram (`<quantity>_histogram.png`, overlaid per-split density curves), and a ridgeline (`<quantity>_ridge.png`, one overlapping density row per split).
+**Distribution plots.** The `background_distribution` and `score_distribution` analyses render, for each quantity listed in `quantities`, the same three side-by-side views with one panel per benchmark: a violin (`<quantity>_violin.png`, splits on the x-axis), a histogram (`<quantity>_histogram.png`, overlaid per-split density curves), and a ridgeline (`<quantity>_ridge.png`, one overlapping density row per split).
 
-**Caching.** The `causal_distribution`, `score_distribution` and `environments_distribution` analyses cache their intermediate frames as CSVs and regenerate their figures from those on a re-run, so plots can be restyled without touching the source data. Set `overwrite=true` to rebuild the cache — also required to pick up changes to `benchmarks` against an already-cached CSV.
+**Caching.** The `background_distribution`, `score_distribution` and `environments_distribution` analyses cache their intermediate frames as CSVs and regenerate their figures from those on a re-run, so plots can be restyled without touching the source data. Set `overwrite=true` to rebuild the cache — also required to pick up changes to `benchmarks` against an already-cached CSV.

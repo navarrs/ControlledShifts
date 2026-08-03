@@ -9,7 +9,7 @@ Example usage:
     # Base (unperturbed) variant for the AutoBot processing profile
     uv run -m controlledshifts.build_ac_cache variant=base model=autobot
 
-    # A perturbed variant (must be generated first via create_benchmark benchmark=causal_agents)
+    # A perturbed variant (must be generated first via create_benchmark benchmark=background_agents)
     uv run -m controlledshifts.build_ac_cache variant=remove_noncausal model=autobot
 
     # MTR uses manually_split_lane, which yields a distinct processing profile / cache directory

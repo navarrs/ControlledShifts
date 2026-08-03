@@ -17,7 +17,7 @@ The decoder must be **separate and minimal**: `waymo-open-dataset-tf-2-12-0` pin
 
 A single canonical copy of each *truly different* dataset is kept and re-split logically — scenarios are never copied per benchmark:
 
-- `variants/<variant>/<scenario_id>.pkl`: `base` is the unperturbed data variant; each causal perturbation (`remove_causal`, `remove_noncausal`, `remove_noncausalequal`, `remove_static`) is its own variant.
+- `variants/<variant>/<scenario_id>.pkl`: `base` is the unperturbed data variant; each agent-removal perturbation (`remove_causal`, `remove_noncausal`, `remove_noncausalequal`, `remove_static`) is its own variant.
 - `splits/<benchmark>.json` — each benchmark's `{training, validation, testing}` lists of scenario IDs (no data is copied).
 - `ac_cache/<variant>/<profile_hash>/` — the model-ready agent-centric tensors for a variant, built once per processing profile.
 
@@ -102,7 +102,7 @@ The pipeline above is the common path. The benchmarks below need extra download/
 
 ### Causal Agents (WOMD)
 
-Prepares the per-scenario causal labels that the `causal_agents` benchmark consumes. **Most steps require Python 3.10** (they depend on `waymo_open_dataset`).
+Prepares the per-scenario causal labels that the `background_agents` benchmark consumes. **Most steps require Python 3.10** (they depend on `waymo_open_dataset`).
 
 1. Download [CausalAgents](https://github.com/google-research/causal-agents) labels:
    ```bash
@@ -130,12 +130,12 @@ Prepares the per-scenario causal labels that the `causal_agents` benchmark consu
    uv run verify_agent_ids.py
    ```
 
-5. Run the pipeline: select the labeled validation scenes, decode them into `base`, then create the benchmark. The `causal_agents` benchmark reuses `splits/uniform.json` and writes the four perturbed variant stores (`remove_causal`, `remove_noncausal`, `remove_noncausalequal`, `remove_static`). See **[BENCHMARKS.md](BENCHMARKS.md)** for variant details.
+5. Run the pipeline: select the labeled validation scenes, decode them into `base`, then create the benchmark. The `background_agents` benchmark reuses `splits/uniform.json` and writes the four perturbed variant stores (`remove_causal`, `remove_noncausal`, `remove_noncausalequal`, `remove_static`). See **[BENCHMARKS.md](BENCHMARKS.md)** for variant details.
    ```bash
    uv run waymo_data_selection.py --parallel --input_data_path /datasets/waymo/raw/scenario/validation --output_dir mini_causal --percentage 1.0
    # decode /data/driving/waymo/raw/mini_causal into variants/base (pipeline step 4)
    uv run -m controlledshifts.create_benchmark benchmark=uniform        # if not already created
-   uv run -m controlledshifts.create_benchmark benchmark=causal_agents
+   uv run -m controlledshifts.create_benchmark benchmark=background_agents
    uv run -m controlledshifts.build_ac_cache variant=remove_noncausal model=autobot
    ```
 

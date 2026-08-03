@@ -11,8 +11,9 @@ Runs one of the analyses over a single combined results file, selected via the `
     # Per-model, per-metric distribution-shift robustness scores (radar plot + CSV + LaTeX table).
     uv run -m controlledshifts.run_analysis analysis=robustness
 
-    # Causal vs non-causal agent count distributions across train/val/test for the causal-agents benchmarks.
-    uv run -m controlledshifts.run_analysis analysis=causal_distribution
+    # Non-background vs background agent count distributions across train/val/test for the background-agents
+    # benchmarks.
+    uv run -m controlledshifts.run_analysis analysis=background_distribution
 
     # Per-scenario criticality-score distributions across train/val/test for the ego-safeshift benchmark.
     uv run -m controlledshifts.run_analysis analysis=score_distribution
@@ -51,7 +52,7 @@ _ANALYSES: dict[str, Callable[[DictConfig, Logger, Path], None]] = {
     "distribution_shift": analysis.run_distribution_shift_analysis,
     "unshifted_generalization": analysis.run_unshifted_generalization_analysis,
     "robustness": analysis.run_robustness_scores_analysis,
-    "causal_distribution": analysis.run_causal_distribution_analysis,
+    "background_distribution": analysis.run_background_distribution_analysis,
     "score_distribution": analysis.run_score_distribution_analysis,
     "environments_distribution": analysis.run_environments_distribution_analysis,
     "scenario_overlap": analysis.run_scenario_overlap_analysis,

@@ -15,6 +15,6 @@ reference:
 
 benchmarks:
   - mini_test: {name: Mini-Test, split: "test/waymo-mini-ood"}
-  - causal_agents_hard: {name: CausalAgentsHard, split: "test/waymo-remove-noncausal-hard-testing"}
+  - background_agents_hard: {name: BackgroundAgentsHard, split: "test/waymo-remove-noncausal-hard-testing"}
   - ego_safeshift: {name: EgoSafeShift-OOD, split: "test/waymo-ego-safeshift-ood"}
   - environments: {name: Environments-OOD, split: "test/waymo-environments-ood"}

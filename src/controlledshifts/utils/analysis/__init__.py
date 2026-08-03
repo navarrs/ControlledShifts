@@ -1,4 +1,4 @@
-from controlledshifts.utils.analysis.causal_distribution import run_causal_distribution_analysis
+from controlledshifts.utils.analysis.background_distribution import run_background_distribution_analysis
 from controlledshifts.utils.analysis.common import plot_heatmap
 from controlledshifts.utils.analysis.distribution_shift import run_distribution_shift_analysis
 from controlledshifts.utils.analysis.environments_distribution import run_environments_distribution_analysis
@@ -12,7 +12,7 @@ from controlledshifts.utils.analysis.unshifted_generalization import run_unshift
 __all__ = [
     "compute_dimensionality_reduction",
     "plot_heatmap",
-    "run_causal_distribution_analysis",
+    "run_background_distribution_analysis",
     "run_distribution_shift_analysis",
     "run_environments_distribution_analysis",
     "run_robustness_scores_analysis",
