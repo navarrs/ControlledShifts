@@ -14,7 +14,7 @@ from omegaconf import DictConfig
 from PIL import Image
 
 from controlledshifts.schemas import AgentCentricScenario, ModelOutput
-from controlledshifts.utils.constants import INVALID_AGENT_ID, MIN_VALID_POINTS, CausalOutputType, SupportedPanes
+from controlledshifts.utils.constants import INVALID_AGENT_ID, MIN_VALID_POINTS, NonBackgroundSource, SupportedPanes
 
 
 logger = get_logger(__name__)
@@ -206,7 +206,7 @@ class BaseVisualizer(ABC):
             scores: encapsulates the scenario and agent scores.
             model_output: encapsulates model outputs. Required for the predicted non-background pane and
                 for the GT non-background pane when ``non_background_gt_ids`` is not provided.
-            non_background_gt_ids: ground-truth non-background agent ids loaded from the causal-label files.
+            non_background_gt_ids: ground-truth non-background agent ids loaded from the non-background label files.
                 When provided, the GT non-background pane is rendered from these instead of from model outputs.
             start_timestep: starting timestep to plot the sequences.
             end_timestep: ending timestep to plot the sequences.
@@ -231,7 +231,7 @@ class BaseVisualizer(ABC):
                         ax,
                         scenario,
                         model_output,
-                        CausalOutputType.GROUND_TRUTH,
+                        NonBackgroundSource.GROUND_TRUTH,
                         start_timestep=start_timestep,
                         end_timestep=end_timestep,
                     )
@@ -248,7 +248,7 @@ class BaseVisualizer(ABC):
                     ax,
                     scenario,
                     model_output,
-                    CausalOutputType.PREDICTION,
+                    NonBackgroundSource.PREDICTION,
                     start_timestep=start_timestep,
                     end_timestep=end_timestep,
                 )
@@ -261,15 +261,14 @@ class BaseVisualizer(ABC):
         ax: Axes,
         scenario: Scenario,
         model_output: ModelOutput,
-        source: CausalOutputType,
+        source: NonBackgroundSource,
         start_timestep: int = 0,
         end_timestep: int = -1,
     ) -> None:
-        """Plots agent trajectories, colouring non-background agents coral and background agents orange.
+        """Plots agent trajectories, colouring background agents orange and the ego agent blue.
 
-        Non-background (a.k.a. causal) agents are highlighted in the ``TYPE_RELEVANT`` colour; every other non-ego agent
-        is drawn in the ``TYPE_BACKGROUND`` colour at ``background_alpha`` so both groups stand out, distinguished by
-        colour.
+        Background agents are drawn in the ``TYPE_BACKGROUND`` colour at ``background_alpha``; the ego agent uses the
+        ``TYPE_SDC`` colour, and every other (non-background) agent keeps its regular agent-type colour.
 
         Args:
             ax: Axes to plot on.
@@ -280,41 +279,45 @@ class BaseVisualizer(ABC):
             end_timestep: ending timestep to plot the sequences.
 
         Raises:
-            ValueError: if the model output does not contain a causal output.
+            ValueError: if the model output does not contain a non-background output.
         """
-        causal_output = model_output.causal_output
-        if causal_output is None:
-            error_message = "Causal output is required for non-background scenario visualization."
+        # `causal_output` is the on-disk schema field name; it holds the non-background classification.
+        non_background_output = model_output.causal_output
+        if non_background_output is None:
+            error_message = "Non-background output is required for non-background scenario visualization."
             raise ValueError(error_message)
 
         agent_data = scenario.agent_data
         agent_ids = agent_data.agent_ids
         ego_index = scenario.metadata.ego_vehicle_index
 
-        # Background agents are drawn orange at background_alpha; non-background agents get a score-based alpha.
-        agent_types = np.full(agent_data.num_agents, "TYPE_BACKGROUND")
+        # Agents keep their regular type colour unless they are background; object dtype so the wider "TYPE_BACKGROUND"
+        # marker is not truncated by the fixed-width dtype numpy infers from the type names present.
+        agent_types = np.asarray([atype.name for atype in agent_data.agent_types], dtype=object)
         agent_scores = np.full(agent_data.num_agents, self.background_alpha, float)
+        is_background = np.ones(agent_data.num_agents, bool)
 
         modeled_agent_ids = model_output.agent_ids.value.detach().cpu().numpy()
         mask = modeled_agent_ids != INVALID_AGENT_ID
         modeled_agent_ids = modeled_agent_ids[mask]
         match source:
-            case CausalOutputType.GROUND_TRUTH:
-                causal = causal_output.causal_gt.value.detach().cpu().numpy()[mask]
-                relevant_indeces = np.where(causal > 0.0)[0]
-                relevant_agent_ids = modeled_agent_ids[relevant_indeces]
-                idxs = np.isin(agent_ids, relevant_agent_ids)
-                agent_types[idxs] = "TYPE_RELEVANT"
+            case NonBackgroundSource.GROUND_TRUTH:
+                non_background = non_background_output.causal_gt.value.detach().cpu().numpy()[mask]
+                non_background_indices = np.where(non_background > 0.0)[0]
+                non_background_agent_ids = modeled_agent_ids[non_background_indices]
+                idxs = np.isin(agent_ids, non_background_agent_ids)
+                is_background[idxs] = False
                 agent_scores[idxs] = 1.0
-            case CausalOutputType.PREDICTION:
-                causal = causal_output.causal_pred.value.detach().cpu().numpy()[mask]
-                causal_probs = causal_output.causal_pred_probs.value.detach().cpu().numpy()[mask]
-                for n, (pred, prob) in enumerate(zip(causal.astype(int), causal_probs, strict=False)):
+            case NonBackgroundSource.PREDICTION:
+                non_background = non_background_output.causal_pred.value.detach().cpu().numpy()[mask]
+                non_background_probs = non_background_output.causal_pred_probs.value.detach().cpu().numpy()[mask]
+                for n, (pred, prob) in enumerate(zip(non_background.astype(int), non_background_probs, strict=False)):
                     agent_id = modeled_agent_ids[n]
                     idx = np.isin(agent_ids, agent_id)
                     if pred == 1:
-                        agent_types[idx] = "TYPE_RELEVANT"
+                        is_background[idx] = False
                     agent_scores[idx] = prob[pred]
+        agent_types[is_background] = "TYPE_BACKGROUND"
         agent_types[ego_index] = "TYPE_SDC"
         agent_scores[ego_index] = 1.0
 
@@ -330,12 +333,12 @@ class BaseVisualizer(ABC):
         start_timestep: int = 0,
         end_timestep: int = -1,
     ) -> None:
-        """Plots ground-truth non-background agents loaded from the causal-label files (no model output required).
+        """Plots ground-truth non-background agents loaded from the label files (no model output required).
 
-        Agents whose ids are in ``non_background_agent_ids`` are highlighted (full opacity, ``TYPE_RELEVANT`` colour);
-        every other agent is drawn in the ``TYPE_BACKGROUND`` colour (orange) at ``background_alpha`` so both groups
-        stand out, distinguished by colour. This mirrors the GROUND_TRUTH branch of ``plot_non_background`` but sources
-        the labels from disk.
+        Agents whose ids are in ``non_background_agent_ids`` keep their regular agent-type colour at full opacity; every
+        other agent is drawn in the ``TYPE_BACKGROUND`` colour (orange) at ``background_alpha``, and the ego agent uses
+        the ``TYPE_SDC`` colour (blue). This mirrors the GROUND_TRUTH branch of ``plot_non_background`` but sources the
+        labels from disk.
 
         Args:
             ax: Axes to plot on.
@@ -348,11 +351,12 @@ class BaseVisualizer(ABC):
         agent_ids = agent_data.agent_ids
         ego_index = scenario.metadata.ego_vehicle_index
 
-        # Background agents are drawn orange at background_alpha; non-background agents are highlighted at full opacity.
-        agent_types = np.full(agent_data.num_agents, "TYPE_BACKGROUND")
+        # Agents keep their regular type colour unless they are background; object dtype so the wider "TYPE_BACKGROUND"
+        # marker is not truncated by the fixed-width dtype numpy infers from the type names present.
+        agent_types = np.asarray([atype.name for atype in agent_data.agent_types], dtype=object)
         agent_scores = np.full(agent_data.num_agents, self.background_alpha, float)
         non_background_idxs = np.isin(agent_ids, non_background_agent_ids)
-        agent_types[non_background_idxs] = "TYPE_RELEVANT"
+        agent_types[~non_background_idxs] = "TYPE_BACKGROUND"
         agent_scores[non_background_idxs] = 1.0
         agent_types[ego_index] = "TYPE_SDC"
         agent_scores[ego_index] = 1.0
@@ -379,7 +383,7 @@ class BaseVisualizer(ABC):
         Args:
             ax: Axes to plot on.
             scenario: encapsulates the scenario to visualize.
-            agent_types: per-agent type names used to look up colors (e.g. "TYPE_RELEVANT", "TYPE_BACKGROUND",
+            agent_types: per-agent type names used to look up colors (e.g. "TYPE_VEHICLE", "TYPE_BACKGROUND",
                 "TYPE_SDC").
             agent_scores: per-agent alpha values; 0.0 hides an agent, positive values highlight it.
             start_timestep: starting timestep to plot the sequences.
@@ -705,7 +709,7 @@ class BaseVisualizer(ABC):
             model_output: encapsulates model outputs.
             output_dir: the directory where to save the scenario visualization.
             non_background_gt_ids: ground-truth non-background agent ids for the GT non-background pane, loaded from
-                the causal-label files; used when no model output is available.
+                the non-background label files; used when no model output is available.
             model_outputs: per-model outputs keyed by model name, used by the trajpred visualizer to render one
                 comparison pane per model. Ignored by visualizers that render a single model output.
         """

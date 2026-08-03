@@ -10,6 +10,7 @@ visualizer:
     is_ego_centric: false
 
     # Opacity of background agents (orange) in the non-background panes; non-background agents and ego stay opaque.
+    # In those panes the ego is blue, background agents are orange, and every other agent keeps its regular type color.
     background_alpha: 0.6
 
     panes_to_plot:
@@ -49,7 +50,9 @@ visualizer:
       TYPE_PEDESTRIAN: "plum"
       TYPE_CYCLIST: "forestgreen"
       TYPE_VEHICLE: "slategray"
-      TYPE_SDC: "dodgerblue"
-      TYPE_RELEVANT: "coral"       # non-background agents in the non-background panes
+      TYPE_UNSET: "gray"
+      TYPE_OTHER: "gray"
+      TYPE_SDC: "dodgerblue"       # ego agent
+      TYPE_RELEVANT: "coral"       # relevant agents in the HIGHLIGHT_RELEVANT pane
       TYPE_RELEVAN: "coral"
-      TYPE_BACKGROUND: "orange"    # background agents in the non-background panes
+      TYPE_BACKGROUND: "coral"    # background agents in the non-background panes

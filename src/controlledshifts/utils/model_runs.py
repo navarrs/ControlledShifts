@@ -22,7 +22,7 @@ CACHE_SPLITS = (ModelStatus.VALIDATION, ModelStatus.TEST)
 class Run:
     """One row of the results CSV, resolved onto its on-disk training run."""
 
-    dataset: str  # paths.tag, hyphenated (e.g. "causal-agents")
+    dataset: str  # paths.tag, hyphenated (e.g. "background-agents")
     model: str  # model.config.model_name (e.g. "wayformer")
     timestamp: str  # trailing path segment (e.g. "2026-06-13_20-43-20")
     run_dir: Path
@@ -78,7 +78,7 @@ def filter_runs(runs: list[Run], models: list[str] | None, benchmarks: list[str]
         wanted_models = {model.strip() for model in models}
         runs = [run for run in runs if run.model in wanted_models]
     if benchmarks:
-        # Accept either spelling: the paths group (`causal_agents`) or the tag (`causal-agents`).
+        # Accept either spelling: the paths group (`background_agents`) or the tag (`background-agents`).
         wanted_benchmarks = {benchmark.strip().replace("-", "_") for benchmark in benchmarks}
         runs = [run for run in runs if run.paths_group in wanted_benchmarks]
     return runs

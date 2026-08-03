@@ -25,8 +25,8 @@ class VizType(Enum):
 
     REGULAR visualizes scenarios as-is. SCORED additionally computes scenario features and scores. TRAJPRED transforms
     the scenario into agent-centric format and overlays model trajectory predictions. MODEL_OUTPUT visualizes other
-    cached model outputs (e.g. causal predictions). NON_BACKGROUND_GT renders the ground-truth non-background agents
-    loaded from the causal-label JSON files, requiring no cached model outputs.
+    cached model outputs (e.g. non-background predictions). NON_BACKGROUND_GT renders the ground-truth non-background
+    agents loaded from the non-background label JSONs, requiring no cached model outputs.
     """
 
     REGULAR = "regular"
@@ -54,11 +54,11 @@ class TrajectoryType(Enum):
 
 
 class AgentBehaviorType(Enum):
-    NON_CAUSAL = 0
-    CAUSAL = 1
+    BACKGROUND = 0
+    NON_BACKGROUND = 1
 
 
-class CausalOutputType(Enum):
+class NonBackgroundSource(Enum):
     GROUND_TRUTH = 0
     PREDICTION = 1
 

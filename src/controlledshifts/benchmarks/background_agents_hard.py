@@ -5,7 +5,7 @@ agents) and re-organizes scenarios into train/validation/testing splits by diffi
 background agents in a scenario: the scenarios with the most background agents form the test set (following
 ``split_ratios``), mirroring how ego_safeshift/safeshift move the hardest scenarios to test.
 
-The benchmark produces a single split JSON (``splits/causal_agents_hard.json``). The unperturbed scenes are served from
+The benchmark produces a split JSON (``splits/background_agents_hard.json``). The unperturbed scenes are served from
 the ``base`` variant and the perturbed scenes from the ``remove_noncausal`` variant; both are selected by the same split
 so the original and perturbed versions of the same held-out scenarios can be compared. As a preparation step, the
 ``remove_noncausal`` perturbations are written flat to ``perturbed_data_path`` (a variant store), reusing existing files

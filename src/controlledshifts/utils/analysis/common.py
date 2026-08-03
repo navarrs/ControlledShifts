@@ -157,7 +157,7 @@ def plot_heatmap(  # noqa: PLR0913
 
 
 # --- Per-scenario distribution plots across train/val/test splits ----------------------------------------------------
-# Shared by the causal-agents and ego-safeshift score distribution analyses: each renders one quantity per figure, with
+# Shared by the background-agents and ego-safeshift distribution analyses: each renders one quantity per figure, with
 # the three splits compared side by side (violin/density) or stacked (ridgeline), one panel per benchmark. The
 # quantity-to-label mapping is passed in by the caller.
 

@@ -33,11 +33,11 @@ from controlledshifts.utils.analysis.common import (
 from controlledshifts.utils.plotting import set_analysis_theme
 
 
-# Keys are the on-disk CSV column names (legacy causal/noncausal spelling); the label strings are display-only.
+# Keys are the CSV column names and the per-quantity plot-file stems; the label strings are display-only.
 _QUANTITY_LABELS: dict[str, str] = {
-    "n_causal": "Non-Background Agents per Scenario",
-    "n_noncausal": "Background Agents per Scenario",
-    "frac_noncausal": "Fraction Background per Scenario",
+    "n_non_background": "Non-Background Agents per Scenario",
+    "n_background": "Background Agents per Scenario",
+    "frac_background": "Fraction Background per Scenario",
     "n_total": "Total Agents per Scenario",
 }
 
@@ -84,7 +84,8 @@ def _collect_counts(
         log: Logger for progress information.
 
     Returns:
-        DataFrame indexed by scenario_id with columns ``n_noncausal``, ``n_total``, ``n_causal``, ``frac_noncausal``.
+        DataFrame indexed by scenario_id with columns ``n_background``, ``n_total``, ``n_non_background``,
+        ``frac_background``.
     """
     filepaths = [variants_base_path / f"{scenario_id}.pkl" for scenario_id in scenario_ids]
     chunksize = max(1, len(filepaths) // (num_workers * 8))
@@ -103,9 +104,9 @@ def _collect_counts(
     if missing:
         log.warning("Skipped %d scenarios missing their pkl or causal labels", missing)
 
-    counts_df = pd.DataFrame(counts, columns=["scenario_id", "n_noncausal", "n_total"]).set_index("scenario_id")
-    counts_df["n_causal"] = counts_df["n_total"] - counts_df["n_noncausal"]
-    counts_df["frac_noncausal"] = counts_df["n_noncausal"] / counts_df["n_total"]
+    counts_df = pd.DataFrame(counts, columns=["scenario_id", "n_background", "n_total"]).set_index("scenario_id")
+    counts_df["n_non_background"] = counts_df["n_total"] - counts_df["n_background"]
+    counts_df["frac_background"] = counts_df["n_background"] / counts_df["n_total"]
     return counts_df
 
 

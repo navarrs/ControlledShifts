@@ -2,7 +2,7 @@ defaults:
  - default.yaml
 
 viz_type: model_output
-pane_type: causal_scenario  # override: causal predictions are model output but get their own folder
+pane_type: non_background_scenario  # override: non-background predictions are model output but get their own folder
 visualizer:
   _target_: controlledshifts.utils.scenario_visualizers.scenario_animated.ScenarioAnimatedVisualizer
   config:

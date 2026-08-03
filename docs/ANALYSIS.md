@@ -20,10 +20,10 @@ The available [`visualization`](../src/controlledshifts/configs/visualization/) 
 | `viz_static` / `viz_animated` | `regular` | The scenarios as-is (static or animated). |
 | `viz_scored` | `scored` | Scenario features → scores, with the scene score drawn. Requires `dataset.config.autolabel_agents=true`. |
 | `viz_non_background` / `viz_non_background_animated` | `model_output` | Ground-truth and predicted non-background agents. Needs cached model outputs. |
-| `viz_non_background_gt` | `non_background_gt` | Only the ground-truth non-background agents, from the causal-label JSONs (`dataset.config.causal_labels_path`). Needs no model outputs. |
+| `viz_non_background_gt` | `non_background_gt` | Only the ground-truth non-background agents, from the label JSONs (`dataset.config.causal_labels_path`). Needs no model outputs. |
 | `viz_trajpred` | `trajpred` | One comparison pane per model: the shared scene context (map, agent history, dimmed ground-truth future) plus that model's predictions. Needs cached model outputs; see `models` below. |
 
-Each config declares a `panes_to_plot` list (values from `SupportedPanes`: `ALL_AGENTS`, `HIGHLIGHT_RELEVANT`, `NON_BACKGROUND_AGENTS_GT`, `NON_BACKGROUND_AGENTS_PRED`, `TRAJECTORY_PREDICTION`) controlling which panes are rendered, one window per pane.
+Each config declares a `panes_to_plot` list (values from `SupportedPanes`: `ALL_AGENTS`, `HIGHLIGHT_RELEVANT`, `NON_BACKGROUND_AGENTS_GT`, `NON_BACKGROUND_AGENTS_PRED`, `TRAJECTORY_PREDICTION`) controlling which panes are rendered, one window per pane. In the non-background panes the ego agent is blue, background agents are orange and dimmed to `background_alpha`, and non-background agents keep their regular agent-type color.
 
 Key options:
 
@@ -37,7 +37,7 @@ Key options:
 | `model_experiment` | For generic `model_output` visualizations, the tag used as the output `pane_type` folder. |
 | `models` | For `trajpred`, a list of `{name, batch_cache_path}` entries, one pane each. Scenarios are sampled from the intersection of IDs available across all models so the panes stay aligned. When null, a single top-level `batch_cache_path` renders one pane. |
 
-Outputs are written under `output_dir/<render>/<split_type>/<split>/<pane_type>`, where `render` is `static`/`animated`, `split_type` is the benchmark name, `split` is `train`/`val`/`test`, and `pane_type` is one of `scenario`, `scenario_scored`, `causal_scenario`, `causal_scenario_gt`, `trajectory_prediction` (or the `model_experiment` tag).
+Outputs are written under `output_dir/<render>/<split_type>/<split>/<pane_type>`, where `render` is `static`/`animated`, `split_type` is the benchmark name, `split` is `train`/`val`/`test`, and `pane_type` is one of `scenario`, `scenario_scored`, `non_background_scenario`, `non_background_scenario_gt`, `trajectory_prediction` (or the `model_experiment` tag).
 
 <details>
 <summary><b>Producing a model-output cache</b> — needed for the <code>trajpred</code> and <code>model_output</code> visualizations.</summary>
@@ -47,8 +47,8 @@ The `trajpred` and `model_output` visualizations read cached model outputs, whic
 ```bash
 uv run -m controlledshifts.eval \
   model=wayformer \
-  paths=causal_agents \
-  paths.experiment_dir=causal-agents/wayformer/2026-06-12_16-20-11 \
+  paths=background_agents \
+  paths.experiment_dir=background-agents/wayformer/2026-06-12_16-20-11 \
   ckpt_name=epoch_110 \
   model.config.cache_batch=true \
   model.config.cache_every_batch_idx=1
@@ -67,7 +67,7 @@ uv run -m controlledshifts.run_model_cache_sweep
 uv run -m controlledshifts.run_model_cache_sweep skip_existing=true
 
 # Restrict to some models/benchmarks.
-uv run -m controlledshifts.run_model_cache_sweep 'models=[wayformer,mtr]' 'benchmarks=[causal_agents]'
+uv run -m controlledshifts.run_model_cache_sweep 'models=[wayformer,mtr]' 'benchmarks=[background_agents]'
 ```
 
 A failing run does not abort the sweep; failures are reported in a summary at the end. See
@@ -165,13 +165,13 @@ It reads raw data rather than the results CSV: per-scenario `base` pkls (`varian
 
 ```yaml
 benchmarks:
-  - background_agents: {name: BackgroundAgents, split_json: causal_agents}
-  - background_agents_hard: {name: BackgroundAgentsHard, split_json: causal_agents_hard}
+  - background_agents: {name: BackgroundAgents, split_json: background_agents}
+  - background_agents_hard: {name: BackgroundAgentsHard, split_json: background_agents_hard}
 ```
 
 Counts (non-background = `causal_ids` + ego; background = everything else, via the same `get_background_mask` the benchmarks use) are intrinsic to a scenario, so they are computed once over `num_workers` processes and cached to `<output_path>/per_scenario_counts.csv`.
 
-Writes, under `<output_path>/` (`outputs/background_distribution_analysis/`): the cached `per_scenario_counts.csv`, the bucketed `background_distribution.csv`, a per-benchmark/per-split `summary.csv`, and the [distribution plots](#shared-conventions) for each quantity in `quantities` (`n_causal`, `n_noncausal`, `frac_noncausal`, `n_total` — the column names keep the legacy spelling).
+Writes, under `<output_path>/` (`outputs/background_distribution_analysis/`): the cached `per_scenario_counts.csv`, the bucketed `background_distribution.csv`, a per-benchmark/per-split `summary.csv`, and the [distribution plots](#shared-conventions) for each quantity in `quantities` (`n_non_background`, `n_background`, `frac_background`, `n_total`).
 
 ### Ego-SafeShift Score Distribution
 

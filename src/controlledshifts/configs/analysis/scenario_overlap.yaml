@@ -17,7 +17,7 @@ benchmarks:
       split_json: uniform
   - background_agents_hard:
       name: BackgroundAgents
-      split_json: causal_agents_hard
+      split_json: background_agents_hard
   - ego_safeshift:
       name: EgoSafeShift
       split_json: ego_safeshift

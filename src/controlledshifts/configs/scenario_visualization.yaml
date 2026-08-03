@@ -26,7 +26,7 @@ batch_cache_path: null            # directory of cached model-output batches; RE
 model_experiment: null            # used as the pane_type folder for model_output viz (e.g. "wayformer")
 
 # Which source (dataset_name) to load from the cached split, e.g. waymo-remove-noncausal-testing. Cached outputs are
-# namespaced by source, and a split can hold several sources for the same scenario id (causal-agents' test split caches
+# namespaced by source, and a split can hold several sources for the same scenario id (background-agents' test split caches
 # both the base and remove_noncausal variants of one scene). Leave null when the split has a single source; set it to
 # pick a variant, otherwise only one arbitrary variant per scenario is loaded.
 cache_source: null
