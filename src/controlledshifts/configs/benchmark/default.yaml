@@ -3,7 +3,7 @@ benchmark_name: null
 # Default path to the input data (the canonical, flat base variant store).
 input_data_path: /data/driving/waymo/variants/base
 
-# Path to the output data (used by benchmarks that write a perturbed variant store, e.g. causal_agents).
+# Path to the output data (used by benchmarks that write a perturbed variant store, e.g. non_background_agents).
 output_data_path: /data/driving/waymo/variants/${benchmark_name}
 
 # (train, val, test) fractions of the full dataset for the random re-split. Should sum to 1.0.

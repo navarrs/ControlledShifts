@@ -35,7 +35,7 @@ from controlledshifts.utils.plotting import set_analysis_theme
 _QUANTITY_LABELS: dict[str, str] = {
     "gt_critical_continuous_individual": "Individual Scores",
     "gt_critical_continuous_interaction": "Interaction Scores",
-    "gt_critical_continuous_safeshift": "SafeShift Scores",
+    "gt_critical_continuous_safeshift": "EgoSafeShift Scores",
 }
 
 # Split strategies supported per benchmark entry: score-ranked (hardest to test) or uniformly random.

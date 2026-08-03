@@ -2,13 +2,14 @@
 defaults:
   - default.yaml
 
+# Retains the legacy "causal_agents_hard" spelling: it is the on-disk split-file stem (splits/causal_agents_hard.json).
 benchmark_name: causal_agents_hard
 
-# Path to the directory containing per-scenario JSON causal labels (used for non-causal counts and on-the-fly
+# Path to the directory containing per-scenario JSON causal labels (used for background counts and on-the-fly
 # generation of the perturbed copies).
 causal_labels_path: /data/driving/waymo/meta/causal_agents/processed_labels/
 
 # Path to the remove_noncausal perturbed variant store to reuse. Scenarios missing from this directory are generated on
 # the fly. If the directory does not exist, all perturbed copies are generated.
-# Scenarios with the most non-causal agents form the test set, following the inherited split_ratios.
+# Scenarios with the most background agents form the test set, following the inherited split_ratios.
 perturbed_data_path: /data/driving/waymo/variants/remove_noncausal/

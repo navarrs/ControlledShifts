@@ -1,7 +1,5 @@
-from .causal_agents import create_causal_agents_benchmark
-from .causal_agents_hard import create_causal_agents_hard_benchmark
 from .common import (
-    CAUSAL_STRATEGIES,
+    NON_BACKGROUND_AGENTS_STRATEGIES,
     Benchmark,
     BenchmarkSplit,
     check_overlap,
@@ -12,19 +10,21 @@ from .common import (
 )
 from .ego_safeshift import create_ego_safeshift_benchmark
 from .environments import create_environments_benchmark
+from .non_background_agents import create_non_background_agents_benchmark
+from .non_background_agents_hard import create_non_background_agents_hard_benchmark
 from .safeshift import create_safeshift_benchmark
 from .uniform import create_uniform_benchmark
 
 
 __all__ = [
-    "CAUSAL_STRATEGIES",
+    "NON_BACKGROUND_AGENTS_STRATEGIES",
     "Benchmark",
     "BenchmarkSplit",
     "check_overlap",
-    "create_causal_agents_benchmark",
-    "create_causal_agents_hard_benchmark",
     "create_ego_safeshift_benchmark",
     "create_environments_benchmark",
+    "create_non_background_agents_benchmark",
+    "create_non_background_agents_hard_benchmark",
     "create_safeshift_benchmark",
     "create_uniform_benchmark",
     "load_benchmark_split",

@@ -16,13 +16,20 @@ from controlledshifts.utils.pylogger import get_pylogger
 
 _LOGGER = get_pylogger(__name__)
 
-# Masking strategies generated up front by the causal_agents benchmark; each becomes a flat perturbed dataset.
-CAUSAL_STRATEGIES: tuple[str, ...] = ("remove_causal", "remove_noncausal", "remove_noncausalequal", "remove_static")
+# Masking strategies generated up front by the non_background_agents benchmark; each becomes a flat perturbed dataset.
+# The strategy strings are on-disk variant directory names, so they retain the legacy causal/noncausal spelling.
+NON_BACKGROUND_AGENTS_STRATEGIES: tuple[str, ...] = (
+    "remove_causal",
+    "remove_noncausal",
+    "remove_noncausalequal",
+    "remove_static",
+)
 
 
 class Benchmark(Enum):
-    CAUSAL_AGENTS = "causal_agents"
-    CAUSAL_AGENTS_HARD = "causal_agents_hard"
+    # Values are on-disk identifiers (split JSON stems, variant dirs) and stay in the legacy causal spelling.
+    NON_BACKGROUND_AGENTS = "causal_agents"
+    NON_BACKGROUND_AGENTS_HARD = "causal_agents_hard"
     EGO_SAFESHIFT = "ego_safeshift"
     SAFESHIFT = "safeshift"
     ENVIRONMENTS = "environments"
@@ -48,22 +55,23 @@ class BenchmarkSplit(NamedTuple):
 _DEFAULT_SPLITS: tuple[str, ...] = ("training", "validation", "testing")
 
 
-def get_noncausal_mask(scenario: dict[str, Any], causal_labels: dict[str, Any]) -> np.ndarray:
-    """Returns a boolean mask over a scenario's agents that is True for non-causal agents.
+def get_background_mask(scenario: dict[str, Any], causal_labels: dict[str, Any]) -> np.ndarray:
+    """Returns a boolean mask over a scenario's agents that is True for background agents.
 
-    Non-causal agents are those whose object_id is neither in the causal labels nor the ego agent.
+    Background agents are those whose object_id is neither among the non-background agents (the labelled ids) nor the
+    ego agent.
 
     Args:
         scenario: Decoded raw scenario.
-        causal_labels: Causal labels with a "causal_ids" key.
+        causal_labels: Labels with a "causal_ids" key listing the non-background agent ids.
 
     Returns:
-        Boolean array of shape (num_agents,), True where the agent is non-causal.
+        Boolean array of shape (num_agents,), True where the agent is background.
     """
     object_ids = np.array(scenario["track_infos"]["object_id"])
     ego_id = object_ids[scenario["sdc_track_index"]]
-    causal_ids = np.array(causal_labels["causal_ids"] + [ego_id], dtype=np.int64)
-    return ~np.isin(object_ids, causal_ids)
+    non_background_ids = np.array(causal_labels["causal_ids"] + [ego_id], dtype=np.int64)
+    return ~np.isin(object_ids, non_background_ids)
 
 
 def _build_split_mapping(training: list[str], validation: list[str], testing: list[str]) -> dict[str, str]:

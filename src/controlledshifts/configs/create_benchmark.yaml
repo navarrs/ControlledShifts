@@ -1,6 +1,6 @@
 # @package _global_
 defaults:
-  - benchmark: causal_agents  # override via benchmark=ego_safeshift or benchmark=safeshift
+  - benchmark: non_background_agents  # override via benchmark=ego_safeshift or benchmark=safeshift
   - scenario: waymo
   - visualization: viz_static
   - dataset: waymo_analysis

@@ -23,7 +23,7 @@ import pandas as pd
 from omegaconf import DictConfig
 from tqdm import tqdm
 
-from controlledshifts.benchmarks.common import get_noncausal_mask, load_benchmark_split
+from controlledshifts.benchmarks.common import get_background_mask, load_benchmark_split
 from controlledshifts.utils.analysis.common import (
     SPLIT_COLOR_MAP,
     SPLIT_ORDER,
@@ -66,7 +66,7 @@ def _count_agents(input_filepath: Path, causal_labels_path: Path) -> tuple[str, 
     with causal_labels_filepath.open("r") as f:
         causal_labels = json.load(f)
 
-    noncausal_mask = get_noncausal_mask(scenario, causal_labels)
+    noncausal_mask = get_background_mask(scenario, causal_labels)
     return scenario_id, int(noncausal_mask.sum()), int(noncausal_mask.size)
 
 

@@ -1,9 +1,9 @@
-r"""Benchmark creation for the Causal Agents benchmark.
+r"""Benchmark creation for the Non-Background Agents benchmark.
 
 Reuses the split of a reference benchmark (``reference_benchmark``, by default ``uniform``) rather than computing its
 own, so the perturbed scenes land in the same train/validation/testing bucket as their unperturbed counterparts. As a
-preparation step, it generates a perturbed variant store for every masking strategy (causal, non-causal,
-non-causal-equal, static), written flat under ``output_data_path/<strategy>/`` (i.e. ``variants/<strategy>/``) with no
+preparation step, it generates a perturbed variant store for every masking strategy (non-background, background,
+background-equal, static), written flat under ``output_data_path/<strategy>/`` (i.e. ``variants/<strategy>/``) with no
 split subdirectories. The shared reference split is returned (and saved as JSON by the entry point). Nothing is copied:
 training/eval select scenario IDs from the reference split JSON and read agent-centric records from the per-variant
 cache (the unperturbed scenes from the ``base`` variant, each perturbed strategy from its own variant).
@@ -14,12 +14,12 @@ The reference split must exist before running this benchmark. Create it first wi
 
 Example usage:
 
-    uv run -m controlledshifts.create_benchmark benchmark=causal_agents \\
+    uv run -m controlledshifts.create_benchmark benchmark=non_background_agents \\
         input_data_path=/data/driving/waymo/variants/base \\
         output_data_path=/data/driving/waymo/variants \\
         causal_labels_path=/data/driving/waymo/meta/causal_agents/processed_labels
 
-See configs/benchmark/causal_agents.yaml for all available options.
+See configs/benchmark/non_background_agents.yaml for all available options.
 """
 
 import json
@@ -35,10 +35,10 @@ from omegaconf import DictConfig
 from tqdm import tqdm
 
 from controlledshifts.benchmarks.common import (
-    CAUSAL_STRATEGIES,
+    NON_BACKGROUND_AGENTS_STRATEGIES,
     BenchmarkSplit,
     collect_scenario_filepaths,
-    get_noncausal_mask,
+    get_background_mask,
     load_benchmark_split,
 )
 from controlledshifts.utils.constants import MIN_VALID_POINTS
@@ -48,111 +48,111 @@ from controlledshifts.utils.pylogger import get_pylogger
 _LOGGER = get_pylogger(__name__)
 
 
-def _remove_causal(scenario: dict[str, Any], causal_labels: dict[str, Any], output_filepath: Path) -> None:
-    """Removes causal objects from a scenario by setting the last column of the trajectories to 0 for causal objects.
+def _remove_non_background(scenario: dict[str, Any], causal_labels: dict[str, Any], output_filepath: Path) -> None:
+    """Removes non-background objects from a scenario by setting the last trajectory column to 0 for those objects.
 
     Args:
         scenario: Decoded raw scenario.
-        causal_labels: Causal labels with a "causal_ids" key.
+        causal_labels: Labels with a "causal_ids" key listing the non-background agent ids.
         output_filepath: Path to the output file.
     """
-    causal_ids = np.array(causal_labels["causal_ids"], dtype=np.int64)
+    non_background_ids = np.array(causal_labels["causal_ids"], dtype=np.int64)
     object_ids = np.array(scenario["track_infos"]["object_id"])
 
-    causal_mask = np.isin(object_ids, causal_ids)
+    non_background_mask = np.isin(object_ids, non_background_ids)
 
     track_infos = scenario["track_infos"]
     track_infos["causal_ids"] = causal_labels["causal_ids"]
 
     trajectories = track_infos["trajs"].copy()
-    trajectories[..., -1][causal_mask] = 0
+    trajectories[..., -1][non_background_mask] = 0
     track_infos["trajs"] = trajectories
     scenario["track_infos"] = track_infos
 
     agent_idxs = np.arange(len(object_ids))
-    causal_idxs = agent_idxs[causal_mask]
+    non_background_idxs = agent_idxs[non_background_mask]
 
     tracks_to_predict = scenario["tracks_to_predict"]
     track_index = np.array(tracks_to_predict["track_index"])
     track_difficulty = np.array(tracks_to_predict["difficulty"])
     object_type = np.array(tracks_to_predict["object_type"])
 
-    causal_track_index_mask = ~np.isin(track_index, causal_idxs)
+    non_background_track_index_mask = ~np.isin(track_index, non_background_idxs)
     scenario["tracks_to_predict"] = {
-        "track_index": track_index[causal_track_index_mask].tolist(),
-        "difficulty": track_difficulty[causal_track_index_mask].tolist(),
-        "object_type": object_type[causal_track_index_mask].tolist(),
+        "track_index": track_index[non_background_track_index_mask].tolist(),
+        "difficulty": track_difficulty[non_background_track_index_mask].tolist(),
+        "object_type": object_type[non_background_track_index_mask].tolist(),
     }
 
     with output_filepath.open("wb") as f:
         pickle.dump(scenario, f)
 
 
-def remove_noncausal(scenario: dict[str, Any], causal_labels: dict[str, Any], output_filepath: Path) -> None:
-    """Removes non-causal objects from a scenario by setting the last column of the trajectories to 0 for non-causal
+def remove_background(scenario: dict[str, Any], causal_labels: dict[str, Any], output_filepath: Path) -> None:
+    """Removes background objects from a scenario by setting the last column of the trajectories to 0 for background
     objects.
 
     Args:
         scenario: Decoded raw scenario.
-        causal_labels: Causal labels with a "causal_ids" key.
+        causal_labels: Labels with a "causal_ids" key listing the non-background agent ids.
         output_filepath: Path to the output file.
     """
     object_ids = np.array(scenario["track_infos"]["object_id"])
-    noncausal_mask = get_noncausal_mask(scenario, causal_labels)
+    background_mask = get_background_mask(scenario, causal_labels)
 
     track_infos = scenario["track_infos"]
     track_infos["causal_ids"] = causal_labels["causal_ids"]
 
     trajectories = track_infos["trajs"].copy()
-    trajectories[..., -1][noncausal_mask] = 0
+    trajectories[..., -1][background_mask] = 0
     track_infos["trajs"] = trajectories
     scenario["track_infos"] = track_infos
 
     agent_idxs = np.arange(len(object_ids))
-    noncausal_idxs = agent_idxs[noncausal_mask]
+    background_idxs = agent_idxs[background_mask]
 
     tracks_to_predict = scenario["tracks_to_predict"]
     track_index = np.array(tracks_to_predict["track_index"])
     track_difficulty = np.array(tracks_to_predict["difficulty"])
     object_type = np.array(tracks_to_predict["object_type"])
 
-    noncausal_track_index_mask = ~np.isin(track_index, noncausal_idxs)
+    background_track_index_mask = ~np.isin(track_index, background_idxs)
     scenario["tracks_to_predict"] = {
-        "track_index": track_index[noncausal_track_index_mask].tolist(),
-        "difficulty": track_difficulty[noncausal_track_index_mask].tolist(),
-        "object_type": object_type[noncausal_track_index_mask].tolist(),
+        "track_index": track_index[background_track_index_mask].tolist(),
+        "difficulty": track_difficulty[background_track_index_mask].tolist(),
+        "object_type": object_type[background_track_index_mask].tolist(),
     }
 
     with output_filepath.open("wb") as f:
         pickle.dump(scenario, f)
 
 
-def _remove_noncausalequal(
+def _remove_background_equal(
     scenario: dict[str, Any], causal_labels: dict[str, Any], output_filepath: Path, random_generator: Generator
 ) -> None:
-    """Removes a random subset of non-causal objects equal in count to the causal objects.
+    """Removes a random subset of background objects equal in count to the non-background objects.
 
     Args:
         scenario: Decoded raw scenario.
-        causal_labels: Causal labels with a "causal_ids" key.
+        causal_labels: Labels with a "causal_ids" key listing the non-background agent ids.
         output_filepath: Path to the output file.
         random_generator: Random number generator.
     """
     object_ids = np.array(scenario["track_infos"]["object_id"])
-    noncausal_mask = get_noncausal_mask(scenario, causal_labels)
+    background_mask = get_background_mask(scenario, causal_labels)
 
     num_to_remove = len(causal_labels["causal_ids"])
     agent_idxs = np.arange(len(object_ids))
-    noncausal_idxs = agent_idxs[noncausal_mask]
-    noncausal_idxs_to_remove = random_generator.choice(
-        noncausal_idxs, size=min(num_to_remove, len(noncausal_idxs)), replace=False
+    background_idxs = agent_idxs[background_mask]
+    background_idxs_to_remove = random_generator.choice(
+        background_idxs, size=min(num_to_remove, len(background_idxs)), replace=False
     )
 
     track_infos = scenario["track_infos"]
     track_infos["causal_ids"] = causal_labels["causal_ids"]
 
     trajectories = track_infos["trajs"].copy()
-    trajectories[..., -1][noncausal_idxs_to_remove] = 0
+    trajectories[..., -1][background_idxs_to_remove] = 0
     track_infos["trajs"] = trajectories
     scenario["track_infos"] = track_infos
 
@@ -161,11 +161,11 @@ def _remove_noncausalequal(
     track_difficulty = np.array(tracks_to_predict["difficulty"])
     object_type = np.array(tracks_to_predict["object_type"])
 
-    noncausal_track_index_mask = ~np.isin(track_index, noncausal_idxs_to_remove)
+    background_track_index_mask = ~np.isin(track_index, background_idxs_to_remove)
     scenario["tracks_to_predict"] = {
-        "track_index": track_index[noncausal_track_index_mask].tolist(),
-        "difficulty": track_difficulty[noncausal_track_index_mask].tolist(),
-        "object_type": object_type[noncausal_track_index_mask].tolist(),
+        "track_index": track_index[background_track_index_mask].tolist(),
+        "difficulty": track_difficulty[background_track_index_mask].tolist(),
+        "object_type": object_type[background_track_index_mask].tolist(),
     }
 
     with output_filepath.open("wb") as f:
@@ -264,11 +264,11 @@ def _perturb_scenario(  # noqa: PLR0913
 
     match strategy:
         case "remove_causal":
-            _remove_causal(scenario, causal_labels, output_filepath)
+            _remove_non_background(scenario, causal_labels, output_filepath)
         case "remove_noncausal":
-            remove_noncausal(scenario, causal_labels, output_filepath)
+            remove_background(scenario, causal_labels, output_filepath)
         case "remove_noncausalequal":
-            _remove_noncausalequal(scenario, causal_labels, output_filepath, random_generator)
+            _remove_background_equal(scenario, causal_labels, output_filepath, random_generator)
         case _:
             error_message = f"Strategy '{strategy}' is not supported. "
             error_message += "Choose from: remove_causal, remove_noncausal, remove_noncausalequal, remove_static."
@@ -294,7 +294,7 @@ def _prepare_perturbations(  # noqa: PLR0913
         num_workers: Number of parallel worker processes.
         overwrite: If False, scenarios already present in a strategy's directory are skipped. Defaults to False.
     """
-    for strategy in CAUSAL_STRATEGIES:
+    for strategy in NON_BACKGROUND_AGENTS_STRATEGIES:
         perturbed_path = output_data_path / strategy
         perturbed_path.mkdir(parents=True, exist_ok=True)
         _LOGGER.info("Generating '%s' perturbations for %d scenarios at %s", strategy, len(filepaths), perturbed_path)
@@ -320,7 +320,7 @@ def _prepare_perturbations(  # noqa: PLR0913
             )
 
 
-def create_causal_agents_benchmark(config: DictConfig) -> BenchmarkSplit:
+def create_non_background_agents_benchmark(config: DictConfig) -> BenchmarkSplit:
     """Reuses the reference benchmark's split and (optionally) prepares the perturbed datasets.
 
     Loads the split saved by ``config.reference_benchmark`` (by default ``uniform``) from
