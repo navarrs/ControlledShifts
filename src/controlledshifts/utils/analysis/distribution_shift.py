@@ -26,12 +26,8 @@ from controlledshifts.utils.analysis.common import (
     save_figure,
     set_yaxis_limits,
 )
-from controlledshifts.utils.constants import EPSILON
+from controlledshifts.utils.analysis.latex import format_gap, format_value
 from controlledshifts.utils.plotting import set_analysis_theme
-
-
-# Higher makes small OOD gaps more vibrant in the LaTeX table.
-GAP_MIN_COLOR_VALUE = 20.0
 
 
 def _plot_distribution_shift_comparison(
@@ -468,7 +464,7 @@ def _build_mean_row(
     return f"\\rowcolor[gray]{{{gray_level}}}\n" + " & ".join(row_parts) + " \\\\"
 
 
-def _build_benchmark_rows(  # noqa: PLR0912, PLR0915
+def _build_benchmark_rows(
     benchmark_df: pd.DataFrame,
     benchmark_name: str,
     id_split: str,
@@ -526,31 +522,13 @@ def _build_benchmark_rows(  # noqa: PLR0912, PLR0915
             id_val = row[f"{id_split}/{metric}"]
             ood_val = row[f"{ood_split}/{metric}"]
 
-            # In-distribution value
-            if pd.notna(id_val):
-                id_str = f"{id_val:.3f}"
-                if np.isclose(id_val, best_id[metric]):
-                    id_str = f"\\textbf{{{id_str}}}"
-            else:
-                id_str = "---"
-            id_values.append(id_str)
+            id_values.append(format_value(id_val, best_id[metric]))
 
-            # Out-of-distribution value with gap annotation and coloring
+            # The OOD cell needs both values: without the ID value there is no gap to annotate it with.
             if pd.notna(id_val) and pd.notna(ood_val):
                 gap = relative_gap_pct(ood_val, id_val)
-
-                best_gap, worst_gap = gap_stats[metric]
-                denom = max(abs(worst_gap - best_gap), EPSILON)
-                severity = np.clip(abs(gap - best_gap) / denom, 0, 1)
-                intensity = int(GAP_MIN_COLOR_VALUE + severity * (100 - GAP_MIN_COLOR_VALUE))
-
-                color = "OrangeRed" if gap > 0 else "ForestGreen"
-                gap_str = f"\\textcolor{{{color}!{intensity}}}{{{gap:+.2f}\\%}}"
-
-                ood_str = f"{ood_val:.3f}"
-                if np.isclose(ood_val, best_ood[metric]):
-                    ood_str = f"\\textbf{{{ood_str}}}"
-                ood_str = f"{ood_str} ({gap_str})"
+                gap_str = format_gap(gap, *gap_stats[metric])
+                ood_str = f"{format_value(ood_val, best_ood[metric])} ({gap_str})"
             else:
                 ood_str = "---"
 

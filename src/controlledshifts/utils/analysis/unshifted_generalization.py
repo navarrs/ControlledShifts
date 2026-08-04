@@ -25,8 +25,8 @@ from controlledshifts.utils.analysis.common import (
     save_figure,
     set_yaxis_limits,
 )
-from controlledshifts.utils.analysis.distribution_shift import GAP_MIN_COLOR_VALUE, build_benchmark_df
-from controlledshifts.utils.constants import EPSILON
+from controlledshifts.utils.analysis.distribution_shift import build_benchmark_df
+from controlledshifts.utils.analysis.latex import format_gap, format_value
 from controlledshifts.utils.plotting import set_analysis_theme
 
 
@@ -42,25 +42,6 @@ def _parse_blocks(config: DictConfig) -> tuple[Block, list[Block]]:
     reference = Block(config.reference.name, config.reference.split)
     benchmarks = [Block(spec.name, spec.split) for _, spec in iter_benchmarks(config)]
     return reference, benchmarks
-
-
-def _format_value(value: float, best_value: float) -> str:
-    """Render a metric value, bolding it when it ties the block's best (minimum, lower-is-better)."""
-    if pd.isna(value):
-        return "---"
-    value_str = f"{value:.3f}"
-    if pd.notna(best_value) and np.isclose(value, best_value):
-        value_str = f"\\textbf{{{value_str}}}"
-    return value_str
-
-
-def _format_gap(gap: float, best_gap: float, worst_gap: float) -> str:
-    """Render a colored gap annotation; severity is scaled to the block's own ``[best, worst]`` gap range."""
-    denom = max(abs(worst_gap - best_gap), EPSILON)
-    severity = float(np.clip(abs(gap - best_gap) / denom, 0, 1))
-    intensity = int(GAP_MIN_COLOR_VALUE + severity * (100 - GAP_MIN_COLOR_VALUE))
-    color = "OrangeRed" if gap > 0 else "ForestGreen"
-    return f"\\textcolor{{{color}!{intensity}}}{{{gap:+.2f}\\%}}"
 
 
 def _build_mean_row(
@@ -109,12 +90,12 @@ def _build_block_rows(
 
         for metric in metrics:
             value = row[f"{eval_split}/{metric}"]
-            cell = _format_value(value, best_value[metric])
+            cell = format_value(value, best_value[metric])
             if not is_reference and pd.notna(value):
                 ref_value = row[f"{ref_split}/{metric}"]
                 if pd.notna(ref_value):
                     gap = relative_gap_pct(value, ref_value)
-                    cell = f"{cell} ({_format_gap(gap, *gap_stats[metric])})"
+                    cell = f"{cell} ({format_gap(gap, *gap_stats[metric])})"
             parts.append(cell)
         rows.append(" & ".join(parts) + " \\\\")
 

@@ -64,6 +64,7 @@ from controlledshifts.utils.analysis.common import (
     save_figure,
 )
 from controlledshifts.utils.analysis.distribution_shift import build_benchmark_df
+from controlledshifts.utils.analysis.latex import format_value
 from controlledshifts.utils.constants import EPSILON
 from controlledshifts.utils.plotting import set_analysis_theme
 
@@ -607,15 +608,7 @@ def _write_scores_tex(scores_df: pd.DataFrame, output_path: Path, filename: str,
     body_rows: list[str] = []
     for model, row in scores_df.iterrows():
         cells = [str(model)]
-        for column in columns:
-            value = row[column]
-            if pd.isna(value):
-                cells.append("---")
-                continue
-            cell = f"{value:.3f}"
-            if np.isclose(value, best[column]):
-                cell = f"\\textbf{{{cell}}}"
-            cells.append(cell)
+        cells.extend(format_value(row[column], best[column]) for column in columns)
         body_rows.append(" & ".join(cells) + " \\\\")
 
     col_spec = "l " + "c" * len(columns)
