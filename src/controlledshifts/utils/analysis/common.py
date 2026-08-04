@@ -55,6 +55,15 @@ METRIC_NAME_MAP = {
     "collisionRate0.25": "CollisionRate",
 }
 
+# Short metric labels for space-constrained axes (e.g. radar rims), spelled out in a caption next to the figure.
+METRIC_ABBREV_MAP = {
+    "brierFDE": "BF",
+    "minFDE6": "MF",
+    "minADE6": "MA",
+    "missRate": "MR",
+    "collisionRate0.25": "CR",
+}
+
 MODEL_SIZE_MAP = {
     "Naive": "624k",
     "AutoBot": "1.5M",

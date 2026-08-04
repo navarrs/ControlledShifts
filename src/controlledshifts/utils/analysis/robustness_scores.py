@@ -1,13 +1,12 @@
 """Distribution-shift robustness scoring (per-model, per-metric) and radar visualization.
 
-Reduces the raw SEEN/UNSEEN benchmark numbers into comparable *scores* per model per metric, measured
-against a reference:
+Reduces raw SEEN/UNSEEN benchmark numbers into comparable *scores* per model per metric, measured against a reference:
 
 * ``naive_relative`` -- each model vs the Naive baseline within the same benchmark.
 * ``uniform_relative`` -- each model vs its own performance in the Uniform benchmark.
 
-Following the MASE / OWA framing of the N-BEATS paper (arXiv:1905.10437), every metric is positive and
-lower-is-better, and each model is characterized by two reference-relative *score* axes (the reciprocal MASE skill):
+Following the MASE / OWA framing of the N-BEATS paper (arXiv:1905.10437), every metric is positive and lower-is-better,
+and each model is characterized by two reference-relative *score* axes (the reciprocal MASE skill):
 
 * ``id_score = ref_seen / model_seen`` -- ID score (reciprocal MASE on the seen split).
 * ``ood_score = ref_unseen / model_unseen`` -- OOD score (reciprocal MASE on the unseen split).
@@ -45,10 +44,22 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib.artist import Artist
+from matplotlib.legend import Legend
+from matplotlib.legend_handler import HandlerBase
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
+from matplotlib.text import Text
+from matplotlib.transforms import Transform
 from numpy.typing import NDArray
 from omegaconf import DictConfig
 
-from controlledshifts.utils.analysis.common import METRIC_NAME_MAP, MODEL_NAME_MAP, model_colors
+from controlledshifts.utils.analysis.common import (
+    METRIC_ABBREV_MAP,
+    METRIC_NAME_MAP,
+    MODEL_NAME_MAP,
+    model_colors,
+)
 from controlledshifts.utils.analysis.distribution_shift import build_benchmark_df
 from controlledshifts.utils.constants import EPSILON
 from controlledshifts.utils.plotting import set_analysis_theme
@@ -97,8 +108,8 @@ def _set_titles(fig: plt.Figure, title: str, subtitle: str) -> None:
         title: Main title text.
         subtitle: Subtitle text.
     """
-    fig.suptitle(title, fontsize=16, fontweight="bold")
-    fig.text(0.5, 0.93, subtitle, ha="center", va="top", fontsize=11, color="dimgray")
+    fig.suptitle(title, fontsize=18, fontweight="bold")
+    fig.text(0.5, 0.93, subtitle, ha="center", va="top", fontsize=13, color="dimgray")
 
 
 def _score(model: float, ref: float) -> float:
@@ -292,6 +303,88 @@ def _metric_label(metric: str) -> str:
     return METRIC_NAME_MAP.get(metric, metric)
 
 
+def _metric_abbrev(metric: str) -> str:
+    """Short radar rim label for a metric (falls back to the clean name when unabbreviated)."""
+    return METRIC_ABBREV_MAP.get(metric, _metric_label(metric))
+
+
+def _bold(text: str) -> str:
+    r"""Mathtext-bold form of ``text``.
+
+    The figure font (DM Sans) ships a single regular face, so ``fontweight="bold"`` silently falls back to it;
+    ``$\bf{...}$`` renders the token in a real bold face instead.
+    """
+    return rf"$\bf{{{text}}}$"
+
+
+def _abbrev_caption(metrics: list[str]) -> str:
+    """One-line abbreviation key, e.g. ``BF = BrierFDE  ·  MF = MinFDE`` (only the abbreviations bold)."""
+    return "   ·   ".join(
+        f"{_bold(_metric_abbrev(metric))} = {_metric_label(metric)}"
+        for metric in metrics
+        if metric in METRIC_ABBREV_MAP
+    )
+
+
+class _AbbrevKeyHandler(HandlerBase):
+    """Render a legend handle as its own (bold) label text instead of a line sample.
+
+    Used for the abbreviation-key row: drawing ``BF`` in the handle slot lines the key up with the model handles above
+    it, and leaves the ``= BrierFDE`` half aligned with the model names.
+    """
+
+    def create_artists(  # noqa: PLR0913
+        self,
+        legend: Legend,  # noqa: ARG002 -- signature fixed by HandlerBase
+        orig_handle: Artist,
+        xdescent: float,
+        ydescent: float,
+        width: float,  # noqa: ARG002 -- signature fixed by HandlerBase
+        height: float,  # noqa: ARG002 -- signature fixed by HandlerBase
+        fontsize: float,
+        trans: Transform,
+    ) -> list[Text]:
+        text = Text(-xdescent, -ydescent, _bold(orig_handle.get_label()), fontsize=fontsize, ha="left", va="baseline")
+        text.set_transform(trans)
+        return [text]
+
+
+def _abbrev_key_entries(metrics: list[str]) -> tuple[list[Patch], list[str]]:
+    """Legend ``(handles, labels)`` for the abbreviation key: bold abbreviation in the handle slot, ``= Name`` after.
+
+    The handles are bare :class:`~matplotlib.patches.Patch` carriers for the abbreviation text -- a type the model
+    entries do not use, so :class:`_AbbrevKeyHandler` can be mapped to it without touching them.
+    """
+    keyed = [metric for metric in metrics if metric in METRIC_ABBREV_MAP]
+    return [Patch(label=_metric_abbrev(metric)) for metric in keyed], [f"= {_metric_label(metric)}" for metric in keyed]
+
+
+def _interleave_legend_key(
+    handles: list, labels: list[str], key_handles: list, key_labels: list[str]
+) -> tuple[list, list[str], int]:
+    """Merge model entries and the abbreviation key into one legend, returning ``(handles, labels, ncol)``.
+
+    Matplotlib fills legend columns top to bottom, so pairing each model with a key entry renders the models as the
+    first row and the key as the second. Both lists are padded with blank entries so the rows stay aligned when the
+    model and metric counts differ.
+    """
+    ncol = max(len(labels), len(key_labels))
+    blank = Line2D([], [], linestyle="none", marker="none")
+    padded_handles = [*handles, *[blank] * (ncol - len(handles))]
+    padded_labels = [*labels, *[""] * (ncol - len(labels))]
+    padded_key_handles = [*key_handles, *[blank] * (ncol - len(key_handles))]
+    padded_key_labels = [*key_labels, *[""] * (ncol - len(key_labels))]
+
+    merged_handles: list = []
+    merged_labels: list[str] = []
+    for handle, label, key_handle, key_label in zip(
+        padded_handles, padded_labels, padded_key_handles, padded_key_labels, strict=True
+    ):
+        merged_handles.extend((handle, key_handle))
+        merged_labels.extend((label, key_label))
+    return merged_handles, merged_labels, ncol
+
+
 # Preferred "nice" mantissas (1-2-5-10) for evenly spaced radial gridlines.
 _NICE_MANTISSAS = (1.0, 2.0, 5.0, 10.0)
 
@@ -334,9 +427,10 @@ def _draw_score_radar(  # noqa: PLR0913
     radial: tuple[float, float, float, NDArray] | None,
     *,
     show_mean: bool,
-    ref_fontsize: float = 8,
-    tick_fontsize: float = 9,
-    metric_fontsize: float = 12,
+    show_reference_text: bool = False,
+    ref_fontsize: float = 9,
+    tick_fontsize: float = 11,
+    metric_fontsize: float = 17,
     rlabel_at_bottom: bool = False,
 ) -> tuple[list, list[str]]:
     """Draw per-model score polygons onto a polar ``ax`` and return its legend ``(handles, labels)``.
@@ -352,9 +446,11 @@ def _draw_score_radar(  # noqa: PLR0913
         radial: Precomputed ``(r_lower, r_upper, step, ticks)`` to share one scale across radars; when ``None`` the
             bounds are derived from this frame's own data.
         show_mean: Append the per-model ``Combined`` mean to each legend label (``"Model  (mean=X.XX)"``).
+        show_reference_text: Annotate the reference ring with ``reference (1.0)``. Off by default: the text sits inside
+            the plot area and can overlap the polygons; the dashed ring itself is always drawn.
         ref_fontsize: Font size of the ``reference (1.0)`` ring annotation.
         tick_fontsize: Font size of the radial (score) tick numbers.
-        metric_fontsize: Font size of the metric axis labels around the rim.
+        metric_fontsize: Font size of the abbreviated metric axis labels around the rim.
         rlabel_at_bottom: Place the radial tick numbers at the bottom instead of the upper-right, so they clear the
             ``reference (1.0)`` annotation (which sits near the top).
     """
@@ -373,7 +469,7 @@ def _draw_score_radar(  # noqa: PLR0913
         combined = row[COMBINED_COLUMN]
         label = f"{model}  (mean={combined:.2f})" if show_mean and not pd.isna(combined) else str(model)
         ax.plot(closed_angles, closed_values, color=color, linewidth=2.5, marker="o", markersize=5, label=label)
-        ax.fill(closed_angles, closed_values, color=color, alpha=0.08)
+        ax.fill(closed_angles, closed_values, color=color, alpha=0.05)
 
     r_lower, r_upper, step, ticks = radial if radial is not None else _radial_ticks(all_values)
     ax.set_ylim(r_lower, r_upper)
@@ -381,16 +477,17 @@ def _draw_score_radar(  # noqa: PLR0913
 
     # score = 1.0 reference ring (model as good as the reference).
     ax.plot(closed_angles, [1.0] * len(closed_angles), color="dimgray", linestyle="--", linewidth=1.2, zorder=1)
-    ax.annotate(
-        "reference (1.0)",
-        xy=(angles[0], 1.0),
-        fontsize=ref_fontsize,
-        color="dimgray",
-        ha="center",
-        va="bottom",
-        xytext=(0, 2),
-        textcoords="offset points",
-    )
+    if show_reference_text:
+        ax.annotate(
+            "reference (1.0)",
+            xy=(angles[0], 1.0),
+            fontsize=ref_fontsize,
+            color="dimgray",
+            ha="center",
+            va="bottom",
+            xytext=(0, 2),
+            textcoords="offset points",
+        )
 
     # Place metric names manually just outside the rim, aligned by their on-screen position so they
     # never overlap the polygons (default polar tick labels sit on top of the data).
@@ -409,7 +506,7 @@ def _draw_score_radar(  # noqa: PLR0913
         ax.text(
             angle,
             label_radius,
-            _metric_label(metric),
+            _metric_abbrev(metric),
             fontsize=metric_fontsize,
             fontweight="bold",
             ha=horizontal,
@@ -439,7 +536,8 @@ def _plot_score_radar(  # noqa: PLR0913
     """Render a standalone radar/spider plot of per-model scores across the metric axes (higher is better).
 
     Thin wrapper around :func:`_draw_score_radar`: one closed polygon (light fill) per model, the per-model
-    ``Combined`` score annotated in the legend, and a dashed ``score = 1.0`` reference ring.
+    ``Combined`` score annotated in the legend, and a dashed ``score = 1.0`` reference ring. Rim labels are the metric
+    abbreviations, spelled out in a caption above the model legend.
 
     Args:
         scores_df: Frame indexed by ``Model`` with metric columns plus a ``Combined`` column.
@@ -463,18 +561,26 @@ def _plot_score_radar(  # noqa: PLR0913
     # Compress the polar axes so the title band clears the top rim label and the legend has room at the bottom.
     fig.subplots_adjust(top=0.84, bottom=0.12)
     _set_titles(fig, title, subtitle)
-    fig.legend(
+    legend = fig.legend(
         handles,
         labels,
         loc="lower center",
         ncol=min(len(labels), 3),
-        fontsize=10,
+        fontsize=12,
         title="Model (mean score)",
-        title_fontsize=11,
+        title_fontsize=13,
         frameon=True,
         framealpha=0.9,
         bbox_to_anchor=(0.5, -0.02),
     )
+
+    # Radar rim abbreviations spelled out under the model legend. The legend hangs below the axes and its height grows
+    # with the model count, so measure it (after a draw) instead of guessing a fixed offset.
+    caption = _abbrev_caption(metrics)
+    if caption:
+        fig.canvas.draw()
+        legend_bottom = legend.get_window_extent().transformed(fig.transFigure.inverted()).y0
+        fig.text(0.5, legend_bottom - 0.015, caption, ha="center", va="top", fontsize=12, color="dimgray")
 
     output_path.mkdir(parents=True, exist_ok=True)
     output_file = output_path / f"{filename}.png"
@@ -596,16 +702,16 @@ def _plot_robustness_decomposition(  # noqa: PLR0913
         ax.set_xlim(lower, upper)
         ax.set_ylim(lower, upper)
         panel_label = COMBINED_COLUMN if panel == COMBINED_COLUMN else _metric_label(panel)
-        ax.set_title(panel_label, fontsize=12, fontweight="bold")
+        ax.set_title(panel_label, fontsize=13, fontweight="bold")
         ax.set_aspect("equal", adjustable="box")
-        ax.tick_params(axis="both", labelsize=7, colors="dimgray")
+        ax.tick_params(axis="both", labelsize=9, colors="dimgray")
         ax.grid(visible=True, color="gray", alpha=0.18, linewidth=0.6)
         sns.despine(ax=ax, trim=False)
         # With shared axes, only label the outer edges to avoid repetition.
         if index % n_cols == 0:
-            ax.set_ylabel("OOD score", fontsize=10, fontweight="bold")
+            ax.set_ylabel("OOD score", fontsize=12, fontweight="bold")
         if index >= len(panels) - n_cols:
-            ax.set_xlabel("ID score", fontsize=10, fontweight="bold")
+            ax.set_xlabel("ID score", fontsize=12, fontweight="bold")
 
     for ax in flat_axes[len(panels) :]:
         ax.set_visible(False)
@@ -616,7 +722,7 @@ def _plot_robustness_decomposition(  # noqa: PLR0913
         labels,
         loc="lower center",
         ncol=min(len(labels), 5),
-        fontsize=10,
+        fontsize=12,
         frameon=True,
         framealpha=0.9,
         bbox_to_anchor=(0.5, -0.02),
@@ -637,12 +743,12 @@ def _draw_combined_ranking(  # noqa: PLR0913
     colormap: str,
     *,
     palette: dict[str, Color] | None = None,
-    ref_fontsize: float = 8,
+    ref_fontsize: float = 9,
     top_headroom: float = 0.0,
     label_fontsize: float | None = None,
-    value_fontsize: float = 9,
-    xlabel_fontsize: float = 13,
-    xtick_fontsize: float = 9,
+    value_fontsize: float = 11,
+    xlabel_fontsize: float = 14,
+    xtick_fontsize: float = 11,
 ) -> None:
     """Draw the sorted horizontal bar chart of the combined score (``Combined`` column) onto ``ax``, best at the top.
 
@@ -773,7 +879,7 @@ def _plot_combined_summary(
 
     fig = plt.figure(figsize=(7.5 * n_cols, 18))
     gs = fig.add_gridspec(
-        3, n_cols, height_ratios=[1.0, 1.0, 0.55], hspace=0.42, wspace=0.3, left=0.16, right=0.97, top=0.87, bottom=0.11
+        3, n_cols, height_ratios=[1.0, 1.0, 0.55], hspace=0.22, wspace=0.3, left=0.17, right=0.97, top=0.87, bottom=0.11
     )
     fig_w, fig_h = fig.get_size_inches()
 
@@ -808,7 +914,7 @@ def _plot_combined_summary(
             show_mean=False,
             ref_fontsize=12,
             tick_fontsize=15,
-            metric_fontsize=15,
+            metric_fontsize=21,
             rlabel_at_bottom=True,
         )
         _draw_score_radar(
@@ -819,7 +925,7 @@ def _plot_combined_summary(
             show_mean=False,
             ref_fontsize=12,
             tick_fontsize=15,
-            metric_fontsize=15,
+            metric_fontsize=21,
             rlabel_at_bottom=True,
         )
         _draw_combined_ranking(
@@ -829,10 +935,10 @@ def _plot_combined_summary(
             palette=bar_palette,
             ref_fontsize=14,
             top_headroom=0.5,
-            label_fontsize=15,
-            value_fontsize=13,
-            xlabel_fontsize=15,
-            xtick_fontsize=12,
+            label_fontsize=16,
+            value_fontsize=16,
+            xlabel_fontsize=17,
+            xtick_fontsize=16,
         )
 
         # Column header (reference mode) centered over the column, above the top radar's rim.
@@ -854,23 +960,34 @@ def _plot_combined_summary(
     for row_ax, row_title in zip(row_axes, row_titles, strict=False):
         pos = row_ax.get_position()
         y_center = (pos.y0 + pos.y1) / 2
-        fig.text(0.03, y_center, row_title, ha="center", va="center", rotation=90, fontsize=20, fontweight="bold")
+        fig.text(0.03, y_center, row_title, ha="center", va="center", rotation=90, fontsize=25, fontweight="bold")
 
     fig.suptitle("Robustness Summary", fontsize=26, fontweight="bold", y=0.975)
     # Stretch the legend across the full width of the ranking panels (edges tracked in the loop). mode="expand" fills
     # the bbox width so the entries spread evenly rather than clumping in the center.
+    # The radar rim abbreviations ride along as a bold second row of the same legend box.
+    key_handles, key_labels = _abbrev_key_entries(metrics)
+    legend_handles, legend_labels, ncol = (
+        _interleave_legend_key(handles, labels, key_handles, key_labels)
+        if key_labels
+        else (handles, labels, len(labels))
+    )
+    # Reach a little past the ranking panels so the two-row entries have room to spread.
+    box_left, box_right = max(0.01, legend_left - 0.05), min(0.99, legend_right + 0.05)
     fig.legend(
-        handles,
-        labels,
+        legend_handles,
+        legend_labels,
         loc="lower left",
-        ncol=len(labels),
+        ncol=ncol,
         mode="expand",
-        fontsize=14,
+        fontsize=17,
         title="Model",
-        title_fontsize=16,
+        title_fontsize=18,
+        handler_map={Patch: _AbbrevKeyHandler()},
         frameon=True,
         framealpha=0.9,
-        bbox_to_anchor=(legend_left, 0.02, legend_right - legend_left, 0.04),
+        # Below the figure: the two-row box would otherwise cover the ranking panels' "Score" axis label.
+        bbox_to_anchor=(box_left, -0.05, box_right - box_left, 0.04),
     )
 
     output_path.mkdir(parents=True, exist_ok=True)
