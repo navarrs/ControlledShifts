@@ -17,7 +17,14 @@ import seaborn as sns
 from matplotlib.axes import Axes
 from omegaconf import DictConfig
 
-from controlledshifts.utils.analysis.common import model_colors, relative_gap_pct, save_figure, set_yaxis_limits
+from controlledshifts.utils.analysis.common import (
+    iter_benchmarks,
+    load_results_csv,
+    model_colors,
+    relative_gap_pct,
+    save_figure,
+    set_yaxis_limits,
+)
 from controlledshifts.utils.analysis.distribution_shift import GAP_MIN_COLOR_VALUE, build_benchmark_df
 from controlledshifts.utils.constants import EPSILON
 from controlledshifts.utils.plotting import set_analysis_theme
@@ -33,7 +40,7 @@ class Block(NamedTuple):
 def _parse_blocks(config: DictConfig) -> tuple[Block, list[Block]]:
     """Return the reference block and the list of benchmark blocks from the config."""
     reference = Block(config.reference.name, config.reference.split)
-    benchmarks = [Block(spec.name, spec.split) for entry in config.benchmarks for spec in entry.values()]
+    benchmarks = [Block(spec.name, spec.split) for _, spec in iter_benchmarks(config)]
     return reference, benchmarks
 
 
@@ -313,12 +320,8 @@ def run_unshifted_generalization_analysis(config: DictConfig, log: Logger, outpu
     output_path.mkdir(parents=True, exist_ok=True)
 
     metrics_filepath = Path(config.benchmarks_filepath)
-    if not metrics_filepath.exists():
-        log.error("Results file not found at %s", metrics_filepath)
-        return
-    metrics_df = pd.read_csv(metrics_filepath)
-    if "Name" not in metrics_df.columns:
-        log.error("CSV must contain a 'Name' column")
+    metrics_df = load_results_csv(metrics_filepath, log)
+    if metrics_df is None:
         return
 
     metrics = list(config.trajectory_forecasting_metrics)

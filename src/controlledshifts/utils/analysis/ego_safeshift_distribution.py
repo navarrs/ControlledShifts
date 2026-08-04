@@ -25,6 +25,7 @@ from controlledshifts.utils.analysis.common import (
     SPLIT_COLOR_MAP,
     SPLIT_ORDER,
     SplitDistributionPlotConfig,
+    iter_benchmarks,
     render_distribution_plots,
 )
 from controlledshifts.utils.plotting import set_analysis_theme
@@ -111,8 +112,7 @@ def _build_distribution_frame(config: DictConfig, log: Logger, output_path: Path
     log.info("Loaded %d scored scenarios from %s", len(scores_df), scores_csv_path)
 
     frames = []
-    for benchmark_entry in config.benchmarks:
-        key, spec = next(iter(benchmark_entry.items()))
+    for key, spec in iter_benchmarks(config):
         log.info("Building '%s' (%s) split with strategy '%s'", key, spec.name, spec.split)
         frames.append(_build_long_frame(scores_df, spec.name, spec.split, config))
 

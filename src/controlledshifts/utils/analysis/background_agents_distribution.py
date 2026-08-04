@@ -28,6 +28,7 @@ from controlledshifts.utils.analysis.common import (
     SPLIT_COLOR_MAP,
     SPLIT_ORDER,
     SplitDistributionPlotConfig,
+    iter_benchmarks,
     render_distribution_plots,
 )
 from controlledshifts.utils.plotting import set_analysis_theme
@@ -154,8 +155,7 @@ def _build_distribution_frame(config: DictConfig, log: Logger, output_path: Path
 
     benchmarks: list[tuple[str, Path]] = []
     all_ids: set[str] = set()
-    for benchmark_entry in config.benchmarks:
-        key, spec = next(iter(benchmark_entry.items()))
+    for key, spec in iter_benchmarks(config):
         split_json_path = splits_path / f"{spec.split_json}.json"
         if not split_json_path.exists():
             log.error("Split JSON not found at %s; skipping benchmark '%s'", split_json_path, key)

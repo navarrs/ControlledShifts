@@ -20,6 +20,8 @@ from omegaconf import DictConfig
 from controlledshifts.utils.analysis.common import (
     MODEL_NAME_MAP,
     MODEL_SIZE_MAP,
+    iter_benchmarks,
+    load_results_csv,
     relative_gap_pct,
     save_figure,
     set_yaxis_limits,
@@ -662,13 +664,8 @@ def run_distribution_shift_analysis(config: DictConfig, log: Logger, output_path
     output_path = Path(output_path)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    metrics_filepath = Path(config.benchmarks_filepath)
-    if not metrics_filepath.exists():
-        log.error("Results file not found at %s", metrics_filepath)
-        return
-    metrics_df = pd.read_csv(metrics_filepath)
-    if "Name" not in metrics_df.columns:
-        log.error("CSV must contain a 'Name' column")
+    metrics_df = load_results_csv(Path(config.benchmarks_filepath), log)
+    if metrics_df is None:
         return
 
     metrics = list(config.trajectory_forecasting_metrics)
@@ -676,8 +673,7 @@ def run_distribution_shift_analysis(config: DictConfig, log: Logger, output_path
     colormap = config.benchmark_colormap
 
     blocks: list[tuple[str, str, str, pd.DataFrame]] = []
-    for benchmark_entry in config.benchmarks:
-        key, spec = next(iter(benchmark_entry.items()))
+    for key, spec in iter_benchmarks(config):
         log.info("Analyzing benchmark '%s' (%s): seen=%s, unseen=%s", key, spec.name, spec.seen, spec.unseen)
 
         splits = (spec.seen, spec.unseen)

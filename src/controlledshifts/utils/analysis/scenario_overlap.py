@@ -26,7 +26,7 @@ import seaborn as sns
 from omegaconf import DictConfig
 
 from controlledshifts.benchmarks.common import BenchmarkSplit, load_benchmark_split
-from controlledshifts.utils.analysis.common import save_figure
+from controlledshifts.utils.analysis.common import iter_benchmarks, save_figure
 from controlledshifts.utils.plotting import set_analysis_theme
 
 
@@ -43,8 +43,7 @@ def _load_benchmarks(config: DictConfig, log: Logger) -> dict[str, BenchmarkSpli
     """Loads the configured benchmark splits, keyed by display name, skipping any whose JSON is missing."""
     splits_path = Path(config.splits_path)
     benchmarks: dict[str, BenchmarkSplit] = {}
-    for benchmark_entry in config.benchmarks:
-        _, spec = next(iter(benchmark_entry.items()))
+    for _, spec in iter_benchmarks(config):
         split_json_path = splits_path / f"{spec.split_json}.json"
         if not split_json_path.exists():
             log.error("Split JSON not found at %s; skipping benchmark '%s'", split_json_path, spec.name)
@@ -56,11 +55,7 @@ def _load_benchmarks(config: DictConfig, log: Logger) -> dict[str, BenchmarkSpli
 
 def _benchmark_abbreviations(config: DictConfig) -> dict[str, str]:
     """Maps each configured benchmark's display name to its short heatmap tick label."""
-    abbreviations: dict[str, str] = {}
-    for benchmark_entry in config.benchmarks:
-        _, spec = next(iter(benchmark_entry.items()))
-        abbreviations[spec.name] = spec.get("abbrev") or spec.name[:_ABBREV_LENGTH].upper()
-    return abbreviations
+    return {spec.name: spec.get("abbrev") or spec.name[:_ABBREV_LENGTH].upper() for _, spec in iter_benchmarks(config)}
 
 
 def _overlap_records(split: str, names: list[str], id_sets: list[set[str]]) -> list[dict[str, str | int | float]]:

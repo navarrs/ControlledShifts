@@ -58,6 +58,8 @@ from controlledshifts.utils.analysis.common import (
     METRIC_ABBREV_MAP,
     METRIC_NAME_MAP,
     MODEL_NAME_MAP,
+    iter_benchmarks,
+    load_results_csv,
     model_colors,
     save_figure,
 )
@@ -1004,23 +1006,17 @@ def run_robustness_scores_analysis(config: DictConfig, log: Logger, output_path:
     output_path = Path(output_path)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    metrics_filepath = Path(config.benchmarks_filepath)
-    if not metrics_filepath.exists():
-        log.error("Results file not found at %s", metrics_filepath)
-        return
-    metrics_df = pd.read_csv(metrics_filepath)
-    if "Name" not in metrics_df.columns:
-        log.error("CSV must contain a 'Name' column")
+    metrics_df = load_results_csv(Path(config.benchmarks_filepath), log)
+    if metrics_df is None:
         return
 
     metrics = list(config.trajectory_forecasting_metrics)
     models_to_compare = list(config.models_to_compare)
     colormap = config.score_colormap
 
-    benchmarks: list[tuple[str, str, str, str]] = []
-    for benchmark_entry in config.benchmarks:
-        key, spec = next(iter(benchmark_entry.items()))
-        benchmarks.append((key, spec.name, spec.seen, spec.unseen))
+    benchmarks: list[tuple[str, str, str, str]] = [
+        (key, spec.name, spec.seen, spec.unseen) for key, spec in iter_benchmarks(config)
+    ]
 
     score_cfg = config.score
 

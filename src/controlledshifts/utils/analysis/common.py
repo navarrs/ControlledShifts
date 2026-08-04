@@ -3,6 +3,7 @@
 See `docs/ANALYSIS.md` for usage details.
 """
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from logging import Logger
 from pathlib import Path
@@ -17,6 +18,7 @@ from matplotlib.legend import Legend
 from matplotlib.patches import Patch
 from matplotlib.text import Text
 from numpy.typing import NDArray
+from omegaconf import DictConfig
 
 from controlledshifts.utils.constants import EPSILON
 
@@ -110,6 +112,41 @@ def set_yaxis_limits(
     ymin, ymax = np.nanmin(values), np.nanmax(values)
     padding = padding_factor * (ymax - ymin) if ymax > ymin else min_padding
     ax.set_ylim(ymin - padding * lower_factor, ymax + padding)
+
+
+def load_results_csv(filepath: Path, log: Logger) -> pd.DataFrame | None:
+    """Loads the combined model-results CSV, returning ``None`` (and logging why) when it is unusable.
+
+    Args:
+        filepath: Path to the combined results CSV.
+        log: Logger for the failure reason.
+
+    Returns:
+        The results frame, or ``None`` when the file is missing or has no ``Name`` column.
+    """
+    if not filepath.exists():
+        log.error("Results file not found at %s", filepath)
+        return None
+    metrics_df = pd.read_csv(filepath)
+    if "Name" not in metrics_df.columns:
+        log.error("CSV must contain a 'Name' column")
+        return None
+    return metrics_df
+
+
+def iter_benchmarks(config: DictConfig) -> Iterator[tuple[str, DictConfig]]:
+    """Yields ``(key, spec)`` per entry of ``config.benchmarks``, in config order.
+
+    Each entry is a single-key mapping of benchmark key to its spec, so the key doubles as the entry's identifier.
+
+    Args:
+        config: Analysis configuration holding a ``benchmarks`` list.
+
+    Yields:
+        The benchmark key and its spec.
+    """
+    for benchmark_entry in config.benchmarks:
+        yield next(iter(benchmark_entry.items()))
 
 
 FIGURE_DPI = 300
