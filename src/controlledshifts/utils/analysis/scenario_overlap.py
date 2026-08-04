@@ -26,24 +26,28 @@ import seaborn as sns
 from omegaconf import DictConfig
 
 from controlledshifts.benchmarks.common import BenchmarkSplit, load_benchmark_split
+from controlledshifts.utils.analysis.common import (
+    CBAR_LABEL_FONTSIZE,
+    CBAR_TICK_FONTSIZE,
+    HEATMAP_ANNOT_FONTSIZE,
+    HEATMAP_LABEL_FONTSIZE,
+    HEATMAP_LEGEND_FONTSIZE,
+    iter_benchmarks,
+    mathtext_bold,
+    save_figure,
+)
 from controlledshifts.utils.plotting import set_analysis_theme
 
 
 _MIN_BENCHMARKS = 2
 _ABBREV_LENGTH = 3
-_LABEL_FONTSIZE = 16
-_ANNOT_FONTSIZE = 18
-_CBAR_TICK_FONTSIZE = 16
-_CBAR_LABEL_FONTSIZE = 20
-_LEGEND_FONTSIZE = 14
 
 
 def _load_benchmarks(config: DictConfig, log: Logger) -> dict[str, BenchmarkSplit]:
     """Loads the configured benchmark splits, keyed by display name, skipping any whose JSON is missing."""
     splits_path = Path(config.splits_path)
     benchmarks: dict[str, BenchmarkSplit] = {}
-    for benchmark_entry in config.benchmarks:
-        _, spec = next(iter(benchmark_entry.items()))
+    for _, spec in iter_benchmarks(config):
         split_json_path = splits_path / f"{spec.split_json}.json"
         if not split_json_path.exists():
             log.error("Split JSON not found at %s; skipping benchmark '%s'", split_json_path, spec.name)
@@ -55,11 +59,7 @@ def _load_benchmarks(config: DictConfig, log: Logger) -> dict[str, BenchmarkSpli
 
 def _benchmark_abbreviations(config: DictConfig) -> dict[str, str]:
     """Maps each configured benchmark's display name to its short heatmap tick label."""
-    abbreviations: dict[str, str] = {}
-    for benchmark_entry in config.benchmarks:
-        _, spec = next(iter(benchmark_entry.items()))
-        abbreviations[spec.name] = spec.get("abbrev") or spec.name[:_ABBREV_LENGTH].upper()
-    return abbreviations
+    return {spec.name: spec.get("abbrev") or spec.name[:_ABBREV_LENGTH].upper() for _, spec in iter_benchmarks(config)}
 
 
 def _overlap_records(split: str, names: list[str], id_sets: list[set[str]]) -> list[dict[str, str | int | float]]:
@@ -136,7 +136,7 @@ def _plot_overlap_grid(
             ax=ax,
             annot=True,
             fmt=".2f",
-            annot_kws={"size": _ANNOT_FONTSIZE},
+            annot_kws={"size": HEATMAP_ANNOT_FONTSIZE},
             vmin=0.0,
             vmax=1.0,
             cmap="rocket",
@@ -146,8 +146,8 @@ def _plot_overlap_grid(
             cbar=False,
         )
         ax.set_title(f"{split.capitalize()} Set", fontweight="bold")
-        ax.tick_params(axis="x", rotation=0, labelsize=_LABEL_FONTSIZE)
-        ax.tick_params(axis="y", rotation=0, labelsize=_LABEL_FONTSIZE)
+        ax.tick_params(axis="x", rotation=0, labelsize=HEATMAP_LABEL_FONTSIZE)
+        ax.tick_params(axis="y", rotation=0, labelsize=HEATMAP_LABEL_FONTSIZE)
 
     # Draw once so the square=True axes settle into their final boxes, then size the colorbar to match the
     # rightmost heatmap's height (rather than the taller subplot axes).
@@ -156,19 +156,15 @@ def _plot_overlap_grid(
     cax = fig.add_axes((last_pos.x1 + 0.01, last_pos.y0, 0.012, last_pos.height))
     mappable = mpl.cm.ScalarMappable(norm=mpl.colors.Normalize(vmin=0.0, vmax=1.0), cmap="rocket")
     cb = fig.colorbar(mappable, cax=cax)
-    cb.set_label("Jaccard overlap", fontsize=_CBAR_LABEL_FONTSIZE, fontweight="bold")
-    cb.ax.tick_params(labelsize=_CBAR_TICK_FONTSIZE)
+    cb.set_label("Jaccard overlap", fontsize=CBAR_LABEL_FONTSIZE, fontweight="bold")
+    cb.ax.tick_params(labelsize=CBAR_TICK_FONTSIZE)
     cb.outline.set_visible(False)
 
-    # Mathtext bolds the abbreviations; `fontweight` cannot, because DM Sans ships here as a single regular face.
-    legend = "   ".join(rf"$\bf{{{label}}}$ = {name}" for label, name in zip(labels, names, strict=True))
-    fig.text(0.5, last_pos.y0 - 0.14, legend, ha="center", va="top", fontsize=_LEGEND_FONTSIZE)
+    legend = "   ".join(f"{mathtext_bold(label)} = {name}" for label, name in zip(labels, names, strict=True))
+    fig.text(0.5, last_pos.y0 - 0.14, legend, ha="center", va="top", fontsize=HEATMAP_LEGEND_FONTSIZE)
 
     fig.suptitle("Scenario Overlap across Benchmarks", fontweight="bold", y=1.01)
-    output_file = output_path / "scenario_overlap.png"
-    fig.savefig(output_file, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print(f"✓ Heatmap saved as '{output_file}'")
+    save_figure(fig, output_path / "scenario_overlap.png", label="Heatmap")
 
 
 def run_scenario_overlap_analysis(config: DictConfig, log: Logger, output_path: Path) -> None:

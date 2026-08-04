@@ -10,14 +10,13 @@ from omegaconf import OmegaConf
 
 mpl.use("Agg")
 
+from controlledshifts.utils.analysis.common import COMBINED_COLUMN, metric_label
 from controlledshifts.utils.analysis.robustness_scores import (
-    COMBINED_COLUMN,
     COMBINED_TERM,
     ID_TERM,
     OOD_TERM,
     _geometric_mean,
     _geometric_mean_combined,
-    _metric_label,
     _score,
     compute_robustness_scores,
     run_robustness_scores_analysis,
@@ -175,10 +174,10 @@ def test_combined_demotes_naive_and_keeps_worse_model_below():
 
 
 def test_metric_label_uses_clean_name():
-    assert _metric_label("brierFDE") == "BrierFDE"
-    assert _metric_label("minADE6") == "MinADE"
-    assert "↓" not in _metric_label("brierFDE")
-    assert _metric_label("unmapped_metric") == "unmapped_metric"  # falls back to raw name
+    assert metric_label("brierFDE") == "BrierFDE"
+    assert metric_label("minADE6") == "MinADE"
+    assert "↓" not in metric_label("brierFDE")
+    assert metric_label("unmapped_metric") == "unmapped_metric"  # falls back to raw name
 
 
 def test_run_score_analysis_writes_artifacts(tmp_path):

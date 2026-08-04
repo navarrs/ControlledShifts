@@ -19,7 +19,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
-from matplotlib.cm import get_cmap
 from matplotlib.patches import Patch
 from numpy.typing import NDArray
 from omegaconf import DictConfig
@@ -27,7 +26,15 @@ from sklearn.manifold import TSNE
 from sklearn.metrics import silhouette_samples
 
 from controlledshifts.benchmarks.environments import load_descriptor_cache
-from controlledshifts.utils.analysis.common import SPLIT_COLOR_MAP, SPLIT_LABELS, SPLIT_ORDER, TEXT_COLOR
+from controlledshifts.utils.analysis.common import (
+    COMPACT_ANNOT_FONTSIZE,
+    COMPACT_LEGEND_FONTSIZE,
+    SPLIT_COLOR_MAP,
+    SPLIT_LABELS,
+    SPLIT_ORDER,
+    TEXT_COLOR,
+    save_figure,
+)
 from controlledshifts.utils.plotting import set_analysis_theme
 
 
@@ -122,7 +129,7 @@ def _plot_tsne(frame: pd.DataFrame, output_path: Path, *, show_axes: bool, seed:
     """
     labels = frame["cluster_label"].to_numpy()
     n_clusters = int(labels.max()) + 1
-    cmap = get_cmap("tab10_r", n_clusters)
+    cmap = plt.get_cmap("tab10_r", n_clusters)
 
     fig, (ax_cluster, ax_split) = plt.subplots(1, 2, figsize=(20, 8), sharey=True)
     fig.suptitle("t-SNE of NetLSD Descriptors", color=TEXT_COLOR)
@@ -148,7 +155,7 @@ def _plot_tsne(frame: pd.DataFrame, output_path: Path, *, show_axes: bool, seed:
         loc="upper center",
         bbox_to_anchor=(0.5, -0.12),
         ncol=min(n_clusters, 10),
-        fontsize=12,
+        fontsize=COMPACT_LEGEND_FONTSIZE,
         framealpha=0.8,
         markerscale=3,
         labelcolor=TEXT_COLOR,
@@ -184,12 +191,7 @@ def _plot_tsne(frame: pd.DataFrame, output_path: Path, *, show_axes: bool, seed:
         labelcolor=TEXT_COLOR,
     )
 
-    ax_cluster.set_title("Environment clusters (t-SNE of NetLSD descriptors)")
-    ax_split.set_title("Benchmark splits (t-SNE of NetLSD descriptors)")
-    if show_axes:
-        ax_cluster.set(xlabel="t-SNE 1", ylabel="t-SNE 2")
-        ax_split.set(xlabel="t-SNE 1", ylabel="t-SNE 2")
-    else:
+    if not show_axes:
         for ax in (ax_cluster, ax_split):
             ax.set_xticks([])
             ax.set_yticks([])
@@ -199,17 +201,14 @@ def _plot_tsne(frame: pd.DataFrame, output_path: Path, *, show_axes: bool, seed:
 
     fig.tight_layout()
     fig.subplots_adjust(wspace=0.05)
-    output_file = output_path / "tsne.png"
-    fig.savefig(output_file, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print(f"✓ Plot saved as '{output_file}'")
+    save_figure(fig, output_path / "tsne.png")
 
 
 def _plot_silhouette(frame: pd.DataFrame, output_path: Path) -> None:
     """Saves a per-cluster silhouette plot with the overall mean to ``silhouette.png``."""
     labels = frame["cluster_label"].to_numpy()
     n_clusters = int(labels.max()) + 1
-    cmap = get_cmap("tab20", n_clusters)
+    cmap = plt.get_cmap("tab20", n_clusters)
     mean_silhouette = float(frame["silhouette"].mean())
 
     fig, ax = plt.subplots(figsize=(8, 10))
@@ -220,7 +219,14 @@ def _plot_silhouette(frame: pd.DataFrame, output_path: Path) -> None:
             continue
         y_upper = y_lower + values.size
         ax.fill_betweenx(np.arange(y_lower, y_upper), 0, values, facecolor=cmap(cluster_id), alpha=0.8, linewidth=0)
-        ax.text(-0.02, y_lower + 0.5 * values.size, f"C{cluster_id}", va="center", ha="right", fontsize=10)
+        ax.text(
+            -0.02,
+            y_lower + 0.5 * values.size,
+            f"C{cluster_id}",
+            va="center",
+            ha="right",
+            fontsize=COMPACT_ANNOT_FONTSIZE,
+        )
         y_lower = y_upper + 10
 
     ax.axvline(mean_silhouette, color="red", linestyle="--", label=f"mean = {mean_silhouette:.3f}")
@@ -231,10 +237,7 @@ def _plot_silhouette(frame: pd.DataFrame, output_path: Path) -> None:
     ax.legend(loc="lower right", framealpha=0.8)
 
     fig.tight_layout()
-    output_file = output_path / "silhouette.png"
-    fig.savefig(output_file, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print(f"✓ Plot saved as '{output_file}'")
+    save_figure(fig, output_path / "silhouette.png")
 
 
 def run_environments_distribution_analysis(config: DictConfig, log: Logger, output_path: Path) -> None:

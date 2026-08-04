@@ -3,13 +3,13 @@
 See `docs/ANALYSIS.md` for usage details.
 """
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from logging import Logger
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-import numpy.typing as npt
 import pandas as pd
 import seaborn as sns
 from matplotlib.axes import Axes
@@ -18,6 +18,7 @@ from matplotlib.legend import Legend
 from matplotlib.patches import Patch
 from matplotlib.text import Text
 from numpy.typing import NDArray
+from omegaconf import DictConfig
 
 from controlledshifts.utils.constants import EPSILON
 
@@ -55,6 +56,9 @@ METRIC_NAME_MAP = {
     "collisionRate0.25": "CollisionRate",
 }
 
+# Column holding the per-model score aggregated across metrics, in the frames the robustness analysis builds.
+COMBINED_COLUMN = "Combined"
+
 # Short metric labels for space-constrained axes (e.g. radar rims), spelled out in a caption next to the figure.
 METRIC_ABBREV_MAP = {
     "brierFDE": "BF",
@@ -64,6 +68,46 @@ METRIC_ABBREV_MAP = {
     "collisionRate0.25": "CR",
 }
 
+# --- Figure text styling -------------------------------------------------------------------------------------------
+# Font sizes come in tiers, because the figures fall into families with genuinely different densities. Pick the tier
+# that matches the figure and use the role name within it; do not hardcode sizes at call sites.
+#
+#   BASE     -- one- or few-panel figures with room to breathe (the split-distribution plots).
+#   COMPACT  -- dense multi-panel grids where the base tier would collide (benchmark comparisons, score panels).
+#   HEATMAP  -- the annotated square heatmaps, whose cells set their own legibility floor.
+#
+# Two figures deliberately opt out: the stacked robustness summary and the score radars size their text relative to a
+# hand-tuned canvas, so their values live next to that layout code instead.
+
+SUPTITLE_FONTSIZE = 19
+TITLE_FONTSIZE = 17
+LABEL_FONTSIZE = 17
+TICK_FONTSIZE = 15
+LEGEND_FONTSIZE = 15
+
+COMPACT_SUPTITLE_FONTSIZE = 18
+COMPACT_SUBTITLE_FONTSIZE = 13
+COMPACT_TITLE_FONTSIZE = 13
+COMPACT_LABEL_FONTSIZE = 12
+COMPACT_TICK_FONTSIZE = 9
+COMPACT_LEGEND_FONTSIZE = 12
+COMPACT_ANNOT_FONTSIZE = 10
+# Legends drawn *inside* a compact panel compete with the data for space, so they sit a tier below the legends that
+# hang outside the axes. Raising this makes the legend box overlap the bars it is drawn over.
+COMPACT_INSET_LEGEND_FONTSIZE = 8
+
+HEATMAP_LABEL_FONTSIZE = 16
+HEATMAP_ANNOT_FONTSIZE = 18
+HEATMAP_LEGEND_FONTSIZE = 14
+CBAR_LABEL_FONTSIZE = 20
+CBAR_TICK_FONTSIZE = 16
+
+# Muted text color for titles, labels and ticks; GRAY_TEXT_COLOR is the matplotlib-named equivalent used for
+# annotations drawn over plot content (reference lines, rings and their labels).
+TEXT_COLOR = "#808080"
+GRAY_TEXT_COLOR = "dimgray"
+
+
 MODEL_SIZE_MAP = {
     "Naive": "624k",
     "AutoBot": "1.5M",
@@ -72,6 +116,25 @@ MODEL_SIZE_MAP = {
     "Safe-Wayformer": "15.2M",
     "MTR": "27.2M",  # This is the size with d_model=256. The original MTR with d_model=512 has 65M parameters.
 }
+
+
+def metric_label(metric: str) -> str:
+    """Clean display label for a metric (falls back to the raw name when unmapped)."""
+    return METRIC_NAME_MAP.get(metric, metric)
+
+
+def metric_abbrev(metric: str) -> str:
+    """Short label for a metric, for space-constrained axes (falls back to the clean name when unabbreviated)."""
+    return METRIC_ABBREV_MAP.get(metric, metric_label(metric))
+
+
+def mathtext_bold(text: str) -> str:
+    r"""Mathtext-bold form of ``text``.
+
+    The figure font (DM Sans) ships a single regular face, so ``fontweight="bold"`` silently falls back to it;
+    ``$\bf{...}$`` renders the token in a real bold face instead.
+    """
+    return rf"$\bf{{{text}}}$"
 
 
 def relative_gap_pct(value: float | NDArray, reference: float | NDArray) -> float | NDArray:
@@ -113,56 +176,60 @@ def set_yaxis_limits(
     ax.set_ylim(ymin - padding * lower_factor, ymax + padding)
 
 
-def flatten_metrics(data: dict, prefix: str = "") -> dict[str, float | int | str | bool | None]:
-    """Recursively flatten a nested dict, joining keys with dots."""
-    flat: dict[str, float | int | str | bool | None] = {}
-    for key, value in data.items():
-        name = f"{prefix}.{key}" if prefix else str(key)
-        if isinstance(value, dict):
-            flat.update(flatten_metrics(value, name))
-        else:
-            flat[name] = value
-    return flat
-
-
-def plot_heatmap(  # noqa: PLR0913
-    heatmap: npt.NDArray[np.float64],
-    title: str,
-    x_label: str,
-    y_label: str,
-    cbar_label: str,
-    output_filepath: Path,
-    colormap: str = "viridis",
-) -> None:
-    """Visualizes a heatmap matrix.
+def load_results_csv(filepath: Path, log: Logger) -> pd.DataFrame | None:
+    """Loads the combined model-results CSV, returning ``None`` (and logging why) when it is unusable.
 
     Args:
-        heatmap: the matrix to plot.
-        title: the title of the heatmap.
-        x_label: the label of the x-axis.
-        y_label: the label of the y-axis.
-        cbar_label: the label of the colorbar.
-        colormap: the colormap to use.
-        output_filepath: filepath to save the visualization.
+        filepath: Path to the combined results CSV.
+        log: Logger for the failure reason.
+
+    Returns:
+        The results frame, or ``None`` when the file is missing or has no ``Name`` column.
     """
-    plt.figure(figsize=(35, 30))
+    if not filepath.exists():
+        log.error("Results file not found at %s", filepath)
+        return None
+    metrics_df = pd.read_csv(filepath)
+    if "Name" not in metrics_df.columns:
+        log.error("CSV must contain a 'Name' column")
+        return None
+    return metrics_df
 
-    plt.imshow(heatmap, cmap=colormap, aspect="auto")
-    cbar = plt.colorbar()
-    cbar.ax.tick_params(labelsize=40)
-    cbar.set_label(cbar_label, size=40)
 
-    plt.title(title, fontsize=50)
-    plt.xlabel(x_label, fontsize=40)
-    plt.ylabel(y_label, fontsize=40)
-    plt.xticks(range(heatmap.shape[0]))
-    plt.yticks(range(heatmap.shape[1]))
-    plt.grid(visible=False)
+def iter_benchmarks(config: DictConfig) -> Iterator[tuple[str, DictConfig]]:
+    """Yields ``(key, spec)`` per entry of ``config.benchmarks``, in config order.
 
-    plt.tight_layout()
-    plt.savefig(output_filepath)
-    plt.close()
-    print(f"Heatmap saved to {output_filepath}")
+    Each entry is a single-key mapping of benchmark key to its spec, so the key doubles as the entry's identifier.
+
+    Args:
+        config: Analysis configuration holding a ``benchmarks`` list.
+
+    Yields:
+        The benchmark key and its spec.
+    """
+    for benchmark_entry in config.benchmarks:
+        yield next(iter(benchmark_entry.items()))
+
+
+FIGURE_DPI = 300
+
+
+def save_figure(
+    fig: Figure, output_file: Path, *, dpi: int = FIGURE_DPI, tight: bool = True, label: str = "Plot"
+) -> None:
+    """Saves ``fig``, creating the parent directory, closing the figure and reporting the path.
+
+    Args:
+        fig: Figure to save; always closed afterwards, so callers must not reuse it.
+        output_file: Destination path, including the extension.
+        dpi: Output resolution.
+        tight: Crop to the drawn content, including artists outside the axes (``bbox_inches="tight"``).
+        label: Noun used in the confirmation message.
+    """
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_file, dpi=dpi, bbox_inches="tight" if tight else None)
+    plt.close(fig)
+    print(f"✓ {label} saved as '{output_file}'")
 
 
 # --- Per-scenario distribution plots across train/val/test splits ----------------------------------------------------
@@ -172,13 +239,6 @@ def plot_heatmap(  # noqa: PLR0913
 
 SPLIT_ORDER: tuple[str, ...] = ("training", "validation", "testing")
 SPLIT_LABELS: dict[str, str] = {"training": "Train", "validation": "Val", "testing": "Test"}
-
-_TITLE_FONTSIZE = 17
-_LABEL_FONTSIZE = 17
-_TICK_FONTSIZE = 15
-_SUPTITLE_FONTSIZE = 19
-_LEGEND_FONTSIZE = 15
-TEXT_COLOR = "#808080"
 
 
 @dataclass(frozen=True)
@@ -219,8 +279,8 @@ def _add_split_legend(fig: Figure, palette: list[str]) -> Legend:
         title="Split",
         loc="center left",
         bbox_to_anchor=(1.0, 0.5),
-        fontsize=_LEGEND_FONTSIZE,
-        title_fontsize=_LEGEND_FONTSIZE,
+        fontsize=LEGEND_FONTSIZE,
+        title_fontsize=LEGEND_FONTSIZE,
         labelcolor=TEXT_COLOR,
         frameon=False,
     )
@@ -279,23 +339,20 @@ def plot_violin(long_df: pd.DataFrame, quantity: str, plot_config: SplitDistribu
             alpha=0.6,
             ax=ax,
         )
-        ax.set_title(benchmark, fontsize=_TITLE_FONTSIZE, color=TEXT_COLOR)
+        ax.set_title(benchmark, fontsize=TITLE_FONTSIZE, color=TEXT_COLOR)
         ax.set_xlabel("")
         ax.set_xticks(range(len(order)))
         ax.set_xticklabels([SPLIT_LABELS[split_key] for split_key in order])
         label = plot_config.quantity_labels[quantity] if ax is axes[0, 0] else ""
-        ax.set_ylabel(label, fontsize=_LABEL_FONTSIZE, color=TEXT_COLOR)
-        ax.tick_params(labelsize=_TICK_FONTSIZE, colors=TEXT_COLOR)
+        ax.set_ylabel(label, fontsize=LABEL_FONTSIZE, color=TEXT_COLOR)
+        ax.tick_params(labelsize=TICK_FONTSIZE, colors=TEXT_COLOR)
 
     title = f"{plot_config.quantity_labels[quantity]}{plot_config.title_suffix}"
-    suptitle = fig.suptitle(title, fontsize=_SUPTITLE_FONTSIZE, color=TEXT_COLOR)
+    suptitle = fig.suptitle(title, fontsize=SUPTITLE_FONTSIZE, color=TEXT_COLOR)
     legend = _add_split_legend(fig, plot_config.palette)
     fig.tight_layout()
     _center_suptitle_over_content(fig, suptitle, legend)
-    output_file = plot_config.output_path / f"{quantity}_violin.png"
-    fig.savefig(output_file, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print(f"✓ Plot saved as '{output_file}'")
+    save_figure(fig, plot_config.output_path / f"{quantity}_violin.png")
 
 
 def plot_ridge(long_df: pd.DataFrame, quantity: str, plot_config: SplitDistributionPlotConfig) -> None:
@@ -345,27 +402,24 @@ def plot_ridge(long_df: pd.DataFrame, quantity: str, plot_config: SplitDistribut
                     transform=ax.transAxes,
                     ha="right",
                     va="bottom",
-                    fontsize=_LABEL_FONTSIZE,
+                    fontsize=LABEL_FONTSIZE,
                     fontweight="bold",
                     color=color_map[split_key],
                 )
             if row == 0:
-                ax.set_title(benchmark, fontsize=_TITLE_FONTSIZE, color=TEXT_COLOR)
+                ax.set_title(benchmark, fontsize=TITLE_FONTSIZE, color=TEXT_COLOR)
             if row == n_rows - 1:
-                ax.set_xlabel(plot_config.quantity_labels[quantity], fontsize=_LABEL_FONTSIZE, color=TEXT_COLOR)
-                ax.tick_params(axis="x", labelsize=_TICK_FONTSIZE, colors=TEXT_COLOR)
+                ax.set_xlabel(plot_config.quantity_labels[quantity], fontsize=LABEL_FONTSIZE, color=TEXT_COLOR)
+                ax.tick_params(axis="x", labelsize=TICK_FONTSIZE, colors=TEXT_COLOR)
             else:
                 ax.set_xlabel("")
                 ax.spines["bottom"].set_visible(False)
                 ax.tick_params(axis="x", length=0)
 
     title = f"{plot_config.quantity_labels[quantity]}{plot_config.title_suffix}"
-    fig.suptitle(title, fontsize=_SUPTITLE_FONTSIZE, color=TEXT_COLOR)
+    fig.suptitle(title, fontsize=SUPTITLE_FONTSIZE, color=TEXT_COLOR)
     fig.subplots_adjust(hspace=-0.25, top=0.9)
-    output_file = plot_config.output_path / f"{quantity}_ridge.png"
-    fig.savefig(output_file, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print(f"✓ Plot saved as '{output_file}'")
+    save_figure(fig, plot_config.output_path / f"{quantity}_ridge.png")
 
 
 def plot_distribution_histogram(long_df: pd.DataFrame, quantity: str, plot_config: SplitDistributionPlotConfig) -> None:
@@ -401,20 +455,17 @@ def plot_distribution_histogram(long_df: pd.DataFrame, quantity: str, plot_confi
             legend=False,
             ax=ax,
         )
-        ax.set_title(benchmark, fontsize=_TITLE_FONTSIZE, color=TEXT_COLOR)
-        ax.set_xlabel(plot_config.quantity_labels[quantity], fontsize=_LABEL_FONTSIZE, color=TEXT_COLOR)
-        ax.set_ylabel("Density" if ax is axes[0, 0] else "", fontsize=_LABEL_FONTSIZE, color=TEXT_COLOR)
-        ax.tick_params(labelsize=_TICK_FONTSIZE, colors=TEXT_COLOR)
+        ax.set_title(benchmark, fontsize=TITLE_FONTSIZE, color=TEXT_COLOR)
+        ax.set_xlabel(plot_config.quantity_labels[quantity], fontsize=LABEL_FONTSIZE, color=TEXT_COLOR)
+        ax.set_ylabel("Density" if ax is axes[0, 0] else "", fontsize=LABEL_FONTSIZE, color=TEXT_COLOR)
+        ax.tick_params(labelsize=TICK_FONTSIZE, colors=TEXT_COLOR)
 
     title = f"{plot_config.quantity_labels[quantity]}{plot_config.title_suffix}"
-    suptitle = fig.suptitle(title, fontsize=_SUPTITLE_FONTSIZE, color=TEXT_COLOR)
+    suptitle = fig.suptitle(title, fontsize=SUPTITLE_FONTSIZE, color=TEXT_COLOR)
     legend = _add_split_legend(fig, plot_config.palette)
     fig.tight_layout()
     _center_suptitle_over_content(fig, suptitle, legend)
-    output_file = plot_config.output_path / f"{quantity}_histogram.png"
-    fig.savefig(output_file, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print(f"✓ Plot saved as '{output_file}'")
+    save_figure(fig, plot_config.output_path / f"{quantity}_histogram.png")
 
 
 def write_split_distribution_summary(long_df: pd.DataFrame, quantities: list[str], output_path: Path) -> None:

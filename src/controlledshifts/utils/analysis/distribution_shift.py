@@ -18,17 +18,22 @@ from numpy.typing import NDArray
 from omegaconf import DictConfig
 
 from controlledshifts.utils.analysis.common import (
+    COMPACT_ANNOT_FONTSIZE,
+    COMPACT_LABEL_FONTSIZE,
+    COMPACT_LEGEND_FONTSIZE,
+    COMPACT_SUPTITLE_FONTSIZE,
+    COMPACT_TICK_FONTSIZE,
+    COMPACT_TITLE_FONTSIZE,
     MODEL_NAME_MAP,
     MODEL_SIZE_MAP,
+    iter_benchmarks,
+    load_results_csv,
     relative_gap_pct,
+    save_figure,
     set_yaxis_limits,
 )
-from controlledshifts.utils.constants import EPSILON
+from controlledshifts.utils.analysis.latex import format_gap, format_value
 from controlledshifts.utils.plotting import set_analysis_theme
-
-
-# Higher makes small OOD gaps more vibrant in the LaTeX table.
-GAP_MIN_COLOR_VALUE = 20.0
 
 
 def _plot_distribution_shift_comparison(
@@ -54,22 +59,22 @@ def _plot_distribution_shift_comparison(
         values = summary_df[metric].to_numpy()
         bars = ax.bar(models, values, color=palette, alpha=0.8, edgecolor="black", linewidth=1.5)
 
-        ax.set_ylabel(metric, fontsize=10, fontweight="bold")
-        ax.set_title(title, fontsize=12, fontweight="bold")
-        ax.tick_params(axis="x", labelsize=9, rotation=30)
+        ax.set_ylabel(metric, fontsize=COMPACT_LABEL_FONTSIZE, fontweight="bold")
+        ax.set_title(title, fontsize=COMPACT_TITLE_FONTSIZE, fontweight="bold")
+        ax.tick_params(axis="x", labelsize=COMPACT_TICK_FONTSIZE, rotation=30)
 
         for bar in bars:
             height = bar.get_height()
             if not np.isnan(height):
                 x = bar.get_x() + bar.get_width() / 2.0
-                ax.text(x, height, f"{height:.3f}", ha="center", va="bottom", fontsize=10)
+                ax.text(x, height, f"{height:.3f}", ha="center", va="bottom", fontsize=COMPACT_ANNOT_FONTSIZE)
         ax.yaxis.grid(visible=True, alpha=0.3)
 
         set_yaxis_limits(ax, list(values), padding_factor=0.15, lower_factor=0.4, min_padding=0.1)
 
     n_models = models.shape[0]
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(1.5 * n_models * 3, 6))
-    fig.suptitle("Distribution Shift Analysis", fontsize=14, fontweight="bold")
+    fig.suptitle("Distribution Shift Analysis", fontsize=COMPACT_SUPTITLE_FONTSIZE, fontweight="bold")
 
     _plot_bars(ax1, id_metric, "In-Distribution (ID) Performance")
     _plot_bars(ax2, ood_metric, "Out-of-Distribution (OOD) Performance")
@@ -82,22 +87,20 @@ def _plot_distribution_shift_comparison(
     gap_colors = ["#f07569" if gap > 0 else "#7cbf7c" for gap in gap_values]
     bars = ax3.bar(models, gap_values, color=gap_colors, alpha=0.8, edgecolor="black", linewidth=1.5)
     ax3.axhline(y=0, color="black", linestyle="-", linewidth=1.5)
-    ax3.set_ylabel("Performance Gap (OOD - ID)", fontsize=11, fontweight="bold")
-    ax3.set_title("Generalization Gap", fontsize=12, fontweight="bold")
-    ax3.tick_params(axis="x", labelsize=12, rotation=30)
+    ax3.set_ylabel("Performance Gap (OOD - ID)", fontsize=COMPACT_LABEL_FONTSIZE, fontweight="bold")
+    ax3.set_title("Generalization Gap", fontsize=COMPACT_TITLE_FONTSIZE, fontweight="bold")
+    ax3.tick_params(axis="x", labelsize=COMPACT_TICK_FONTSIZE, rotation=30)
 
     for bar, gap in zip(bars, gap_values, strict=False):
         height = bar.get_height()
         if not np.isnan(height):
             va = "bottom" if height > 0 else "top"
             x = bar.get_x() + bar.get_width() / 2.0
-            ax3.text(x, height, f"{gap:.3f}", ha="center", va=va, fontsize=8, fontweight="bold")
+            ax3.text(x, height, f"{gap:.3f}", ha="center", va=va, fontsize=COMPACT_ANNOT_FONTSIZE, fontweight="bold")
     ax3.yaxis.grid(visible=True, alpha=0.3)
 
     plt.tight_layout()
-    output_file = output_path / "distribution_shift_comparison.png"
-    plt.savefig(output_file, dpi=300, bbox_inches="tight")
-    print(f"✓ Plot saved as '{output_file}'")
+    save_figure(fig, output_path / "distribution_shift_comparison.png")
 
 
 def _plot_benchmark_comparison(
@@ -117,7 +120,7 @@ def _plot_benchmark_comparison(
     n_rows = math.ceil(num_metrics / n_cols)
 
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(2.0 * n_models * n_cols, 4.0 * n_rows), constrained_layout=True)
-    fig.suptitle("Model Performance Comparison", fontsize=20, fontweight="bold")
+    fig.suptitle("Model Performance Comparison", fontsize=COMPACT_SUPTITLE_FONTSIZE, fontweight="bold")
 
     axes = np.atleast_1d(axes).flatten()
 
@@ -133,8 +136,8 @@ def _plot_benchmark_comparison(
         bars = ax.bar(model_order, values, color=palette, edgecolor="black", linewidth=1.0, alpha=0.8)
 
         ax.set_title(metric_name, pad=12)
-        ax.set_ylabel("Metric Value", fontsize=12)
-        ax.tick_params(axis="x", labelsize=10)
+        ax.set_ylabel("Metric Value", fontsize=COMPACT_LABEL_FONTSIZE)
+        ax.tick_params(axis="x", labelsize=COMPACT_TICK_FONTSIZE)
         ax.set_axisbelow(True)
 
         set_yaxis_limits(ax, list(values), padding_factor=0.15, lower_factor=0.4, min_padding=0.1)
@@ -150,7 +153,7 @@ def _plot_benchmark_comparison(
                     textcoords="offset points",
                     ha="center",
                     va="bottom",
-                    fontsize=10,
+                    fontsize=COMPACT_ANNOT_FONTSIZE,
                     fontweight="medium",
                 )
 
@@ -162,10 +165,8 @@ def _plot_benchmark_comparison(
     for ax in axes[len(metrics) :]:
         ax.set_visible(False)
 
-    output_file = output_path / "benchmark_comparison.png"
-    fig.savefig(output_file, dpi=300)
-    plt.close(fig)
-    print(f"\n✓ Plot saved as '{output_file}'")
+    # tight=False preserves this figure's current cropping; it is one of the few that omits it, likely an oversight.
+    save_figure(fig, output_path / "benchmark_comparison.png", tight=False)
 
 
 def _plot_performance_gaps(
@@ -194,7 +195,7 @@ def _plot_performance_gaps(
         num_models = summary_df["Model"].shape[0]
         horizontal_size = num_models * num_metrics * 1.5
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(horizontal_size, 6))
-        fig.suptitle("Performance Gaps (OOD - ID)", fontsize=14, fontweight="bold")
+        fig.suptitle("Performance Gaps (OOD - ID)", fontsize=COMPACT_SUPTITLE_FONTSIZE, fontweight="bold")
         x = np.arange(len(summary_df))
         width = 0.25
         for i, (metric_name, gaps) in enumerate(gap_data.items()):
@@ -203,31 +204,35 @@ def _plot_performance_gaps(
             ax2.bar(x + offset, gaps["percent"], width, label=metric_name, alpha=0.8, edgecolor="black", linewidth=1)
 
         ax1.axhline(y=0, color="black", linestyle="-", linewidth=1.5)
-        ax1.set_xlabel("Model", fontsize=12, fontweight="bold")
-        ax1.set_ylabel("Absolute Gap (OOD - ID)", fontsize=12, fontweight="bold")
-        ax1.set_title("Absolute Performance Gaps\n(Positive = OOD performs worse)", fontsize=12, fontweight="bold")
+        ax1.set_xlabel("Model", fontsize=COMPACT_LABEL_FONTSIZE, fontweight="bold")
+        ax1.set_ylabel("Absolute Gap (OOD - ID)", fontsize=COMPACT_LABEL_FONTSIZE, fontweight="bold")
+        ax1.set_title(
+            "Absolute Performance Gaps\n(Positive = OOD performs worse)",
+            fontsize=COMPACT_TITLE_FONTSIZE,
+            fontweight="bold",
+        )
         ax1.set_xticks(x + (num_metrics - 1) * width)
-        ax1.set_xticklabels(summary_df["Model"].values, ha="right", fontsize=12)
-        ax1.legend(fontsize=10)
+        ax1.set_xticklabels(summary_df["Model"].values, ha="right", fontsize=COMPACT_TICK_FONTSIZE)
+        ax1.legend(fontsize=COMPACT_LEGEND_FONTSIZE)
         ax1.yaxis.grid(visible=True, alpha=0.3)
         ax1.set_axisbelow(True)
 
         ax2.axhline(y=0, color="black", linestyle="-", linewidth=1.5)
-        ax2.set_xlabel("Model", fontsize=12, fontweight="bold")
-        ax2.set_ylabel("Percentage Gap (%)", fontsize=12, fontweight="bold")
+        ax2.set_xlabel("Model", fontsize=COMPACT_LABEL_FONTSIZE, fontweight="bold")
+        ax2.set_ylabel("Percentage Gap (%)", fontsize=COMPACT_LABEL_FONTSIZE, fontweight="bold")
         ax2.set_title(
-            "Percentage Performance Gaps\n(Positive = OOD worse, % relative to ID)", fontsize=12, fontweight="bold"
+            "Percentage Performance Gaps\n(Positive = OOD worse, % relative to ID)",
+            fontsize=COMPACT_TITLE_FONTSIZE,
+            fontweight="bold",
         )
         ax2.set_xticks(x + (num_metrics - 1) * width)
-        ax2.set_xticklabels(summary_df["Model"].values, ha="right", fontsize=14)
-        ax2.legend(fontsize=10)
+        ax2.set_xticklabels(summary_df["Model"].values, ha="right", fontsize=COMPACT_TICK_FONTSIZE)
+        ax2.legend(fontsize=COMPACT_LEGEND_FONTSIZE)
         ax2.yaxis.grid(visible=True, alpha=0.3)
         ax2.set_axisbelow(True)
 
         plt.tight_layout()
-        output_file = output_path / "performance_gaps.png"
-        plt.savefig(output_file, dpi=300, bbox_inches="tight")
-        print(f"✓ Plot saved as '{output_file}'")
+        save_figure(fig, output_path / "performance_gaps.png")
 
         # Print gap statistics
         print("\n" + "=" * 80)
@@ -254,7 +259,7 @@ def _plot_grouped_bar_chart(
         output_path: Directory to save the generated plot.
         key_metrics_display: Key metric column names to include in the chart.
     """
-    _fig, ax = plt.subplots(figsize=(14, 7))
+    fig, ax = plt.subplots(figsize=(14, 7))
 
     available_metrics = [m for m in key_metrics_display if m in summary_df.columns]
 
@@ -269,19 +274,17 @@ def _plot_grouped_bar_chart(
 
         set_yaxis_limits(ax, all_values, padding_factor=0.15, lower_factor=0.4, min_padding=0.1)
 
-        ax.set_xlabel("Model", fontsize=12, fontweight="bold")
-        ax.set_ylabel("Metric Value", fontsize=12, fontweight="bold")
-        ax.set_title("Multi-Metric Comparison", fontsize=14, fontweight="bold")
+        ax.set_xlabel("Model", fontsize=COMPACT_LABEL_FONTSIZE, fontweight="bold")
+        ax.set_ylabel("Metric Value", fontsize=COMPACT_LABEL_FONTSIZE, fontweight="bold")
+        ax.set_title("Multi-Metric Comparison", fontsize=COMPACT_TITLE_FONTSIZE, fontweight="bold")
         ax.set_xticks(x + width * (len(available_metrics) - 1) / 2)
         ax.set_xticklabels(summary_df["Model"].values, rotation=35, ha="right")
-        ax.legend(loc="upper left", fontsize=10)
+        ax.legend(loc="upper left", fontsize=COMPACT_LEGEND_FONTSIZE)
         ax.yaxis.grid(visible=True, alpha=0.3)
         ax.set_axisbelow(True)
 
         plt.tight_layout()
-        output_file = output_path / "grouped_comparison.png"
-        plt.savefig(output_file, dpi=300, bbox_inches="tight")
-        print(f"✓ Plot saved as '{output_file}'")
+        save_figure(fig, output_path / "grouped_comparison.png")
 
     # Print best performing model for each metric
     print("\n" + "=" * 80)
@@ -473,7 +476,7 @@ def _build_mean_row(
     return f"\\rowcolor[gray]{{{gray_level}}}\n" + " & ".join(row_parts) + " \\\\"
 
 
-def _build_benchmark_rows(  # noqa: PLR0912, PLR0915
+def _build_benchmark_rows(
     benchmark_df: pd.DataFrame,
     benchmark_name: str,
     id_split: str,
@@ -531,31 +534,13 @@ def _build_benchmark_rows(  # noqa: PLR0912, PLR0915
             id_val = row[f"{id_split}/{metric}"]
             ood_val = row[f"{ood_split}/{metric}"]
 
-            # In-distribution value
-            if pd.notna(id_val):
-                id_str = f"{id_val:.3f}"
-                if np.isclose(id_val, best_id[metric]):
-                    id_str = f"\\textbf{{{id_str}}}"
-            else:
-                id_str = "---"
-            id_values.append(id_str)
+            id_values.append(format_value(id_val, best_id[metric]))
 
-            # Out-of-distribution value with gap annotation and coloring
+            # The OOD cell needs both values: without the ID value there is no gap to annotate it with.
             if pd.notna(id_val) and pd.notna(ood_val):
                 gap = relative_gap_pct(ood_val, id_val)
-
-                best_gap, worst_gap = gap_stats[metric]
-                denom = max(abs(worst_gap - best_gap), EPSILON)
-                severity = np.clip(abs(gap - best_gap) / denom, 0, 1)
-                intensity = int(GAP_MIN_COLOR_VALUE + severity * (100 - GAP_MIN_COLOR_VALUE))
-
-                color = "OrangeRed" if gap > 0 else "ForestGreen"
-                gap_str = f"\\textcolor{{{color}!{intensity}}}{{{gap:+.2f}\\%}}"
-
-                ood_str = f"{ood_val:.3f}"
-                if np.isclose(ood_val, best_ood[metric]):
-                    ood_str = f"\\textbf{{{ood_str}}}"
-                ood_str = f"{ood_str} ({gap_str})"
+                gap_str = format_gap(gap, *gap_stats[metric])
+                ood_str = f"{format_value(ood_val, best_ood[metric])} ({gap_str})"
             else:
                 ood_str = "---"
 
@@ -629,7 +614,7 @@ def _write_combined_tex_table(
         (
             f"\\multirow{{2}}{{*}}{{\\textbf{{Benchmark}}}} & \\multirow{{2}}{{*}}{{\\textbf{{Model}}}} & "
             f"\\multirow{{2}}{{*}}{{\\textbf{{Model Size}}}} & "
-            f"\\multicolumn{{{n_metrics}}}{{c}}{{\\textbf{{Seem}}}} & "
+            f"\\multicolumn{{{n_metrics}}}{{c}}{{\\textbf{{Seen}}}} & "
             f"\\multicolumn{{{n_metrics}}}{{c}}{{\\textbf{{Unseen}}}} \\\\"
         ),
         " & & & " + " & ".join([*metrics, "", "", *metrics]) + " \\\\",
@@ -669,13 +654,8 @@ def run_distribution_shift_analysis(config: DictConfig, log: Logger, output_path
     output_path = Path(output_path)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    metrics_filepath = Path(config.benchmarks_filepath)
-    if not metrics_filepath.exists():
-        log.error("Results file not found at %s", metrics_filepath)
-        return
-    metrics_df = pd.read_csv(metrics_filepath)
-    if "Name" not in metrics_df.columns:
-        log.error("CSV must contain a 'Name' column")
+    metrics_df = load_results_csv(Path(config.benchmarks_filepath), log)
+    if metrics_df is None:
         return
 
     metrics = list(config.trajectory_forecasting_metrics)
@@ -683,8 +663,7 @@ def run_distribution_shift_analysis(config: DictConfig, log: Logger, output_path
     colormap = config.benchmark_colormap
 
     blocks: list[tuple[str, str, str, pd.DataFrame]] = []
-    for benchmark_entry in config.benchmarks:
-        key, spec = next(iter(benchmark_entry.items()))
+    for key, spec in iter_benchmarks(config):
         log.info("Analyzing benchmark '%s' (%s): seen=%s, unseen=%s", key, spec.name, spec.seen, spec.unseen)
 
         splits = (spec.seen, spec.unseen)

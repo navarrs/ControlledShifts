@@ -28,6 +28,7 @@ from controlledshifts.utils.analysis.common import (
     SPLIT_COLOR_MAP,
     SPLIT_ORDER,
     SplitDistributionPlotConfig,
+    iter_benchmarks,
     render_distribution_plots,
 )
 from controlledshifts.utils.plotting import set_analysis_theme
@@ -137,7 +138,7 @@ def _build_distribution_frame(config: DictConfig, log: Logger, output_path: Path
 
     Per-scenario counts are loaded from ``per_scenario_counts.csv`` when present (unless ``overwrite`` is set),
     otherwise computed from the scenario pkls and cached. The counts are then bucketed by each benchmark's split and
-    written to ``background_distribution.csv``.
+    written to ``background_agents_distribution.csv``.
 
     Args:
         config: Analysis configuration (``splits_path``, ``variants_base_path``, ``causal_labels_path``,
@@ -154,8 +155,7 @@ def _build_distribution_frame(config: DictConfig, log: Logger, output_path: Path
 
     benchmarks: list[tuple[str, Path]] = []
     all_ids: set[str] = set()
-    for benchmark_entry in config.benchmarks:
-        key, spec = next(iter(benchmark_entry.items()))
+    for key, spec in iter_benchmarks(config):
         split_json_path = splits_path / f"{spec.split_json}.json"
         if not split_json_path.exists():
             log.error("Split JSON not found at %s; skipping benchmark '%s'", split_json_path, key)
@@ -182,19 +182,20 @@ def _build_distribution_frame(config: DictConfig, log: Logger, output_path: Path
         [_build_long_frame(counts_df, name, split_json_path) for name, split_json_path in benchmarks],
         ignore_index=True,
     )
-    long_df.to_csv(output_path / "background_distribution.csv", index=False)
+    long_df.to_csv(output_path / "background_agents_distribution.csv", index=False)
     return long_df
 
 
-def run_background_distribution_analysis(config: DictConfig, log: Logger, output_path: Path) -> None:
+def run_background_agents_distribution_analysis(config: DictConfig, log: Logger, output_path: Path) -> None:
     """Compares non-background/background agent distributions across train/val/test splits for the background-agents
     benchmarks.
 
     Renders side-by-side violin and histogram plots (one panel per benchmark) plus a per-benchmark, per-split summary
-    for every configured quantity. The plots are driven entirely by the long-form ``background_distribution.csv``: when
-    it already exists (and ``overwrite`` is false) it is loaded directly, so re-rendering touches neither the scenario
-    pkls nor the split JSONs. Otherwise the frame is rebuilt — reusing the cached ``per_scenario_counts.csv`` when
-    present, and only falling back to loading scenarios when no cache exists or ``overwrite`` is set.
+    for every configured quantity. The plots are driven entirely by the long-form
+    ``background_agents_distribution.csv``: when it already exists (and ``overwrite`` is false) it is loaded directly,
+    so re-rendering touches neither the scenario pkls nor the split JSONs. Otherwise the frame is rebuilt — reusing the
+    cached ``per_scenario_counts.csv`` when present, and only falling back to loading scenarios when no cache exists or
+    ``overwrite`` is set.
 
     Args:
         config: Analysis configuration (``splits_path``, ``variants_base_path``, ``causal_labels_path``,
@@ -208,7 +209,7 @@ def run_background_distribution_analysis(config: DictConfig, log: Logger, output
     output_path.mkdir(parents=True, exist_ok=True)
     quantities = list(config.quantities)
 
-    long_cache = output_path / "background_distribution.csv"
+    long_cache = output_path / "background_agents_distribution.csv"
     if long_cache.exists() and not config.overwrite:
         log.info("Regenerating plots from cached %s (set overwrite=true to recompute from scenarios)", long_cache)
         long_df = pd.read_csv(long_cache)

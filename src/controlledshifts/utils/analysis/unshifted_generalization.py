@@ -17,9 +17,19 @@ import seaborn as sns
 from matplotlib.axes import Axes
 from omegaconf import DictConfig
 
-from controlledshifts.utils.analysis.common import model_colors, relative_gap_pct, set_yaxis_limits
-from controlledshifts.utils.analysis.distribution_shift import GAP_MIN_COLOR_VALUE, build_benchmark_df
-from controlledshifts.utils.constants import EPSILON
+from controlledshifts.utils.analysis.common import (
+    COMPACT_INSET_LEGEND_FONTSIZE,
+    COMPACT_SUPTITLE_FONTSIZE,
+    COMPACT_TICK_FONTSIZE,
+    iter_benchmarks,
+    load_results_csv,
+    model_colors,
+    relative_gap_pct,
+    save_figure,
+    set_yaxis_limits,
+)
+from controlledshifts.utils.analysis.distribution_shift import build_benchmark_df
+from controlledshifts.utils.analysis.latex import format_gap, format_value
 from controlledshifts.utils.plotting import set_analysis_theme
 
 
@@ -33,27 +43,8 @@ class Block(NamedTuple):
 def _parse_blocks(config: DictConfig) -> tuple[Block, list[Block]]:
     """Return the reference block and the list of benchmark blocks from the config."""
     reference = Block(config.reference.name, config.reference.split)
-    benchmarks = [Block(spec.name, spec.split) for entry in config.benchmarks for spec in entry.values()]
+    benchmarks = [Block(spec.name, spec.split) for _, spec in iter_benchmarks(config)]
     return reference, benchmarks
-
-
-def _format_value(value: float, best_value: float) -> str:
-    """Render a metric value, bolding it when it ties the block's best (minimum, lower-is-better)."""
-    if pd.isna(value):
-        return "---"
-    value_str = f"{value:.3f}"
-    if pd.notna(best_value) and np.isclose(value, best_value):
-        value_str = f"\\textbf{{{value_str}}}"
-    return value_str
-
-
-def _format_gap(gap: float, best_gap: float, worst_gap: float) -> str:
-    """Render a colored gap annotation; severity is scaled to the block's own ``[best, worst]`` gap range."""
-    denom = max(abs(worst_gap - best_gap), EPSILON)
-    severity = float(np.clip(abs(gap - best_gap) / denom, 0, 1))
-    intensity = int(GAP_MIN_COLOR_VALUE + severity * (100 - GAP_MIN_COLOR_VALUE))
-    color = "OrangeRed" if gap > 0 else "ForestGreen"
-    return f"\\textcolor{{{color}!{intensity}}}{{{gap:+.2f}\\%}}"
 
 
 def _build_mean_row(
@@ -102,12 +93,12 @@ def _build_block_rows(
 
         for metric in metrics:
             value = row[f"{eval_split}/{metric}"]
-            cell = _format_value(value, best_value[metric])
+            cell = format_value(value, best_value[metric])
             if not is_reference and pd.notna(value):
                 ref_value = row[f"{ref_split}/{metric}"]
                 if pd.notna(ref_value):
                     gap = relative_gap_pct(value, ref_value)
-                    cell = f"{cell} ({_format_gap(gap, *gap_stats[metric])})"
+                    cell = f"{cell} ({format_gap(gap, *gap_stats[metric])})"
             parts.append(cell)
         rows.append(" & ".join(parts) + " \\\\")
 
@@ -186,7 +177,11 @@ def _plot_benchmark_values(
         figsize=(max(8.0, 2.2 * len(block_names)) * n_cols, 4.5 * n_rows),
         constrained_layout=True,
     )
-    fig.suptitle(f"Per-Benchmark Performance (reference: {blocks[0].name})", fontsize=18, fontweight="bold")
+    fig.suptitle(
+        f"Per-Benchmark Performance (reference: {blocks[0].name})",
+        fontsize=COMPACT_SUPTITLE_FONTSIZE,
+        fontweight="bold",
+    )
     axes = np.atleast_1d(axes).flatten()
 
     x = np.arange(len(block_names))
@@ -211,20 +206,18 @@ def _plot_benchmark_values(
             bars[0].set_hatch("//")  # reference block
         ax.set_title(metric, fontweight="bold")
         ax.set_xticks(x)
-        ax.set_xticklabels(block_names, rotation=25, ha="right", fontsize=9)
+        ax.set_xticklabels(block_names, rotation=25, ha="right", fontsize=COMPACT_TICK_FONTSIZE)
         ax.set_ylabel("Value (↓)", fontweight="bold")
         set_yaxis_limits(ax, all_values, padding_factor=0.15, lower_factor=0.4, min_padding=0.1)
         ax.yaxis.grid(visible=True, alpha=0.3)
         ax.set_axisbelow(True)
         if idx == 0:
-            ax.legend(fontsize=8, ncol=2, title="Model")
+            ax.legend(fontsize=COMPACT_INSET_LEGEND_FONTSIZE, ncol=2, title="Model")
     for ax in axes[len(metrics) :]:
         ax.set_visible(False)
 
-    output_file = output_path / "benchmark_values.png"
-    fig.savefig(output_file, dpi=300)
-    plt.close(fig)
-    print(f"✓ Plot saved as '{output_file}'")
+    # tight=False preserves this figure's current cropping; it is one of the few that omits it, likely an oversight.
+    save_figure(fig, output_path / "benchmark_values.png", tight=False)
 
 
 def _plot_gap_heatmaps(
@@ -242,7 +235,7 @@ def _plot_gap_heatmaps(
         figsize=(max(7.0, 1.4 * len(models)) * n_cols, 1.0 * len(bench_names) * n_rows + 2.0),
         constrained_layout=True,
     )
-    fig.suptitle("Performance Gap vs Reference (%)", fontsize=18, fontweight="bold")
+    fig.suptitle("Performance Gap vs Reference (%)", fontsize=COMPACT_SUPTITLE_FONTSIZE, fontweight="bold")
     axes = np.atleast_1d(axes).flatten()
 
     for idx, metric in enumerate(metrics):
@@ -272,15 +265,13 @@ def _plot_gap_heatmaps(
             linecolor="white",
         )
         ax.set_title(metric, fontweight="bold")
-        ax.tick_params(axis="x", rotation=30, labelsize=9)
-        ax.tick_params(axis="y", rotation=0, labelsize=9)
+        ax.tick_params(axis="x", rotation=30, labelsize=COMPACT_TICK_FONTSIZE)
+        ax.tick_params(axis="y", rotation=0, labelsize=COMPACT_TICK_FONTSIZE)
     for ax in axes[len(metrics) :]:
         ax.set_visible(False)
 
-    output_file = output_path / "gap_heatmap.png"
-    fig.savefig(output_file, dpi=300)
-    plt.close(fig)
-    print(f"✓ Plot saved as '{output_file}'")
+    # tight=False preserves this figure's current cropping; it is one of the few that omits it, likely an oversight.
+    save_figure(fig, output_path / "gap_heatmap.png", tight=False)
 
 
 def _print_summary(df: pd.DataFrame, ref_split: str, benchmarks: list[Block], metrics: list[str]) -> None:
@@ -317,12 +308,8 @@ def run_unshifted_generalization_analysis(config: DictConfig, log: Logger, outpu
     output_path.mkdir(parents=True, exist_ok=True)
 
     metrics_filepath = Path(config.benchmarks_filepath)
-    if not metrics_filepath.exists():
-        log.error("Results file not found at %s", metrics_filepath)
-        return
-    metrics_df = pd.read_csv(metrics_filepath)
-    if "Name" not in metrics_df.columns:
-        log.error("CSV must contain a 'Name' column")
+    metrics_df = load_results_csv(metrics_filepath, log)
+    if metrics_df is None:
         return
 
     metrics = list(config.trajectory_forecasting_metrics)

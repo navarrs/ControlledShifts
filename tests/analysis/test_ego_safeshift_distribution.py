@@ -5,7 +5,7 @@ import logging
 import pandas as pd
 from omegaconf import OmegaConf
 
-from controlledshifts.utils.analysis.score_distribution import run_score_distribution_analysis
+from controlledshifts.utils.analysis.ego_safeshift_distribution import run_ego_safeshift_distribution_analysis
 
 
 QUANTITIES = [
@@ -47,9 +47,11 @@ def test_writes_frame_summary_and_plots(tmp_path):
     _write_scores_csv(csv_path, num_scenarios=200)
     output_path = tmp_path / "out"
 
-    run_score_distribution_analysis(_make_config(csv_path, output_path), logging.getLogger(__name__), output_path)
+    run_ego_safeshift_distribution_analysis(
+        _make_config(csv_path, output_path), logging.getLogger(__name__), output_path
+    )
 
-    assert (output_path / "score_distribution.csv").exists()
+    assert (output_path / "ego_safeshift_distribution.csv").exists()
     assert (output_path / "summary.csv").exists()
     for quantity in QUANTITIES:
         for kind in ("violin", "histogram", "ridge"):
@@ -62,9 +64,11 @@ def test_score_split_sends_hardest_to_test(tmp_path):
     _write_scores_csv(csv_path, num_scenarios=200)
     output_path = tmp_path / "out"
 
-    run_score_distribution_analysis(_make_config(csv_path, output_path), logging.getLogger(__name__), output_path)
+    run_ego_safeshift_distribution_analysis(
+        _make_config(csv_path, output_path), logging.getLogger(__name__), output_path
+    )
 
-    long_df = pd.read_csv(output_path / "score_distribution.csv")
+    long_df = pd.read_csv(output_path / "ego_safeshift_distribution.csv")
     ego = long_df[long_df["benchmark"] == "EgoSafeShift"]
     ego_test = ego[ego["split"] == "testing"][SCORE_TYPE].mean()
     ego_train = ego[ego["split"] == "training"][SCORE_TYPE].mean()
