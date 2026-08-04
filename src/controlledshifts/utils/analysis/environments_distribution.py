@@ -27,6 +27,8 @@ from sklearn.metrics import silhouette_samples
 
 from controlledshifts.benchmarks.environments import load_descriptor_cache
 from controlledshifts.utils.analysis.common import (
+    COMPACT_ANNOT_FONTSIZE,
+    COMPACT_LEGEND_FONTSIZE,
     SPLIT_COLOR_MAP,
     SPLIT_LABELS,
     SPLIT_ORDER,
@@ -153,7 +155,7 @@ def _plot_tsne(frame: pd.DataFrame, output_path: Path, *, show_axes: bool, seed:
         loc="upper center",
         bbox_to_anchor=(0.5, -0.12),
         ncol=min(n_clusters, 10),
-        fontsize=12,
+        fontsize=COMPACT_LEGEND_FONTSIZE,
         framealpha=0.8,
         markerscale=3,
         labelcolor=TEXT_COLOR,
@@ -217,7 +219,14 @@ def _plot_silhouette(frame: pd.DataFrame, output_path: Path) -> None:
             continue
         y_upper = y_lower + values.size
         ax.fill_betweenx(np.arange(y_lower, y_upper), 0, values, facecolor=cmap(cluster_id), alpha=0.8, linewidth=0)
-        ax.text(-0.02, y_lower + 0.5 * values.size, f"C{cluster_id}", va="center", ha="right", fontsize=10)
+        ax.text(
+            -0.02,
+            y_lower + 0.5 * values.size,
+            f"C{cluster_id}",
+            va="center",
+            ha="right",
+            fontsize=COMPACT_ANNOT_FONTSIZE,
+        )
         y_lower = y_upper + 10
 
     ax.axvline(mean_silhouette, color="red", linestyle="--", label=f"mean = {mean_silhouette:.3f}")

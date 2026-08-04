@@ -18,6 +18,9 @@ from matplotlib.axes import Axes
 from omegaconf import DictConfig
 
 from controlledshifts.utils.analysis.common import (
+    COMPACT_INSET_LEGEND_FONTSIZE,
+    COMPACT_SUPTITLE_FONTSIZE,
+    COMPACT_TICK_FONTSIZE,
     iter_benchmarks,
     load_results_csv,
     model_colors,
@@ -174,7 +177,11 @@ def _plot_benchmark_values(
         figsize=(max(8.0, 2.2 * len(block_names)) * n_cols, 4.5 * n_rows),
         constrained_layout=True,
     )
-    fig.suptitle(f"Per-Benchmark Performance (reference: {blocks[0].name})", fontsize=18, fontweight="bold")
+    fig.suptitle(
+        f"Per-Benchmark Performance (reference: {blocks[0].name})",
+        fontsize=COMPACT_SUPTITLE_FONTSIZE,
+        fontweight="bold",
+    )
     axes = np.atleast_1d(axes).flatten()
 
     x = np.arange(len(block_names))
@@ -199,13 +206,13 @@ def _plot_benchmark_values(
             bars[0].set_hatch("//")  # reference block
         ax.set_title(metric, fontweight="bold")
         ax.set_xticks(x)
-        ax.set_xticklabels(block_names, rotation=25, ha="right", fontsize=9)
+        ax.set_xticklabels(block_names, rotation=25, ha="right", fontsize=COMPACT_TICK_FONTSIZE)
         ax.set_ylabel("Value (↓)", fontweight="bold")
         set_yaxis_limits(ax, all_values, padding_factor=0.15, lower_factor=0.4, min_padding=0.1)
         ax.yaxis.grid(visible=True, alpha=0.3)
         ax.set_axisbelow(True)
         if idx == 0:
-            ax.legend(fontsize=8, ncol=2, title="Model")
+            ax.legend(fontsize=COMPACT_INSET_LEGEND_FONTSIZE, ncol=2, title="Model")
     for ax in axes[len(metrics) :]:
         ax.set_visible(False)
 
@@ -228,7 +235,7 @@ def _plot_gap_heatmaps(
         figsize=(max(7.0, 1.4 * len(models)) * n_cols, 1.0 * len(bench_names) * n_rows + 2.0),
         constrained_layout=True,
     )
-    fig.suptitle("Performance Gap vs Reference (%)", fontsize=18, fontweight="bold")
+    fig.suptitle("Performance Gap vs Reference (%)", fontsize=COMPACT_SUPTITLE_FONTSIZE, fontweight="bold")
     axes = np.atleast_1d(axes).flatten()
 
     for idx, metric in enumerate(metrics):
@@ -258,8 +265,8 @@ def _plot_gap_heatmaps(
             linecolor="white",
         )
         ax.set_title(metric, fontweight="bold")
-        ax.tick_params(axis="x", rotation=30, labelsize=9)
-        ax.tick_params(axis="y", rotation=0, labelsize=9)
+        ax.tick_params(axis="x", rotation=30, labelsize=COMPACT_TICK_FONTSIZE)
+        ax.tick_params(axis="y", rotation=0, labelsize=COMPACT_TICK_FONTSIZE)
     for ax in axes[len(metrics) :]:
         ax.set_visible(False)
 

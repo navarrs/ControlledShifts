@@ -26,17 +26,20 @@ import seaborn as sns
 from omegaconf import DictConfig
 
 from controlledshifts.benchmarks.common import BenchmarkSplit, load_benchmark_split
-from controlledshifts.utils.analysis.common import iter_benchmarks, save_figure
+from controlledshifts.utils.analysis.common import (
+    CBAR_LABEL_FONTSIZE,
+    CBAR_TICK_FONTSIZE,
+    HEATMAP_ANNOT_FONTSIZE,
+    HEATMAP_LABEL_FONTSIZE,
+    HEATMAP_LEGEND_FONTSIZE,
+    iter_benchmarks,
+    save_figure,
+)
 from controlledshifts.utils.plotting import set_analysis_theme
 
 
 _MIN_BENCHMARKS = 2
 _ABBREV_LENGTH = 3
-_LABEL_FONTSIZE = 16
-_ANNOT_FONTSIZE = 18
-_CBAR_TICK_FONTSIZE = 16
-_CBAR_LABEL_FONTSIZE = 20
-_LEGEND_FONTSIZE = 14
 
 
 def _load_benchmarks(config: DictConfig, log: Logger) -> dict[str, BenchmarkSplit]:
@@ -132,7 +135,7 @@ def _plot_overlap_grid(
             ax=ax,
             annot=True,
             fmt=".2f",
-            annot_kws={"size": _ANNOT_FONTSIZE},
+            annot_kws={"size": HEATMAP_ANNOT_FONTSIZE},
             vmin=0.0,
             vmax=1.0,
             cmap="rocket",
@@ -142,8 +145,8 @@ def _plot_overlap_grid(
             cbar=False,
         )
         ax.set_title(f"{split.capitalize()} Set", fontweight="bold")
-        ax.tick_params(axis="x", rotation=0, labelsize=_LABEL_FONTSIZE)
-        ax.tick_params(axis="y", rotation=0, labelsize=_LABEL_FONTSIZE)
+        ax.tick_params(axis="x", rotation=0, labelsize=HEATMAP_LABEL_FONTSIZE)
+        ax.tick_params(axis="y", rotation=0, labelsize=HEATMAP_LABEL_FONTSIZE)
 
     # Draw once so the square=True axes settle into their final boxes, then size the colorbar to match the
     # rightmost heatmap's height (rather than the taller subplot axes).
@@ -152,13 +155,13 @@ def _plot_overlap_grid(
     cax = fig.add_axes((last_pos.x1 + 0.01, last_pos.y0, 0.012, last_pos.height))
     mappable = mpl.cm.ScalarMappable(norm=mpl.colors.Normalize(vmin=0.0, vmax=1.0), cmap="rocket")
     cb = fig.colorbar(mappable, cax=cax)
-    cb.set_label("Jaccard overlap", fontsize=_CBAR_LABEL_FONTSIZE, fontweight="bold")
-    cb.ax.tick_params(labelsize=_CBAR_TICK_FONTSIZE)
+    cb.set_label("Jaccard overlap", fontsize=CBAR_LABEL_FONTSIZE, fontweight="bold")
+    cb.ax.tick_params(labelsize=CBAR_TICK_FONTSIZE)
     cb.outline.set_visible(False)
 
     # Mathtext bolds the abbreviations; `fontweight` cannot, because DM Sans ships here as a single regular face.
     legend = "   ".join(rf"$\bf{{{label}}}$ = {name}" for label, name in zip(labels, names, strict=True))
-    fig.text(0.5, last_pos.y0 - 0.14, legend, ha="center", va="top", fontsize=_LEGEND_FONTSIZE)
+    fig.text(0.5, last_pos.y0 - 0.14, legend, ha="center", va="top", fontsize=HEATMAP_LEGEND_FONTSIZE)
 
     fig.suptitle("Scenario Overlap across Benchmarks", fontweight="bold", y=1.01)
     save_figure(fig, output_path / "scenario_overlap.png", label="Heatmap")

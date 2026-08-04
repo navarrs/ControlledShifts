@@ -55,6 +55,13 @@ from numpy.typing import NDArray
 from omegaconf import DictConfig
 
 from controlledshifts.utils.analysis.common import (
+    COMPACT_LABEL_FONTSIZE,
+    COMPACT_LEGEND_FONTSIZE,
+    COMPACT_SUBTITLE_FONTSIZE,
+    COMPACT_SUPTITLE_FONTSIZE,
+    COMPACT_TICK_FONTSIZE,
+    COMPACT_TITLE_FONTSIZE,
+    GRAY_TEXT_COLOR,
     METRIC_ABBREV_MAP,
     METRIC_NAME_MAP,
     MODEL_NAME_MAP,
@@ -112,8 +119,8 @@ def _set_titles(fig: plt.Figure, title: str, subtitle: str) -> None:
         title: Main title text.
         subtitle: Subtitle text.
     """
-    fig.suptitle(title, fontsize=18, fontweight="bold")
-    fig.text(0.5, 0.93, subtitle, ha="center", va="top", fontsize=13, color="dimgray")
+    fig.suptitle(title, fontsize=COMPACT_SUPTITLE_FONTSIZE, fontweight="bold")
+    fig.text(0.5, 0.93, subtitle, ha="center", va="top", fontsize=COMPACT_SUBTITLE_FONTSIZE, color=GRAY_TEXT_COLOR)
 
 
 def _score(model: float, ref: float) -> float:
@@ -570,9 +577,9 @@ def _plot_score_radar(  # noqa: PLR0913
         labels,
         loc="lower center",
         ncol=min(len(labels), 3),
-        fontsize=12,
+        fontsize=COMPACT_LEGEND_FONTSIZE,
         title="Model (mean score)",
-        title_fontsize=13,
+        title_fontsize=COMPACT_SUBTITLE_FONTSIZE,
         frameon=True,
         framealpha=0.9,
         bbox_to_anchor=(0.5, -0.02),
@@ -584,7 +591,15 @@ def _plot_score_radar(  # noqa: PLR0913
     if caption:
         fig.canvas.draw()
         legend_bottom = legend.get_window_extent().transformed(fig.transFigure.inverted()).y0
-        fig.text(0.5, legend_bottom - 0.015, caption, ha="center", va="top", fontsize=12, color="dimgray")
+        fig.text(
+            0.5,
+            legend_bottom - 0.015,
+            caption,
+            ha="center",
+            va="top",
+            fontsize=COMPACT_LEGEND_FONTSIZE,
+            color=GRAY_TEXT_COLOR,
+        )
 
     save_figure(fig, output_path / f"{filename}.png")
 
@@ -694,16 +709,16 @@ def _plot_robustness_decomposition(  # noqa: PLR0913
         ax.set_xlim(lower, upper)
         ax.set_ylim(lower, upper)
         panel_label = COMBINED_COLUMN if panel == COMBINED_COLUMN else _metric_label(panel)
-        ax.set_title(panel_label, fontsize=13, fontweight="bold")
+        ax.set_title(panel_label, fontsize=COMPACT_TITLE_FONTSIZE, fontweight="bold")
         ax.set_aspect("equal", adjustable="box")
-        ax.tick_params(axis="both", labelsize=9, colors="dimgray")
+        ax.tick_params(axis="both", labelsize=COMPACT_TICK_FONTSIZE, colors=GRAY_TEXT_COLOR)
         ax.grid(visible=True, color="gray", alpha=0.18, linewidth=0.6)
         sns.despine(ax=ax, trim=False)
         # With shared axes, only label the outer edges to avoid repetition.
         if index % n_cols == 0:
-            ax.set_ylabel("OOD score", fontsize=12, fontweight="bold")
+            ax.set_ylabel("OOD score", fontsize=COMPACT_LABEL_FONTSIZE, fontweight="bold")
         if index >= len(panels) - n_cols:
-            ax.set_xlabel("ID score", fontsize=12, fontweight="bold")
+            ax.set_xlabel("ID score", fontsize=COMPACT_LABEL_FONTSIZE, fontweight="bold")
 
     for ax in flat_axes[len(panels) :]:
         ax.set_visible(False)
@@ -714,7 +729,7 @@ def _plot_robustness_decomposition(  # noqa: PLR0913
         labels,
         loc="lower center",
         ncol=min(len(labels), 5),
-        fontsize=12,
+        fontsize=COMPACT_LEGEND_FONTSIZE,
         frameon=True,
         framealpha=0.9,
         bbox_to_anchor=(0.5, -0.02),

@@ -18,6 +18,12 @@ from numpy.typing import NDArray
 from omegaconf import DictConfig
 
 from controlledshifts.utils.analysis.common import (
+    COMPACT_ANNOT_FONTSIZE,
+    COMPACT_LABEL_FONTSIZE,
+    COMPACT_LEGEND_FONTSIZE,
+    COMPACT_SUPTITLE_FONTSIZE,
+    COMPACT_TICK_FONTSIZE,
+    COMPACT_TITLE_FONTSIZE,
     MODEL_NAME_MAP,
     MODEL_SIZE_MAP,
     iter_benchmarks,
@@ -53,22 +59,22 @@ def _plot_distribution_shift_comparison(
         values = summary_df[metric].to_numpy()
         bars = ax.bar(models, values, color=palette, alpha=0.8, edgecolor="black", linewidth=1.5)
 
-        ax.set_ylabel(metric, fontsize=10, fontweight="bold")
-        ax.set_title(title, fontsize=12, fontweight="bold")
-        ax.tick_params(axis="x", labelsize=9, rotation=30)
+        ax.set_ylabel(metric, fontsize=COMPACT_LABEL_FONTSIZE, fontweight="bold")
+        ax.set_title(title, fontsize=COMPACT_TITLE_FONTSIZE, fontweight="bold")
+        ax.tick_params(axis="x", labelsize=COMPACT_TICK_FONTSIZE, rotation=30)
 
         for bar in bars:
             height = bar.get_height()
             if not np.isnan(height):
                 x = bar.get_x() + bar.get_width() / 2.0
-                ax.text(x, height, f"{height:.3f}", ha="center", va="bottom", fontsize=10)
+                ax.text(x, height, f"{height:.3f}", ha="center", va="bottom", fontsize=COMPACT_ANNOT_FONTSIZE)
         ax.yaxis.grid(visible=True, alpha=0.3)
 
         set_yaxis_limits(ax, list(values), padding_factor=0.15, lower_factor=0.4, min_padding=0.1)
 
     n_models = models.shape[0]
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(1.5 * n_models * 3, 6))
-    fig.suptitle("Distribution Shift Analysis", fontsize=14, fontweight="bold")
+    fig.suptitle("Distribution Shift Analysis", fontsize=COMPACT_SUPTITLE_FONTSIZE, fontweight="bold")
 
     _plot_bars(ax1, id_metric, "In-Distribution (ID) Performance")
     _plot_bars(ax2, ood_metric, "Out-of-Distribution (OOD) Performance")
@@ -81,16 +87,16 @@ def _plot_distribution_shift_comparison(
     gap_colors = ["#f07569" if gap > 0 else "#7cbf7c" for gap in gap_values]
     bars = ax3.bar(models, gap_values, color=gap_colors, alpha=0.8, edgecolor="black", linewidth=1.5)
     ax3.axhline(y=0, color="black", linestyle="-", linewidth=1.5)
-    ax3.set_ylabel("Performance Gap (OOD - ID)", fontsize=11, fontweight="bold")
-    ax3.set_title("Generalization Gap", fontsize=12, fontweight="bold")
-    ax3.tick_params(axis="x", labelsize=12, rotation=30)
+    ax3.set_ylabel("Performance Gap (OOD - ID)", fontsize=COMPACT_LABEL_FONTSIZE, fontweight="bold")
+    ax3.set_title("Generalization Gap", fontsize=COMPACT_TITLE_FONTSIZE, fontweight="bold")
+    ax3.tick_params(axis="x", labelsize=COMPACT_TICK_FONTSIZE, rotation=30)
 
     for bar, gap in zip(bars, gap_values, strict=False):
         height = bar.get_height()
         if not np.isnan(height):
             va = "bottom" if height > 0 else "top"
             x = bar.get_x() + bar.get_width() / 2.0
-            ax3.text(x, height, f"{gap:.3f}", ha="center", va=va, fontsize=8, fontweight="bold")
+            ax3.text(x, height, f"{gap:.3f}", ha="center", va=va, fontsize=COMPACT_ANNOT_FONTSIZE, fontweight="bold")
     ax3.yaxis.grid(visible=True, alpha=0.3)
 
     plt.tight_layout()
@@ -114,7 +120,7 @@ def _plot_benchmark_comparison(
     n_rows = math.ceil(num_metrics / n_cols)
 
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(2.0 * n_models * n_cols, 4.0 * n_rows), constrained_layout=True)
-    fig.suptitle("Model Performance Comparison", fontsize=20, fontweight="bold")
+    fig.suptitle("Model Performance Comparison", fontsize=COMPACT_SUPTITLE_FONTSIZE, fontweight="bold")
 
     axes = np.atleast_1d(axes).flatten()
 
@@ -130,8 +136,8 @@ def _plot_benchmark_comparison(
         bars = ax.bar(model_order, values, color=palette, edgecolor="black", linewidth=1.0, alpha=0.8)
 
         ax.set_title(metric_name, pad=12)
-        ax.set_ylabel("Metric Value", fontsize=12)
-        ax.tick_params(axis="x", labelsize=10)
+        ax.set_ylabel("Metric Value", fontsize=COMPACT_LABEL_FONTSIZE)
+        ax.tick_params(axis="x", labelsize=COMPACT_TICK_FONTSIZE)
         ax.set_axisbelow(True)
 
         set_yaxis_limits(ax, list(values), padding_factor=0.15, lower_factor=0.4, min_padding=0.1)
@@ -147,7 +153,7 @@ def _plot_benchmark_comparison(
                     textcoords="offset points",
                     ha="center",
                     va="bottom",
-                    fontsize=10,
+                    fontsize=COMPACT_ANNOT_FONTSIZE,
                     fontweight="medium",
                 )
 
@@ -189,7 +195,7 @@ def _plot_performance_gaps(
         num_models = summary_df["Model"].shape[0]
         horizontal_size = num_models * num_metrics * 1.5
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(horizontal_size, 6))
-        fig.suptitle("Performance Gaps (OOD - ID)", fontsize=14, fontweight="bold")
+        fig.suptitle("Performance Gaps (OOD - ID)", fontsize=COMPACT_SUPTITLE_FONTSIZE, fontweight="bold")
         x = np.arange(len(summary_df))
         width = 0.25
         for i, (metric_name, gaps) in enumerate(gap_data.items()):
@@ -198,24 +204,30 @@ def _plot_performance_gaps(
             ax2.bar(x + offset, gaps["percent"], width, label=metric_name, alpha=0.8, edgecolor="black", linewidth=1)
 
         ax1.axhline(y=0, color="black", linestyle="-", linewidth=1.5)
-        ax1.set_xlabel("Model", fontsize=12, fontweight="bold")
-        ax1.set_ylabel("Absolute Gap (OOD - ID)", fontsize=12, fontweight="bold")
-        ax1.set_title("Absolute Performance Gaps\n(Positive = OOD performs worse)", fontsize=12, fontweight="bold")
+        ax1.set_xlabel("Model", fontsize=COMPACT_LABEL_FONTSIZE, fontweight="bold")
+        ax1.set_ylabel("Absolute Gap (OOD - ID)", fontsize=COMPACT_LABEL_FONTSIZE, fontweight="bold")
+        ax1.set_title(
+            "Absolute Performance Gaps\n(Positive = OOD performs worse)",
+            fontsize=COMPACT_TITLE_FONTSIZE,
+            fontweight="bold",
+        )
         ax1.set_xticks(x + (num_metrics - 1) * width)
-        ax1.set_xticklabels(summary_df["Model"].values, ha="right", fontsize=12)
-        ax1.legend(fontsize=10)
+        ax1.set_xticklabels(summary_df["Model"].values, ha="right", fontsize=COMPACT_TICK_FONTSIZE)
+        ax1.legend(fontsize=COMPACT_LEGEND_FONTSIZE)
         ax1.yaxis.grid(visible=True, alpha=0.3)
         ax1.set_axisbelow(True)
 
         ax2.axhline(y=0, color="black", linestyle="-", linewidth=1.5)
-        ax2.set_xlabel("Model", fontsize=12, fontweight="bold")
-        ax2.set_ylabel("Percentage Gap (%)", fontsize=12, fontweight="bold")
+        ax2.set_xlabel("Model", fontsize=COMPACT_LABEL_FONTSIZE, fontweight="bold")
+        ax2.set_ylabel("Percentage Gap (%)", fontsize=COMPACT_LABEL_FONTSIZE, fontweight="bold")
         ax2.set_title(
-            "Percentage Performance Gaps\n(Positive = OOD worse, % relative to ID)", fontsize=12, fontweight="bold"
+            "Percentage Performance Gaps\n(Positive = OOD worse, % relative to ID)",
+            fontsize=COMPACT_TITLE_FONTSIZE,
+            fontweight="bold",
         )
         ax2.set_xticks(x + (num_metrics - 1) * width)
-        ax2.set_xticklabels(summary_df["Model"].values, ha="right", fontsize=14)
-        ax2.legend(fontsize=10)
+        ax2.set_xticklabels(summary_df["Model"].values, ha="right", fontsize=COMPACT_TICK_FONTSIZE)
+        ax2.legend(fontsize=COMPACT_LEGEND_FONTSIZE)
         ax2.yaxis.grid(visible=True, alpha=0.3)
         ax2.set_axisbelow(True)
 
@@ -262,12 +274,12 @@ def _plot_grouped_bar_chart(
 
         set_yaxis_limits(ax, all_values, padding_factor=0.15, lower_factor=0.4, min_padding=0.1)
 
-        ax.set_xlabel("Model", fontsize=12, fontweight="bold")
-        ax.set_ylabel("Metric Value", fontsize=12, fontweight="bold")
-        ax.set_title("Multi-Metric Comparison", fontsize=14, fontweight="bold")
+        ax.set_xlabel("Model", fontsize=COMPACT_LABEL_FONTSIZE, fontweight="bold")
+        ax.set_ylabel("Metric Value", fontsize=COMPACT_LABEL_FONTSIZE, fontweight="bold")
+        ax.set_title("Multi-Metric Comparison", fontsize=COMPACT_TITLE_FONTSIZE, fontweight="bold")
         ax.set_xticks(x + width * (len(available_metrics) - 1) / 2)
         ax.set_xticklabels(summary_df["Model"].values, rotation=35, ha="right")
-        ax.legend(loc="upper left", fontsize=10)
+        ax.legend(loc="upper left", fontsize=COMPACT_LEGEND_FONTSIZE)
         ax.yaxis.grid(visible=True, alpha=0.3)
         ax.set_axisbelow(True)
 
