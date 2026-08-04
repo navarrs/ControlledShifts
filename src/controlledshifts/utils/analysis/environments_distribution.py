@@ -19,7 +19,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
-from matplotlib.cm import get_cmap
 from matplotlib.patches import Patch
 from numpy.typing import NDArray
 from omegaconf import DictConfig
@@ -122,7 +121,7 @@ def _plot_tsne(frame: pd.DataFrame, output_path: Path, *, show_axes: bool, seed:
     """
     labels = frame["cluster_label"].to_numpy()
     n_clusters = int(labels.max()) + 1
-    cmap = get_cmap("tab10_r", n_clusters)
+    cmap = plt.get_cmap("tab10_r", n_clusters)
 
     fig, (ax_cluster, ax_split) = plt.subplots(1, 2, figsize=(20, 8), sharey=True)
     fig.suptitle("t-SNE of NetLSD Descriptors", color=TEXT_COLOR)
@@ -184,12 +183,7 @@ def _plot_tsne(frame: pd.DataFrame, output_path: Path, *, show_axes: bool, seed:
         labelcolor=TEXT_COLOR,
     )
 
-    ax_cluster.set_title("Environment clusters (t-SNE of NetLSD descriptors)")
-    ax_split.set_title("Benchmark splits (t-SNE of NetLSD descriptors)")
-    if show_axes:
-        ax_cluster.set(xlabel="t-SNE 1", ylabel="t-SNE 2")
-        ax_split.set(xlabel="t-SNE 1", ylabel="t-SNE 2")
-    else:
+    if not show_axes:
         for ax in (ax_cluster, ax_split):
             ax.set_xticks([])
             ax.set_yticks([])
@@ -209,7 +203,7 @@ def _plot_silhouette(frame: pd.DataFrame, output_path: Path) -> None:
     """Saves a per-cluster silhouette plot with the overall mean to ``silhouette.png``."""
     labels = frame["cluster_label"].to_numpy()
     n_clusters = int(labels.max()) + 1
-    cmap = get_cmap("tab20", n_clusters)
+    cmap = plt.get_cmap("tab20", n_clusters)
     mean_silhouette = float(frame["silhouette"].mean())
 
     fig, ax = plt.subplots(figsize=(8, 10))

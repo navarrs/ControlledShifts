@@ -2,8 +2,8 @@
 defaults:
   - default.yaml
 
-analysis_name: background_distribution
-output_path: ./outputs/background_distribution_analysis
+analysis_name: background_agents_distribution
+output_path: ./outputs/background_agents_distribution_analysis
 
 # Unlike the other analyses this reads raw data (split JSONs + base-variant scenario pkls + per-scenario causal labels)
 # rather than the combined model-results CSV, so it defines its own absolute path keys matching the benchmark configs.
@@ -12,7 +12,8 @@ variants_base_path: /data/driving/waymo/variants/base
 causal_labels_path: /data/driving/waymo/meta/causal_agents/processed_labels/
 
 num_workers: 8
-# When false (default), plots are regenerated from the cached background_distribution.csv (and per_scenario_counts.csv)
+# When false (default), plots are regenerated from the cached background_agents_distribution.csv (and
+# per_scenario_counts.csv)
 # without touching the scenario pkls or split JSONs. Set true to recompute everything from scenarios -- also required
 # to pick up changes to `benchmarks` against already-cached CSVs.
 overwrite: false

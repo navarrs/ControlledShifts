@@ -2,8 +2,8 @@
 defaults:
   - default.yaml
 
-analysis_name: score_distribution
-output_path: ./outputs/score_distribution_analysis
+analysis_name: ego_safeshift_distribution
+output_path: ./outputs/ego_safeshift_distribution_analysis
 
 # Unlike the model-results analyses this reads the ego-safeshift scores CSV (columns: scenario_ids + score columns) and
 # reproduces each benchmark's split in-script, so it needs neither scenario pkls nor a pre-existing split JSON.
@@ -13,7 +13,8 @@ scores_csv_path: /data/driving/waymo/meta/ego_safeshift/scores/scene_to_scores_m
 score_type: gt_critical_continuous_safeshift
 split_ratios: [0.70, 0.15, 0.15]
 
-# When false (default), plots are regenerated from the cached score_distribution.csv without re-reading the CSV. Set
+# When false (default), plots are regenerated from the cached ego_safeshift_distribution.csv without re-reading the CSV.
+# Set
 # true to recompute the frame -- also required to pick up changes to `benchmarks` against an already-cached CSV.
 overwrite: false
 

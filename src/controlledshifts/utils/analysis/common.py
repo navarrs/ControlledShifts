@@ -9,7 +9,6 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-import numpy.typing as npt
 import pandas as pd
 import seaborn as sns
 from matplotlib.axes import Axes
@@ -111,58 +110,6 @@ def set_yaxis_limits(
     ymin, ymax = np.nanmin(values), np.nanmax(values)
     padding = padding_factor * (ymax - ymin) if ymax > ymin else min_padding
     ax.set_ylim(ymin - padding * lower_factor, ymax + padding)
-
-
-def flatten_metrics(data: dict, prefix: str = "") -> dict[str, float | int | str | bool | None]:
-    """Recursively flatten a nested dict, joining keys with dots."""
-    flat: dict[str, float | int | str | bool | None] = {}
-    for key, value in data.items():
-        name = f"{prefix}.{key}" if prefix else str(key)
-        if isinstance(value, dict):
-            flat.update(flatten_metrics(value, name))
-        else:
-            flat[name] = value
-    return flat
-
-
-def plot_heatmap(  # noqa: PLR0913
-    heatmap: npt.NDArray[np.float64],
-    title: str,
-    x_label: str,
-    y_label: str,
-    cbar_label: str,
-    output_filepath: Path,
-    colormap: str = "viridis",
-) -> None:
-    """Visualizes a heatmap matrix.
-
-    Args:
-        heatmap: the matrix to plot.
-        title: the title of the heatmap.
-        x_label: the label of the x-axis.
-        y_label: the label of the y-axis.
-        cbar_label: the label of the colorbar.
-        colormap: the colormap to use.
-        output_filepath: filepath to save the visualization.
-    """
-    plt.figure(figsize=(35, 30))
-
-    plt.imshow(heatmap, cmap=colormap, aspect="auto")
-    cbar = plt.colorbar()
-    cbar.ax.tick_params(labelsize=40)
-    cbar.set_label(cbar_label, size=40)
-
-    plt.title(title, fontsize=50)
-    plt.xlabel(x_label, fontsize=40)
-    plt.ylabel(y_label, fontsize=40)
-    plt.xticks(range(heatmap.shape[0]))
-    plt.yticks(range(heatmap.shape[1]))
-    plt.grid(visible=False)
-
-    plt.tight_layout()
-    plt.savefig(output_filepath)
-    plt.close()
-    print(f"Heatmap saved to {output_filepath}")
 
 
 # --- Per-scenario distribution plots across train/val/test splits ----------------------------------------------------

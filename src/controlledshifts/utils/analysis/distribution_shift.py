@@ -629,7 +629,7 @@ def _write_combined_tex_table(
         (
             f"\\multirow{{2}}{{*}}{{\\textbf{{Benchmark}}}} & \\multirow{{2}}{{*}}{{\\textbf{{Model}}}} & "
             f"\\multirow{{2}}{{*}}{{\\textbf{{Model Size}}}} & "
-            f"\\multicolumn{{{n_metrics}}}{{c}}{{\\textbf{{Seem}}}} & "
+            f"\\multicolumn{{{n_metrics}}}{{c}}{{\\textbf{{Seen}}}} & "
             f"\\multicolumn{{{n_metrics}}}{{c}}{{\\textbf{{Unseen}}}} \\\\"
         ),
         " & & & " + " & ".join([*metrics, "", "", *metrics]) + " \\\\",

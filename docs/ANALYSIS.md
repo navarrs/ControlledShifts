@@ -88,8 +88,8 @@ uv run -m controlledshifts.run_analysis analysis=[analysis_name]
 | `distribution_shift` | Combined results CSV | Per-benchmark ID vs OOD comparison plots and a LaTeX table. |
 | `unshifted_generalization` | Combined results CSV | Gap of every benchmark against one unshifted reference split. |
 | `robustness` | Combined results CSV | Reference-relative quality/stability scores, radar plots, and a ranking. |
-| `background_distribution` | Scenario pkls + causal labels | How non-background/background agent counts distribute across the background benchmarks' splits. |
-| `score_distribution` | Scores CSV | How ego-safeshift criticality scores distribute across splits. |
+| `background_agents_distribution` | Scenario pkls + causal labels | How non-background/background agent counts distribute across the background benchmarks' splits. |
+| `ego_safeshift_distribution` | Scores CSV | How ego-safeshift criticality scores distribute across splits. |
 | `environments_distribution` | Clustering artifacts | TSNE and silhouette plots of the environments benchmark's clustering. |
 | `scenario_overlap` | Split JSONs | Jaccard overlap between benchmarks' splits. |
 
@@ -159,7 +159,7 @@ It also writes `<output_path>/robustness_summary.png`: a 3x2 grid whose columns 
 
 ### Background Agent Distribution
 
-[`analysis/background_distribution.yaml`](../src/controlledshifts/configs/analysis/background_distribution.yaml) compares how the two background-agents benchmarks distribute agents across their splits. `background_agents` reuses a random reference split, so its per-scenario agent counts should look the same across splits; `background_agents_hard` sends the scenarios with the most background agents to the test set, so its test split should be visibly shifted.
+[`analysis/background_agents_distribution.yaml`](../src/controlledshifts/configs/analysis/background_agents_distribution.yaml) compares how the two background-agents benchmarks distribute agents across their splits. `background_agents` reuses a random reference split, so its per-scenario agent counts should look the same across splits; `background_agents_hard` sends the scenarios with the most background agents to the test set, so its test split should be visibly shifted.
 
 It reads raw data rather than the results CSV: per-scenario `base` pkls (`variants_base_path`), JSON causal labels (`causal_labels_path`), and the benchmark split JSONs (`splits_path`). Each entry names the split JSON to read (`split_json` keeps the legacy on-disk spelling):
 
@@ -171,11 +171,11 @@ benchmarks:
 
 Counts (non-background = `causal_ids` + ego; background = everything else, via the same `get_background_mask` the benchmarks use) are intrinsic to a scenario, so they are computed once over `num_workers` processes and cached to `<output_path>/per_scenario_counts.csv`.
 
-Writes, under `<output_path>/` (`outputs/background_distribution_analysis/`): the cached `per_scenario_counts.csv`, the bucketed `background_distribution.csv`, a per-benchmark/per-split `summary.csv`, and the [distribution plots](#shared-conventions) for each quantity in `quantities` (`n_non_background`, `n_background`, `frac_background`, `n_total`).
+Writes, under `<output_path>/` (`outputs/background_agents_distribution_analysis/`): the cached `per_scenario_counts.csv`, the bucketed `background_agents_distribution.csv`, a per-benchmark/per-split `summary.csv`, and the [distribution plots](#shared-conventions) for each quantity in `quantities` (`n_non_background`, `n_background`, `frac_background`, `n_total`).
 
 ### Ego-SafeShift Score Distribution
 
-[`analysis/score_distribution.yaml`](../src/controlledshifts/configs/analysis/score_distribution.yaml) compares how the ego-safeshift criticality scores distribute across splits. `ego_safeshift` sends the highest-scoring scenarios to the test set, so its test split should be shifted toward higher scores; the `uniform` baseline splits randomly, so its distributions should match across splits.
+[`analysis/ego_safeshift_distribution.yaml`](../src/controlledshifts/configs/analysis/ego_safeshift_distribution.yaml) compares how the ego-safeshift criticality scores distribute across splits. `ego_safeshift` sends the highest-scoring scenarios to the test set, so its test split should be shifted toward higher scores; the `uniform` baseline splits randomly, so its distributions should match across splits.
 
 It reads only the scores CSV at `scores_csv_path` (columns: `scenario_ids` plus one column per score). Each benchmark's split is reproduced in-script from the scores via the same `split_ids_by_score` / `split_ids_by_ratio` the benchmarks use, so it needs neither the scenario pkls nor a pre-existing split JSON. Unlike benchmark creation, scenarios are not filtered by on-disk availability — every scored scenario in the CSV is included.
 
@@ -185,7 +185,7 @@ benchmarks:
   - uniform: {name: Uniform (random), split: random}
 ```
 
-Writes, under `<output_path>/`: `score_distribution.csv`, a per-benchmark/per-split `summary.csv`, and the
+Writes, under `<output_path>/`: `ego_safeshift_distribution.csv`, a per-benchmark/per-split `summary.csv`, and the
 [distribution plots](#shared-conventions) for each quantity in `quantities`.
 
 ### Environments Distribution
@@ -225,6 +225,6 @@ Writes, under `<output_path>/`: `scenario_overlap.png` (one annotated Jaccard he
 
 ### Shared conventions
 
-**Distribution plots.** The `background_distribution` and `score_distribution` analyses render, for each quantity listed in `quantities`, the same three side-by-side views with one panel per benchmark: a violin (`<quantity>_violin.png`, splits on the x-axis), a histogram (`<quantity>_histogram.png`, overlaid per-split density curves), and a ridgeline (`<quantity>_ridge.png`, one overlapping density row per split).
+**Distribution plots.** The `background_agents_distribution` and `ego_safeshift_distribution` analyses render, for each quantity listed in `quantities`, the same three side-by-side views with one panel per benchmark: a violin (`<quantity>_violin.png`, splits on the x-axis), a histogram (`<quantity>_histogram.png`, overlaid per-split density curves), and a ridgeline (`<quantity>_ridge.png`, one overlapping density row per split).
 
-**Caching.** The `background_distribution`, `score_distribution` and `environments_distribution` analyses cache their intermediate frames as CSVs and regenerate their figures from those on a re-run, so plots can be restyled without touching the source data. Set `overwrite=true` to rebuild the cache — also required to pick up changes to `benchmarks` against an already-cached CSV.
+**Caching.** The `background_agents_distribution`, `ego_safeshift_distribution` and `environments_distribution` analyses cache their intermediate frames as CSVs and regenerate their figures from those on a re-run, so plots can be restyled without touching the source data. Set `overwrite=true` to rebuild the cache — also required to pick up changes to `benchmarks` against an already-cached CSV.

@@ -92,7 +92,7 @@ def _build_distribution_frame(config: DictConfig, log: Logger, output_path: Path
     """Builds and caches the long-form score distribution frame from the scores CSV.
 
     Reads the scores CSV, strips the ``.pkl`` suffix from scenario IDs (matching benchmark creation), reproduces each
-    configured benchmark's split, and writes the combined long-form frame to ``score_distribution.csv``.
+    configured benchmark's split, and writes the combined long-form frame to ``ego_safeshift_distribution.csv``.
 
     Args:
         config: Analysis configuration (``scores_csv_path``, ``score_type``, ``split_ratios``, ``seed``, ``quantities``,
@@ -117,17 +117,17 @@ def _build_distribution_frame(config: DictConfig, log: Logger, output_path: Path
         frames.append(_build_long_frame(scores_df, spec.name, spec.split, config))
 
     long_df = pd.concat(frames, ignore_index=True)
-    long_df.to_csv(output_path / "score_distribution.csv", index=False)
+    long_df.to_csv(output_path / "ego_safeshift_distribution.csv", index=False)
     return long_df
 
 
-def run_score_distribution_analysis(config: DictConfig, log: Logger, output_path: Path) -> None:
+def run_ego_safeshift_distribution_analysis(config: DictConfig, log: Logger, output_path: Path) -> None:
     """Compares per-scenario criticality-score distributions across train/val/test splits for the ego-safeshift CSV.
 
     Renders side-by-side violin and histogram plots plus a ridgeline (one panel per benchmark) and a per-benchmark,
     per-split summary for every configured score quantity. The plots are driven entirely by the long-form
-    ``score_distribution.csv``: when it already exists (and ``overwrite`` is false) it is loaded directly; otherwise the
-    splits are reproduced from the scores CSV and the frame is rebuilt and cached.
+    ``ego_safeshift_distribution.csv``: when it already exists (and ``overwrite`` is false) it is loaded directly;
+    otherwise the splits are reproduced from the scores CSV and the frame is rebuilt and cached.
 
     Args:
         config: Analysis configuration (``scores_csv_path``, ``score_type``, ``split_ratios``, ``seed``, ``overwrite``,
@@ -141,7 +141,7 @@ def run_score_distribution_analysis(config: DictConfig, log: Logger, output_path
     output_path.mkdir(parents=True, exist_ok=True)
     quantities = list(config.quantities)
 
-    long_cache = output_path / "score_distribution.csv"
+    long_cache = output_path / "ego_safeshift_distribution.csv"
     if long_cache.exists() and not config.overwrite:
         log.info("Regenerating plots from cached %s (set overwrite=true to recompute from the scores CSV)", long_cache)
         long_df = pd.read_csv(long_cache)
