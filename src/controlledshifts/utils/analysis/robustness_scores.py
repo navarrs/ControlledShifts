@@ -879,7 +879,7 @@ def _plot_combined_summary(
 
     fig = plt.figure(figsize=(7.5 * n_cols, 18))
     gs = fig.add_gridspec(
-        3, n_cols, height_ratios=[1.0, 1.0, 0.55], hspace=0.22, wspace=0.3, left=0.17, right=0.97, top=0.87, bottom=0.11
+        3, n_cols, height_ratios=[1.0, 1.0, 0.55], hspace=0.28, wspace=0.3, left=0.17, right=0.97, top=0.87, bottom=0.11
     )
     fig_w, fig_h = fig.get_size_inches()
 
@@ -982,7 +982,7 @@ def _plot_combined_summary(
         mode="expand",
         fontsize=17,
         title="Model",
-        title_fontsize=18,
+        title_fontsize=20,
         handler_map={Patch: _AbbrevKeyHandler()},
         frameon=True,
         framealpha=0.9,
