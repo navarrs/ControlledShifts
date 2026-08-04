@@ -21,6 +21,7 @@ from controlledshifts.utils.analysis.common import (
     MODEL_NAME_MAP,
     MODEL_SIZE_MAP,
     relative_gap_pct,
+    save_figure,
     set_yaxis_limits,
 )
 from controlledshifts.utils.constants import EPSILON
@@ -95,9 +96,7 @@ def _plot_distribution_shift_comparison(
     ax3.yaxis.grid(visible=True, alpha=0.3)
 
     plt.tight_layout()
-    output_file = output_path / "distribution_shift_comparison.png"
-    plt.savefig(output_file, dpi=300, bbox_inches="tight")
-    print(f"✓ Plot saved as '{output_file}'")
+    save_figure(fig, output_path / "distribution_shift_comparison.png")
 
 
 def _plot_benchmark_comparison(
@@ -162,10 +161,8 @@ def _plot_benchmark_comparison(
     for ax in axes[len(metrics) :]:
         ax.set_visible(False)
 
-    output_file = output_path / "benchmark_comparison.png"
-    fig.savefig(output_file, dpi=300)
-    plt.close(fig)
-    print(f"\n✓ Plot saved as '{output_file}'")
+    # tight=False preserves this figure's current cropping; it is one of the few that omits it, likely an oversight.
+    save_figure(fig, output_path / "benchmark_comparison.png", tight=False)
 
 
 def _plot_performance_gaps(
@@ -225,9 +222,7 @@ def _plot_performance_gaps(
         ax2.set_axisbelow(True)
 
         plt.tight_layout()
-        output_file = output_path / "performance_gaps.png"
-        plt.savefig(output_file, dpi=300, bbox_inches="tight")
-        print(f"✓ Plot saved as '{output_file}'")
+        save_figure(fig, output_path / "performance_gaps.png")
 
         # Print gap statistics
         print("\n" + "=" * 80)
@@ -254,7 +249,7 @@ def _plot_grouped_bar_chart(
         output_path: Directory to save the generated plot.
         key_metrics_display: Key metric column names to include in the chart.
     """
-    _fig, ax = plt.subplots(figsize=(14, 7))
+    fig, ax = plt.subplots(figsize=(14, 7))
 
     available_metrics = [m for m in key_metrics_display if m in summary_df.columns]
 
@@ -279,9 +274,7 @@ def _plot_grouped_bar_chart(
         ax.set_axisbelow(True)
 
         plt.tight_layout()
-        output_file = output_path / "grouped_comparison.png"
-        plt.savefig(output_file, dpi=300, bbox_inches="tight")
-        print(f"✓ Plot saved as '{output_file}'")
+        save_figure(fig, output_path / "grouped_comparison.png")
 
     # Print best performing model for each metric
     print("\n" + "=" * 80)

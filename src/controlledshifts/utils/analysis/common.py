@@ -112,6 +112,27 @@ def set_yaxis_limits(
     ax.set_ylim(ymin - padding * lower_factor, ymax + padding)
 
 
+FIGURE_DPI = 300
+
+
+def save_figure(
+    fig: Figure, output_file: Path, *, dpi: int = FIGURE_DPI, tight: bool = True, label: str = "Plot"
+) -> None:
+    """Saves ``fig``, creating the parent directory, closing the figure and reporting the path.
+
+    Args:
+        fig: Figure to save; always closed afterwards, so callers must not reuse it.
+        output_file: Destination path, including the extension.
+        dpi: Output resolution.
+        tight: Crop to the drawn content, including artists outside the axes (``bbox_inches="tight"``).
+        label: Noun used in the confirmation message.
+    """
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_file, dpi=dpi, bbox_inches="tight" if tight else None)
+    plt.close(fig)
+    print(f"✓ {label} saved as '{output_file}'")
+
+
 # --- Per-scenario distribution plots across train/val/test splits ----------------------------------------------------
 # Shared by the background-agents and ego-safeshift distribution analyses: each renders one quantity per figure, with
 # the three splits compared side by side (violin/density) or stacked (ridgeline), one panel per benchmark. The
@@ -239,10 +260,7 @@ def plot_violin(long_df: pd.DataFrame, quantity: str, plot_config: SplitDistribu
     legend = _add_split_legend(fig, plot_config.palette)
     fig.tight_layout()
     _center_suptitle_over_content(fig, suptitle, legend)
-    output_file = plot_config.output_path / f"{quantity}_violin.png"
-    fig.savefig(output_file, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print(f"✓ Plot saved as '{output_file}'")
+    save_figure(fig, plot_config.output_path / f"{quantity}_violin.png")
 
 
 def plot_ridge(long_df: pd.DataFrame, quantity: str, plot_config: SplitDistributionPlotConfig) -> None:
@@ -309,10 +327,7 @@ def plot_ridge(long_df: pd.DataFrame, quantity: str, plot_config: SplitDistribut
     title = f"{plot_config.quantity_labels[quantity]}{plot_config.title_suffix}"
     fig.suptitle(title, fontsize=_SUPTITLE_FONTSIZE, color=TEXT_COLOR)
     fig.subplots_adjust(hspace=-0.25, top=0.9)
-    output_file = plot_config.output_path / f"{quantity}_ridge.png"
-    fig.savefig(output_file, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print(f"✓ Plot saved as '{output_file}'")
+    save_figure(fig, plot_config.output_path / f"{quantity}_ridge.png")
 
 
 def plot_distribution_histogram(long_df: pd.DataFrame, quantity: str, plot_config: SplitDistributionPlotConfig) -> None:
@@ -358,10 +373,7 @@ def plot_distribution_histogram(long_df: pd.DataFrame, quantity: str, plot_confi
     legend = _add_split_legend(fig, plot_config.palette)
     fig.tight_layout()
     _center_suptitle_over_content(fig, suptitle, legend)
-    output_file = plot_config.output_path / f"{quantity}_histogram.png"
-    fig.savefig(output_file, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print(f"✓ Plot saved as '{output_file}'")
+    save_figure(fig, plot_config.output_path / f"{quantity}_histogram.png")
 
 
 def write_split_distribution_summary(long_df: pd.DataFrame, quantities: list[str], output_path: Path) -> None:

@@ -59,6 +59,7 @@ from controlledshifts.utils.analysis.common import (
     METRIC_NAME_MAP,
     MODEL_NAME_MAP,
     model_colors,
+    save_figure,
 )
 from controlledshifts.utils.analysis.distribution_shift import build_benchmark_df
 from controlledshifts.utils.constants import EPSILON
@@ -582,11 +583,7 @@ def _plot_score_radar(  # noqa: PLR0913
         legend_bottom = legend.get_window_extent().transformed(fig.transFigure.inverted()).y0
         fig.text(0.5, legend_bottom - 0.015, caption, ha="center", va="top", fontsize=12, color="dimgray")
 
-    output_path.mkdir(parents=True, exist_ok=True)
-    output_file = output_path / f"{filename}.png"
-    plt.savefig(output_file, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print(f"✓ Plot saved as '{output_file}'")
+    save_figure(fig, output_path / f"{filename}.png")
 
 
 def _write_scores_csv(scores_df: pd.DataFrame, output_path: Path, filename: str, *, label: str) -> Path:
@@ -730,11 +727,7 @@ def _plot_robustness_decomposition(  # noqa: PLR0913
 
     _set_titles(fig, title, subtitle)
     fig.tight_layout(rect=(0, 0.04, 1, 0.95))
-    output_path.mkdir(parents=True, exist_ok=True)
-    output_file = output_path / f"{filename}.png"
-    fig.savefig(output_file, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print(f"✓ Plot saved as '{output_file}'")
+    save_figure(fig, output_path / f"{filename}.png")
 
 
 def _draw_combined_ranking(  # noqa: PLR0913
@@ -840,11 +833,7 @@ def _plot_combined_ranking(  # noqa: PLR0913
     _set_titles(fig, title, subtitle)
 
     fig.tight_layout(rect=(0, 0, 1, 0.95))
-    output_path.mkdir(parents=True, exist_ok=True)
-    output_file = output_path / f"{filename}.png"
-    fig.savefig(output_file, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print(f"✓ Plot saved as '{output_file}'")
+    save_figure(fig, output_path / f"{filename}.png")
 
 
 def _plot_combined_summary(
@@ -990,11 +979,7 @@ def _plot_combined_summary(
         bbox_to_anchor=(box_left, -0.05, box_right - box_left, 0.04),
     )
 
-    output_path.mkdir(parents=True, exist_ok=True)
-    output_file = output_path / f"{filename}.png"
-    fig.savefig(output_file, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print(f"✓ Plot saved as '{output_file}'")
+    save_figure(fig, output_path / f"{filename}.png")
 
 
 def run_robustness_scores_analysis(config: DictConfig, log: Logger, output_path: Path) -> None:

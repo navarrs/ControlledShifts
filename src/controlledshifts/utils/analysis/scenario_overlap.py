@@ -26,6 +26,7 @@ import seaborn as sns
 from omegaconf import DictConfig
 
 from controlledshifts.benchmarks.common import BenchmarkSplit, load_benchmark_split
+from controlledshifts.utils.analysis.common import save_figure
 from controlledshifts.utils.plotting import set_analysis_theme
 
 
@@ -165,10 +166,7 @@ def _plot_overlap_grid(
     fig.text(0.5, last_pos.y0 - 0.14, legend, ha="center", va="top", fontsize=_LEGEND_FONTSIZE)
 
     fig.suptitle("Scenario Overlap across Benchmarks", fontweight="bold", y=1.01)
-    output_file = output_path / "scenario_overlap.png"
-    fig.savefig(output_file, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print(f"✓ Heatmap saved as '{output_file}'")
+    save_figure(fig, output_path / "scenario_overlap.png", label="Heatmap")
 
 
 def run_scenario_overlap_analysis(config: DictConfig, log: Logger, output_path: Path) -> None:

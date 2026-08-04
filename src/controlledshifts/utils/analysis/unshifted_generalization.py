@@ -17,7 +17,7 @@ import seaborn as sns
 from matplotlib.axes import Axes
 from omegaconf import DictConfig
 
-from controlledshifts.utils.analysis.common import model_colors, relative_gap_pct, set_yaxis_limits
+from controlledshifts.utils.analysis.common import model_colors, relative_gap_pct, save_figure, set_yaxis_limits
 from controlledshifts.utils.analysis.distribution_shift import GAP_MIN_COLOR_VALUE, build_benchmark_df
 from controlledshifts.utils.constants import EPSILON
 from controlledshifts.utils.plotting import set_analysis_theme
@@ -221,10 +221,8 @@ def _plot_benchmark_values(
     for ax in axes[len(metrics) :]:
         ax.set_visible(False)
 
-    output_file = output_path / "benchmark_values.png"
-    fig.savefig(output_file, dpi=300)
-    plt.close(fig)
-    print(f"✓ Plot saved as '{output_file}'")
+    # tight=False preserves this figure's current cropping; it is one of the few that omits it, likely an oversight.
+    save_figure(fig, output_path / "benchmark_values.png", tight=False)
 
 
 def _plot_gap_heatmaps(
@@ -277,10 +275,8 @@ def _plot_gap_heatmaps(
     for ax in axes[len(metrics) :]:
         ax.set_visible(False)
 
-    output_file = output_path / "gap_heatmap.png"
-    fig.savefig(output_file, dpi=300)
-    plt.close(fig)
-    print(f"✓ Plot saved as '{output_file}'")
+    # tight=False preserves this figure's current cropping; it is one of the few that omits it, likely an oversight.
+    save_figure(fig, output_path / "gap_heatmap.png", tight=False)
 
 
 def _print_summary(df: pd.DataFrame, ref_split: str, benchmarks: list[Block], metrics: list[str]) -> None:

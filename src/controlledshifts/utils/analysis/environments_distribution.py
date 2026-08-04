@@ -26,7 +26,13 @@ from sklearn.manifold import TSNE
 from sklearn.metrics import silhouette_samples
 
 from controlledshifts.benchmarks.environments import load_descriptor_cache
-from controlledshifts.utils.analysis.common import SPLIT_COLOR_MAP, SPLIT_LABELS, SPLIT_ORDER, TEXT_COLOR
+from controlledshifts.utils.analysis.common import (
+    SPLIT_COLOR_MAP,
+    SPLIT_LABELS,
+    SPLIT_ORDER,
+    TEXT_COLOR,
+    save_figure,
+)
 from controlledshifts.utils.plotting import set_analysis_theme
 
 
@@ -193,10 +199,7 @@ def _plot_tsne(frame: pd.DataFrame, output_path: Path, *, show_axes: bool, seed:
 
     fig.tight_layout()
     fig.subplots_adjust(wspace=0.05)
-    output_file = output_path / "tsne.png"
-    fig.savefig(output_file, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print(f"✓ Plot saved as '{output_file}'")
+    save_figure(fig, output_path / "tsne.png")
 
 
 def _plot_silhouette(frame: pd.DataFrame, output_path: Path) -> None:
@@ -225,10 +228,7 @@ def _plot_silhouette(frame: pd.DataFrame, output_path: Path) -> None:
     ax.legend(loc="lower right", framealpha=0.8)
 
     fig.tight_layout()
-    output_file = output_path / "silhouette.png"
-    fig.savefig(output_file, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print(f"✓ Plot saved as '{output_file}'")
+    save_figure(fig, output_path / "silhouette.png")
 
 
 def run_environments_distribution_analysis(config: DictConfig, log: Logger, output_path: Path) -> None:
