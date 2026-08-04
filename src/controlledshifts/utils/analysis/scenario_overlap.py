@@ -30,8 +30,12 @@ from controlledshifts.utils.plotting import set_analysis_theme
 
 
 _MIN_BENCHMARKS = 2
-_LABEL_FONTSIZE = 8
-_ANNOT_FONTSIZE = 14
+_ABBREV_LENGTH = 3
+_LABEL_FONTSIZE = 16
+_ANNOT_FONTSIZE = 18
+_CBAR_TICK_FONTSIZE = 16
+_CBAR_LABEL_FONTSIZE = 20
+_LEGEND_FONTSIZE = 14
 
 
 def _load_benchmarks(config: DictConfig, log: Logger) -> dict[str, BenchmarkSplit]:
@@ -47,6 +51,15 @@ def _load_benchmarks(config: DictConfig, log: Logger) -> dict[str, BenchmarkSpli
         benchmarks[spec.name] = load_benchmark_split(split_json_path)
         log.info("Loaded benchmark '%s' from %s", spec.name, split_json_path)
     return benchmarks
+
+
+def _benchmark_abbreviations(config: DictConfig) -> dict[str, str]:
+    """Maps each configured benchmark's display name to its short heatmap tick label."""
+    abbreviations: dict[str, str] = {}
+    for benchmark_entry in config.benchmarks:
+        _, spec = next(iter(benchmark_entry.items()))
+        abbreviations[spec.name] = spec.get("abbrev") or spec.name[:_ABBREV_LENGTH].upper()
+    return abbreviations
 
 
 def _overlap_records(split: str, names: list[str], id_sets: list[set[str]]) -> list[dict[str, str | int | float]]:
@@ -102,9 +115,17 @@ def _write_overlap_files(
 
 
 def _plot_overlap_grid(
-    matrices: list[npt.NDArray[np.float64]], labels: list[str], splits: list[str], output_path: Path
+    matrices: list[npt.NDArray[np.float64]],
+    labels: list[str],
+    names: list[str],
+    splits: list[str],
+    output_path: Path,
 ) -> None:
-    """Saves the per-split Jaccard heatmaps side by side in one figure with a single shared colorbar."""
+    """Saves the per-split Jaccard heatmaps side by side, sharing one colorbar and an abbreviation legend.
+
+    Ticks are labelled with the short ``labels`` so they fit unrotated; ``names`` supplies the matching full
+    benchmark names spelled out in the legend below the panels.
+    """
     panel = max(4.5, 1.3 * len(labels))
     fig, axes = plt.subplots(
         1, len(splits), figsize=(panel * len(splits), panel), squeeze=False, gridspec_kw={"wspace": 0.05}
@@ -134,10 +155,16 @@ def _plot_overlap_grid(
     last_pos = axes[0][-1].get_position()
     cax = fig.add_axes((last_pos.x1 + 0.01, last_pos.y0, 0.012, last_pos.height))
     mappable = mpl.cm.ScalarMappable(norm=mpl.colors.Normalize(vmin=0.0, vmax=1.0), cmap="rocket")
-    cb = fig.colorbar(mappable, cax=cax, label="Jaccard overlap")
+    cb = fig.colorbar(mappable, cax=cax)
+    cb.set_label("Jaccard overlap", fontsize=_CBAR_LABEL_FONTSIZE, fontweight="bold")
+    cb.ax.tick_params(labelsize=_CBAR_TICK_FONTSIZE)
     cb.outline.set_visible(False)
 
-    fig.suptitle("Scenario Overlap across Benchmarks", fontweight="bold")
+    # Mathtext bolds the abbreviations; `fontweight` cannot, because DM Sans ships here as a single regular face.
+    legend = "   ".join(rf"$\bf{{{label}}}$ = {name}" for label, name in zip(labels, names, strict=True))
+    fig.text(0.5, last_pos.y0 - 0.14, legend, ha="center", va="top", fontsize=_LEGEND_FONTSIZE)
+
+    fig.suptitle("Scenario Overlap across Benchmarks", fontweight="bold", y=1.01)
     output_file = output_path / "scenario_overlap.png"
     fig.savefig(output_file, dpi=300, bbox_inches="tight")
     plt.close(fig)
@@ -184,7 +211,8 @@ def run_scenario_overlap_analysis(config: DictConfig, log: Logger, output_path: 
         matrix = frame.pivot_table(index="benchmark_a", columns="benchmark_b", values="jaccard").loc[names, names]
         matrices.append(matrix.to_numpy())
 
-    _plot_overlap_grid(matrices, names, splits, output_path)
+    abbreviations = _benchmark_abbreviations(config)
+    _plot_overlap_grid(matrices, [abbreviations[name] for name in names], names, splits, output_path)
     _write_overlap_files(names, splits, id_sets_by_split, output_path, log)
 
     csv_path = output_path / "scenario_overlap.csv"

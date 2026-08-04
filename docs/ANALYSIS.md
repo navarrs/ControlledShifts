@@ -213,9 +213,11 @@ Writes, under `<output_path>/`: `environments_embedding.csv`, `tsne.png` (the em
 splits_path: /data/driving/waymo/splits
 splits: [training, validation, testing]
 benchmarks:
-  - uniform: {name: Uniform, split_json: uniform}
-  - ego_safeshift: {name: EgoSafeShift, split_json: ego_safeshift}
+  - uniform: {name: Uniform, abbrev: UNI, split_json: uniform}
+  - ego_safeshift: {name: EgoSafeShift, abbrev: ESS, split_json: ego_safeshift}
 ```
+
+`abbrev` is the short label used on the heatmap ticks so they fit without rotation; it defaults to the first three letters of `name`. A legend under the panels spells out each abbreviation.
 
 For each split it builds a symmetric benchmark x benchmark matrix of the Jaccard index `|A ∩ B| / |A ∪ B|` over scenario IDs. Benchmarks built on a shared reference split (e.g. `background_agents` vs `uniform`) land near 1.0; benchmarks that resample the population (e.g. `background_agents_hard`) drop well below.
 

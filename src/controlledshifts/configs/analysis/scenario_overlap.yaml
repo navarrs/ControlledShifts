@@ -10,17 +10,21 @@ splits_path: /data/driving/waymo/splits
 splits: [training, validation, testing]
 
 # Benchmarks to include -- referenced by split-JSON filename and display name. Edit this list to choose which
-# benchmarks to analyze.
+# benchmarks to analyze. `abbrev` is the short heatmap tick label; it defaults to the first three letters of `name`.
 benchmarks:
   - uniform:
       name: Uniform
+      abbrev: UNI
       split_json: uniform
   - background_agents_hard:
       name: BackgroundAgents
+      abbrev: BGA
       split_json: background_agents_hard
   - ego_safeshift:
       name: EgoSafeShift
+      abbrev: ESS
       split_json: ego_safeshift
   - environments:
       name: Environments
+      abbrev: ENV
       split_json: environments
