@@ -56,6 +56,9 @@ METRIC_NAME_MAP = {
     "collisionRate0.25": "CollisionRate",
 }
 
+# Column holding the per-model score aggregated across metrics, in the frames the robustness analysis builds.
+COMBINED_COLUMN = "Combined"
+
 # Short metric labels for space-constrained axes (e.g. radar rims), spelled out in a caption next to the figure.
 METRIC_ABBREV_MAP = {
     "brierFDE": "BF",
@@ -113,6 +116,25 @@ MODEL_SIZE_MAP = {
     "Safe-Wayformer": "15.2M",
     "MTR": "27.2M",  # This is the size with d_model=256. The original MTR with d_model=512 has 65M parameters.
 }
+
+
+def metric_label(metric: str) -> str:
+    """Clean display label for a metric (falls back to the raw name when unmapped)."""
+    return METRIC_NAME_MAP.get(metric, metric)
+
+
+def metric_abbrev(metric: str) -> str:
+    """Short label for a metric, for space-constrained axes (falls back to the clean name when unabbreviated)."""
+    return METRIC_ABBREV_MAP.get(metric, metric_label(metric))
+
+
+def mathtext_bold(text: str) -> str:
+    r"""Mathtext-bold form of ``text``.
+
+    The figure font (DM Sans) ships a single regular face, so ``fontweight="bold"`` silently falls back to it;
+    ``$\bf{...}$`` renders the token in a real bold face instead.
+    """
+    return rf"$\bf{{{text}}}$"
 
 
 def relative_gap_pct(value: float | NDArray, reference: float | NDArray) -> float | NDArray:

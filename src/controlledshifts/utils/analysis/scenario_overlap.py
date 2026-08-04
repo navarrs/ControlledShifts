@@ -33,6 +33,7 @@ from controlledshifts.utils.analysis.common import (
     HEATMAP_LABEL_FONTSIZE,
     HEATMAP_LEGEND_FONTSIZE,
     iter_benchmarks,
+    mathtext_bold,
     save_figure,
 )
 from controlledshifts.utils.plotting import set_analysis_theme
@@ -159,8 +160,7 @@ def _plot_overlap_grid(
     cb.ax.tick_params(labelsize=CBAR_TICK_FONTSIZE)
     cb.outline.set_visible(False)
 
-    # Mathtext bolds the abbreviations; `fontweight` cannot, because DM Sans ships here as a single regular face.
-    legend = "   ".join(rf"$\bf{{{label}}}$ = {name}" for label, name in zip(labels, names, strict=True))
+    legend = "   ".join(f"{mathtext_bold(label)} = {name}" for label, name in zip(labels, names, strict=True))
     fig.text(0.5, last_pos.y0 - 0.14, legend, ha="center", va="top", fontsize=HEATMAP_LEGEND_FONTSIZE)
 
     fig.suptitle("Scenario Overlap across Benchmarks", fontweight="bold", y=1.01)
