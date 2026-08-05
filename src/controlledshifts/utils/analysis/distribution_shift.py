@@ -24,8 +24,9 @@ from controlledshifts.utils.analysis.common import (
     COMPACT_SUPTITLE_FONTSIZE,
     COMPACT_TICK_FONTSIZE,
     COMPACT_TITLE_FONTSIZE,
-    MODEL_NAME_MAP,
-    MODEL_SIZE_MAP,
+    QUALITY_COLUMN,
+    STABILITY_COLUMN,
+    build_benchmark_df,
     iter_benchmarks,
     load_results_csv,
     relative_gap_pct,
@@ -33,7 +34,36 @@ from controlledshifts.utils.analysis.common import (
     set_yaxis_limits,
 )
 from controlledshifts.utils.analysis.latex import format_gap, format_value
+from controlledshifts.utils.analysis.robustness_scores import compute_benchmark_robustness
 from controlledshifts.utils.plotting import set_analysis_theme
+
+
+# Macros the paper's preamble defines per model; the LaTeX table prints these instead of the display name. Benchmarks
+# carry their own macro in the config (`latex`), because a benchmark's macro does not always follow from its name.
+MODEL_MACRO_MAP = {
+    "Naive": "\\naive",
+    "AutoBot": "\\autobot",
+    "SceneTransformer": "\\scenetransformer",
+    "Wayformer": "\\wayformer",
+    "MTR": "\\mtr",
+}
+
+# Column headers for the LaTeX table. Kept separate from METRIC_NAME_MAP, which abbreviates MinFDE6/MinADE6 for plot
+# axes; the table spells the number out.
+METRIC_HEADER_MAP = {
+    "brierFDE": "BrierFDE",
+    "minFDE6": "MinFDE6",
+    "minADE6": "MinADE6",
+    "missRate": "MissRate",
+    "collisionRate0.25": "CollisionRate",
+}
+
+# Comment rule delimiting each benchmark block, so blocks stay findable when the table is edited by hand.
+BLOCK_BANNER_RULE = "% " + "-" * 56
+
+# Trailing robustness columns, in display order. The table's benchmark frames carry them as columns of the same name;
+# unlike the error metrics these are scores, so higher is better.
+ROBUSTNESS_COLUMNS = (QUALITY_COLUMN, STABILITY_COLUMN)
 
 
 def _plot_distribution_shift_comparison(
@@ -299,63 +329,6 @@ def _plot_grouped_bar_chart(
                 print(f"{metric_name:30s}: {best_model:30s} ({best_value:.4f})")
 
 
-def build_benchmark_df(
-    metrics_df: pd.DataFrame,
-    splits: tuple[str, ...],
-    metrics: list[str],
-    models_to_compare: list[str],
-    *,
-    show_run_id: bool,
-) -> pd.DataFrame:
-    """Reconstruct a per-model benchmark DataFrame from the combined results file.
-
-    For each model in ``models_to_compare``, the metric values for each split in ``splits`` are looked up independently
-    and joined by model name (typically the seen/unseen pair, but any number of split prefixes is supported). A
-    benchmark's splits may therefore come from different training runs (or even different datasets); each value is taken
-    from the first row that populates the corresponding column.
-
-    Args:
-        metrics_df: Combined results with a ``Name`` (``<dataset>_<model>``) column and ``<split>/<metric>`` columns.
-        splits: Split column prefixes to extract, e.g.
-            ``("test/waymo-uniform-validation", "test/waymo-uniform-testing")``.
-        metrics: Metric names to extract for each split.
-        models_to_compare: Raw model identifiers (as they appear after ``<dataset>_``) to include.
-        show_run_id: Whether to append the source run ID to the displayed model name.
-
-    Returns:
-        One row per model with a ``Model`` column and ``<split>/<metric>`` value columns (NaN when a metric is absent),
-        shape-compatible with the plotting and LaTeX-table helpers.
-    """
-    metrics_df = metrics_df.copy()
-    metrics_df["model_name"] = metrics_df["Name"].str.rsplit("_", n=1).str[-1]
-    if "ID" not in metrics_df.columns:
-        metrics_df["ID"] = np.arange(len(metrics_df))
-
-    rows: list[dict[str, float | str]] = []
-    for model in models_to_compare:
-        model_rows = metrics_df[metrics_df["model_name"] == model]
-        if model_rows.empty:
-            continue
-        display_name = MODEL_NAME_MAP.get(model, model)
-        record: dict[str, float | str] = {}
-        run_id: str | None = None
-        for split in splits:
-            for metric in metrics:
-                col = f"{split}/{metric}"
-                value = float("nan")
-                if col in model_rows.columns:
-                    non_null = model_rows[col].dropna()
-                    if not non_null.empty:
-                        value = float(non_null.iloc[0])
-                        if run_id is None:
-                            run_id = str(model_rows.loc[non_null.index[0], "ID"])
-                record[col] = value
-        record["Model"] = f"{display_name}[{run_id}]" if show_run_id and run_id is not None else display_name
-        rows.append(record)
-
-    return pd.DataFrame(rows)
-
-
 def _plot_benchmark(
     benchmark_df: pd.DataFrame, splits: tuple[str, str], metrics: list[str], colormap: str, output_path: Path
 ) -> None:
@@ -404,11 +377,14 @@ def _plot_benchmark(
 
 
 class _MetricMeans(NamedTuple):
-    """Per-metric mean seen/unseen values and mean OOD gap (percent) for a set of rows, each keyed by metric name."""
+    """Column means for a set of rows: seen/unseen values and OOD gap (percent) per metric, plus the robustness
+    scores keyed by :data:`ROBUSTNESS_COLUMNS`.
+    """
 
     seen: dict[str, float]
     unseen: dict[str, float]
     gap: dict[str, float]
+    robustness: dict[str, float]
 
 
 def _benchmark_metric_means(
@@ -420,13 +396,13 @@ def _benchmark_metric_means(
     across the models in the benchmark, not the gap between the averaged values.
 
     Args:
-        benchmark_df: Per-model frame from :func:`build_benchmark_df`.
+        benchmark_df: Per-model frame from :func:`build_benchmark_df`, carrying the robustness columns.
         id_split: Column prefix of the ID split.
         ood_split: Column prefix of the OOD split.
         metrics: Metric names to summarize.
 
     Returns:
-        Per-metric mean seen value, mean unseen value, and mean OOD gap.
+        Per-metric mean seen value, mean unseen value and mean OOD gap, plus the mean robustness scores.
     """
     mean_seen: dict[str, float] = {}
     mean_unseen: dict[str, float] = {}
@@ -438,7 +414,8 @@ def _benchmark_metric_means(
         mean_seen[metric] = float(id_vals.mean())
         mean_unseen[metric] = float(ood_vals.mean())
         mean_gap[metric] = float(gaps.mean())
-    return _MetricMeans(mean_seen, mean_unseen, mean_gap)
+    mean_robustness = {column: float(benchmark_df[column].mean()) for column in ROBUSTNESS_COLUMNS}
+    return _MetricMeans(mean_seen, mean_unseen, mean_gap, mean_robustness)
 
 
 def _build_mean_row(
@@ -446,8 +423,9 @@ def _build_mean_row(
 ) -> str:
     r"""Render a gray-shaded summary row of per-metric mean seen/unseen values and mean OOD gaps (plain text).
 
-    The row matches the model rows' column layout (lead columns + seen metrics + two spacers + unseen metrics) and is
-    shaded via ``\rowcolor`` so it reads as an aggregate. Unlike the model rows, the gap is plain text (no color/bold).
+    The row matches the model rows' column layout (benchmark + model + seen metrics + two spacers + unseen metrics +
+    two spacers + robustness scores) and is shaded via ``\rowcolor`` so it reads as an aggregate. Unlike the model
+    rows, the gap is plain text (no color/bold).
 
     Args:
         benchmark_label: Leading benchmark cell (empty inside a block; a label such as ``Overall`` otherwise).
@@ -459,7 +437,7 @@ def _build_mean_row(
     Returns:
         The LaTeX row string, prefixed with the row-color directive.
     """
-    row_parts = [benchmark_label, model_label, ""]  # benchmark, model, model-size (blank for aggregates)
+    row_parts = [benchmark_label, model_label]
 
     id_values = [f"{means.seen[metric]:.3f}" if pd.notna(means.seen[metric]) else "---" for metric in metrics]
     id_values.append("")  # spacer column
@@ -473,12 +451,28 @@ def _build_mean_row(
 
     row_parts.extend(id_values)
     row_parts.extend(ood_values)
+
+    row_parts.extend(["", ""])  # spacer columns before the robustness group
+    for column in ROBUSTNESS_COLUMNS:
+        score = means.robustness[column]
+        row_parts.append(f"{score:.3f}" if pd.notna(score) else "---")
+
     return f"\\rowcolor[gray]{{{gray_level}}}\n" + " & ".join(row_parts) + " \\\\"
+
+
+def _best_score(values: pd.Series) -> float:
+    """Highest score in a robustness column, or NaN when every model ties.
+
+    A fully tied column carries no ranking -- the Uniform block's stability is 1.000 for every model, since each is
+    referenced against its own row -- and bolding all of it would suggest one.
+    """
+    low, high = values.min(), values.max()
+    return float("nan") if pd.isna(high) or np.isclose(low, high) else float(high)
 
 
 def _build_benchmark_rows(
     benchmark_df: pd.DataFrame,
-    benchmark_name: str,
+    benchmark_latex: str,
     id_split: str,
     ood_split: str,
     metrics: list[str],
@@ -486,11 +480,12 @@ def _build_benchmark_rows(
     """Builds the LaTeX ``tabular`` rows for a single benchmark block (with gap annotations/coloring).
 
     Best ID/OOD values are bolded and OOD gap severity is colored relative to this benchmark's own min/max gap, so each
-    block is self-scaled.
+    block is self-scaled. The trailing robustness scores are bolded on their highest value instead (they are scores,
+    not errors).
 
     Args:
-        benchmark_df: Per-model frame from :func:`build_benchmark_df`.
-        benchmark_name: Display name of the benchmark for the leading multirow cell.
+        benchmark_df: Per-model frame from :func:`build_benchmark_df`, carrying the robustness columns.
+        benchmark_latex: Benchmark macro for the leading multirow cell.
         id_split: Column prefix of the ID split.
         ood_split: Column prefix of the OOD split.
         metrics: Metric names to include, in column order.
@@ -510,24 +505,19 @@ def _build_benchmark_rows(
         gaps: pd.Series = relative_gap_pct(ood_vals, id_vals)  # pyright: ignore[reportAssignmentType, reportArgumentType]
         gap_stats[metric] = (gaps.min(), gaps.max())  # best, worst
 
+    best_score = {column: _best_score(benchmark_df[column]) for column in ROBUSTNESS_COLUMNS}
+
     table_rows = []
     first_row = True
     for _, row in benchmark_df.iterrows():
         row_parts = []
         if first_row:
-            row_parts.append(f"\\multirow{{{len(benchmark_df)}}}{{*}}{{\\texttt{{{benchmark_name}}}}}")
+            row_parts.append(f"\\multirow{{{len(benchmark_df)}}}{{*}}{{{benchmark_latex}}}")
             first_row = False
         else:
             row_parts.append("")
-        row_parts.append(str(row["Model"]))
-
-        # Model size
-        if "model/params/total" in row and pd.notna(row["model/params/total"]):
-            size_val = row["model/params/total"]
-            size_str = f"{size_val:.2e}" if isinstance(size_val, (int, float)) else str(size_val)
-        else:
-            size_str = MODEL_SIZE_MAP.get(row["Model"], "---")
-        row_parts.append(size_str)
+        model = str(row["Model"])
+        row_parts.append(MODEL_MACRO_MAP.get(model, model))
 
         id_values, ood_values = [], []
         for metric in metrics:
@@ -550,79 +540,101 @@ def _build_benchmark_rows(
         row_parts.extend(id_values)
         ood_values = ["", *ood_values]  # spacer column
         row_parts.extend(ood_values)
+
+        row_parts.extend(["", ""])  # spacer columns before the robustness group
+        row_parts.extend(format_value(row[column], best_score[column]) for column in ROBUSTNESS_COLUMNS)
         table_rows.append(" & ".join(row_parts) + " \\\\")
 
     # Light-gray per-benchmark mean row; benchmark cell left empty so the multirow label stays over the model rows.
     means = _benchmark_metric_means(benchmark_df, id_split, ood_split, metrics)
-    table_rows.append(_build_mean_row("", "Mean", means, metrics, gray_level=0.9))
+    table_rows.append(_build_mean_row("", "Mean", means, metrics, gray_level=0.95))
 
     return table_rows
 
 
 def _write_combined_tex_table(
-    blocks: list[tuple[str, str, str, pd.DataFrame]], metrics: list[str], output_path: Path
+    blocks: list[tuple[str, str, str, str, pd.DataFrame]],
+    metrics: list[str],
+    output_path: Path,
+    table_config: DictConfig,
 ) -> str:
     r"""Writes a single LaTeX table spanning all benchmarks, each as a multirow block separated by ``\midrule``.
 
     Args:
-        blocks: One ``(benchmark_name, id_split, ood_split, benchmark_df)`` tuple per benchmark, in display order.
+        blocks: One ``(benchmark_name, benchmark_latex, id_split, ood_split, benchmark_df)`` tuple per benchmark, in
+            display order; each frame carries the robustness columns.
         metrics: Metric names to include, in column order.
         output_path: Directory to save the generated ``results.tex`` file.
+        table_config: The config's ``table`` node: ``caption`` and the ``seen_label``/``unseen_label``/
+            ``robustness_label`` column-group headers, copied verbatim (they may use macros the consuming document
+            defines), plus ``include_overall_mean`` -- when false the closing overall-mean row is written as
+            commented-out LaTeX, so it can be re-enabled by hand without rerunning the analysis.
 
     Returns:
         The rendered LaTeX table string.
     """
     body_rows: list[str] = []
-    for i, (benchmark_name, id_split, ood_split, benchmark_df) in enumerate(blocks):
-        if i > 0:
-            body_rows.append("\\midrule")
-        body_rows.extend(_build_benchmark_rows(benchmark_df, benchmark_name, id_split, ood_split, metrics))
+    for benchmark_name, benchmark_latex, id_split, ood_split, benchmark_df in blocks:
+        banner = [BLOCK_BANNER_RULE, f"% {benchmark_name.upper()} BENCHMARK HERE:", BLOCK_BANNER_RULE, "\\midrule"]
+        body_rows.extend(banner)
+        body_rows.extend(_build_benchmark_rows(benchmark_df, benchmark_latex, id_split, ood_split, metrics))
 
-    # Gray overall mean row across the entire sweep (grand mean over all benchmark x model entries).
+    # Gray overall mean row across the entire sweep (grand mean over all benchmark x model entries). Always computed:
+    # the commented-out form still carries the real numbers.
     acc_id: dict[str, list[pd.Series]] = {metric: [] for metric in metrics}
     acc_ood: dict[str, list[pd.Series]] = {metric: [] for metric in metrics}
     acc_gap: dict[str, list[pd.Series]] = {metric: [] for metric in metrics}
-    for _, id_split, ood_split, benchmark_df in blocks:
+    acc_score: dict[str, list[pd.Series]] = {column: [] for column in ROBUSTNESS_COLUMNS}
+    for _, _, id_split, ood_split, benchmark_df in blocks:
         for metric in metrics:
             id_vals = benchmark_df[f"{id_split}/{metric}"]
             ood_vals = benchmark_df[f"{ood_split}/{metric}"]
             acc_id[metric].append(id_vals)
             acc_ood[metric].append(ood_vals)
             acc_gap[metric].append(pd.Series(relative_gap_pct(ood_vals, id_vals)))
+        for column in ROBUSTNESS_COLUMNS:
+            acc_score[column].append(benchmark_df[column])
     overall_means = _MetricMeans(
         seen={metric: float(pd.concat(acc_id[metric], ignore_index=True).mean()) for metric in metrics},
         unseen={metric: float(pd.concat(acc_ood[metric], ignore_index=True).mean()) for metric in metrics},
         gap={metric: float(pd.concat(acc_gap[metric], ignore_index=True).mean()) for metric in metrics},
+        robustness={
+            column: float(pd.concat(acc_score[column], ignore_index=True).mean()) for column in ROBUSTNESS_COLUMNS
+        },
     )
-    body_rows.append("\\midrule")
-    body_rows.append(_build_mean_row("\\texttt{Overall}", "Mean", overall_means, metrics, gray_level=0.8))
+    # The mean row is two lines (\rowcolor + the row itself), so each line is commented individually.
+    overall_row = _build_mean_row("\\textsc{Overall}", "Mean", overall_means, metrics, gray_level=0.89)
+    prefix = "" if table_config.include_overall_mean else "% "
+    body_rows.extend(f"{prefix}{line}" for line in ["\\midrule", *overall_row.split("\n")])
 
     n_metrics = len(metrics)
-    col_spec = "l l c " + "c" * (2 * n_metrics) + "cc"
+    n_scores = len(ROBUSTNESS_COLUMNS)
+    # Two spacer columns precede the unseen and the robustness group; each group's header spans its own pair.
+    col_spec = "l l " + "c" * (2 * n_metrics + n_scores + 4)
+    headers = [METRIC_HEADER_MAP.get(metric, metric) for metric in metrics]
 
     latex_lines: list[str] = [
-        "% Requires \\usepackage[table]{xcolor} (\\rowcolor), plus multirow/graphicx as before.",
         "\\begin{table*}[t]",
         "\\centering",
         "\\small",
         "\\setlength{\\tabcolsep}{4pt}",
-        "\\caption{Distribution Shift Results}",
+        f"\\caption{{{table_config.caption}}}",
         "\\label{tab:distribution_shift_results}",
         "\\resizebox{\\textwidth}{!}{%",
         "\\begin{tabular}{" + col_spec + "}",
         "\\toprule",
         (
             f"\\multirow{{2}}{{*}}{{\\textbf{{Benchmark}}}} & \\multirow{{2}}{{*}}{{\\textbf{{Model}}}} & "
-            f"\\multirow{{2}}{{*}}{{\\textbf{{Model Size}}}} & "
-            f"\\multicolumn{{{n_metrics}}}{{c}}{{\\textbf{{Seen}}}} & "
-            f"\\multicolumn{{{n_metrics}}}{{c}}{{\\textbf{{Unseen}}}} \\\\"
+            f"\\multicolumn{{{n_metrics}}}{{c}}{{\\textbf{{{table_config.seen_label}}}}} & "
+            f"\\multicolumn{{{n_metrics + 2}}}{{c}}{{\\textbf{{{table_config.unseen_label}}}}} & "
+            f"\\multicolumn{{{n_scores + 2}}}{{c}}{{\\textbf{{{table_config.robustness_label}}}}} \\\\"
         ),
-        " & & & " + " & ".join([*metrics, "", "", *metrics]) + " \\\\",
-        "\\midrule",
+        "& & " + " & ".join([*headers, "", "", *headers, "", "", *ROBUSTNESS_COLUMNS]) + " \\\\",
         *body_rows,
         "\\bottomrule",
         "\\end{tabular}%",
         "}",
+        "\\vspace{-0.3cm}",
         "\\end{table*}",
     ]
     latex_table_str = "\n".join(latex_lines)
@@ -630,7 +642,7 @@ def _write_combined_tex_table(
     output_path = Path(output_path)
     output_path.mkdir(parents=True, exist_ok=True)
     output_file = output_path / "results.tex"
-    output_file.write_text(latex_table_str)
+    output_file.write_text(latex_table_str + "\n")
     print(f"\n✓ Combined LaTeX table saved as '{output_file}'")
 
     return latex_table_str
@@ -641,11 +653,12 @@ def run_distribution_shift_analysis(config: DictConfig, log: Logger, output_path
 
     For each benchmark listed in ``config.benchmarks`` the seen/unseen split columns are looked up in the shared
     results file, per-benchmark comparison plots are written under ``output_path/<benchmark>/``, and a single combined
-    LaTeX table spanning all benchmarks is written to ``output_path/results.tex``.
+    LaTeX table spanning all benchmarks is written to ``output_path/results.tex``. The table's trailing robustness
+    columns are scored per benchmark over the same set of benchmarks (see :func:`compute_benchmark_robustness`).
 
     Args:
         config: Analysis configuration (``benchmarks_filepath``, ``benchmarks``, ``models_to_compare``,
-            ``trajectory_forecasting_metrics``, ``benchmark_colormap``, ``show_run_id``).
+            ``trajectory_forecasting_metrics``, ``benchmark_colormap``, ``show_run_id``, ``table``).
         log: Logger.
         output_path: Directory to save the generated plots and table.
     """
@@ -662,7 +675,12 @@ def run_distribution_shift_analysis(config: DictConfig, log: Logger, output_path
     models_to_compare = list(config.models_to_compare)
     colormap = config.benchmark_colormap
 
-    blocks: list[tuple[str, str, str, pd.DataFrame]] = []
+    benchmarks = [(key, spec.name, spec.seen, spec.unseen) for key, spec in iter_benchmarks(config)]
+    robustness = compute_benchmark_robustness(
+        metrics_df, benchmarks, metrics, models_to_compare, uniform_key=str(config.table.uniform_key)
+    )
+
+    blocks: list[tuple[str, str, str, str, pd.DataFrame]] = []
     for key, spec in iter_benchmarks(config):
         log.info("Analyzing benchmark '%s' (%s): seen=%s, unseen=%s", key, spec.name, spec.seen, spec.unseen)
 
@@ -678,10 +696,17 @@ def run_distribution_shift_analysis(config: DictConfig, log: Logger, output_path
         benchmark_output = output_path / key
         benchmark_output.mkdir(parents=True, exist_ok=True)
         _plot_benchmark(benchmark_df, splits, metrics, colormap, benchmark_output)
-        blocks.append((spec.name, spec.seen, spec.unseen, benchmark_df))
+
+        # Table-only columns, attached after plotting so the figures keep seeing the raw metric frame.
+        block_scores = robustness.get(key)
+        model_names = benchmark_df["Model"].str.split("[").str[0]  # scores are keyed without the [run-id] suffix
+        for column in ROBUSTNESS_COLUMNS:
+            benchmark_df[column] = model_names.map(block_scores[column]) if block_scores is not None else float("nan")
+
+        blocks.append((spec.name, spec.latex, spec.seen, spec.unseen, benchmark_df))
 
     if blocks:
-        _write_combined_tex_table(blocks, metrics, output_path)
+        _write_combined_tex_table(blocks, metrics, output_path, config.table)
 
     print("\n✓ Analysis complete!")
     log.info("Distribution shift analysis complete!")

@@ -10,26 +10,47 @@ benchmarks_filepath: ./meta/runs/distribution_shift_results.csv
 output_path: ./outputs/distribution_shift_analysis
 benchmark_colormap: colorblind
 
+# `latex` is the macro the paper's preamble defines for the benchmark; it is what the LaTeX table prints.
 benchmarks:
   - uniform:
       name: Uniform
+      latex: '\uniform'
       seen: "test/waymo-uniform-validation"
       unseen: "test/waymo-uniform-testing"
-  - background_agents:
-      name: BackgroundAgents
-      seen: "test/waymo-uniform-testing"
-      unseen: "test/waymo-remove-noncausal-testing"
+#   - background_agents:
+#       name: BackgroundAgents
+#       latex: '\backgroundagents'
+#       seen: "test/waymo-uniform-testing"
+#       unseen: "test/waymo-remove-noncausal-testing"
   - background_agents_hard:
       name: BackgroundAgentsHard
+      latex: '\backgroundagents' # The paper only reports the hard variant, so it takes the unqualified macro.
       seen: "test/waymo-background-agents-hard-original-validation"
       unseen: "test/waymo-remove-noncausal-hard-testing"
   - ego_safeshift:
       name: EgoSafeShift
+      latex: '\egosafeshift'
     #   seen: "test/waymo-causal-ego-safeshift-id"
       seen: "test/waymo-ego-safeshift-id"
     #   unseen: "test/waymo-causal-ego-safeshift-ood"
       unseen: "test/waymo-ego-safeshift-ood"
   - environments:
       name: Environments
+      latex: '\environments'
       seen: "test/waymo-environments-id"
       unseen: "test/waymo-environments-ood"
+
+# Paper-specific LaTeX for results.tex. The caption and the two group labels are copied into the table verbatim, and
+# the consuming document must define every macro they use (\seen, \unseen, \uniform, the model macros, ...).
+table:
+  caption: >-
+    Model performance under each controlled distribution shift, one block per benchmark. \textbf{Left:} the
+    \seen~(validation) split; \textbf{right:} the \unseen~(test) split, with the parenthesised gap relative to
+    \seen~in percent (red = degradation, green = improvement). \uniform~is the no-shift setting. Bold marks the best
+    model per group column. Displacement error metrics are in meters, and CR uses a 0.25\,m threshold. Shaded rows
+    are per-benchmark means.
+  seen_label: 'In Distribution (\seen)'
+  unseen_label: 'Distribution Shift (\unseen)'
+  robustness_label: 'Robustness'
+  uniform_key: uniform # Benchmark the robustness columns score stability against.
+  include_overall_mean: false # When false, the closing overall-mean row is written as commented-out LaTeX.

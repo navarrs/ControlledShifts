@@ -21,6 +21,7 @@ from controlledshifts.utils.analysis.common import (
     COMPACT_INSET_LEGEND_FONTSIZE,
     COMPACT_SUPTITLE_FONTSIZE,
     COMPACT_TICK_FONTSIZE,
+    build_benchmark_df,
     iter_benchmarks,
     load_results_csv,
     model_colors,
@@ -28,7 +29,6 @@ from controlledshifts.utils.analysis.common import (
     save_figure,
     set_yaxis_limits,
 )
-from controlledshifts.utils.analysis.distribution_shift import build_benchmark_df
 from controlledshifts.utils.analysis.latex import format_gap, format_value
 from controlledshifts.utils.plotting import set_analysis_theme
 

@@ -52,10 +52,12 @@ from omegaconf import DictConfig
 from controlledshifts.utils.analysis.common import (
     COMBINED_COLUMN,
     MODEL_NAME_MAP,
+    QUALITY_COLUMN,
+    STABILITY_COLUMN,
+    build_benchmark_df,
     iter_benchmarks,
     load_results_csv,
 )
-from controlledshifts.utils.analysis.distribution_shift import build_benchmark_df
 from controlledshifts.utils.analysis.latex import format_value
 from controlledshifts.utils.analysis.robustness_plots import (
     RADAR_TERM_TITLES,
@@ -90,7 +92,7 @@ COMBINED_TITLE = "Combined Robustness Score"
 # Output folder + semantic label per reference mode, plus the stacked-summary figure stem and its bar-panel title.
 # Only OUTPUT naming lives here -- the reference-mode strings above are unchanged. Edit these to rename outputs.
 SUMMARY_FOLDERS = {NAIVE_RELATIVE: "quality_naive", UNIFORM_RELATIVE: "stability_uniform"}
-SUMMARY_LABELS = {NAIVE_RELATIVE: "Quality", UNIFORM_RELATIVE: "Stability"}
+SUMMARY_LABELS = {NAIVE_RELATIVE: QUALITY_COLUMN, UNIFORM_RELATIVE: STABILITY_COLUMN}
 SUMMARY_FILE_STEM = "robustness_summary"
 
 
@@ -176,25 +178,22 @@ def _aggregate_term(
     return pd.DataFrame(rows).set_index("Model")
 
 
-def _scored_benchmarks(
-    benchmarks: list[tuple[str, str, str, str]],
-    frames: dict[str, pd.DataFrame],
-    reference_mode: str,
-    uniform_key: str,
-    aggregate_over: str,
-) -> list[tuple[str, str, str, str]]:
-    """Benchmark tuples that actually contribute scores: those with data, minus Uniform where it does not belong.
+def _build_frames(
+    metrics_df: pd.DataFrame, benchmarks: list[tuple[str, str, str, str]], metrics: list[str], models: list[str]
+) -> tuple[dict[str, pd.DataFrame], dict[str, tuple[str, str]]]:
+    """Per-benchmark frames indexed by model name, plus each benchmark's ``(seen, unseen)`` splits.
 
-    Uniform is dropped under ``uniform_relative`` (a model is referenced against its own Uniform row, so scoring it
-    would be a degenerate uniform-vs-uniform comparison) and under :data:`METRIC_AXIS` (it is the unshifted control,
-    not one of the shifts the per-benchmark view compares).
+    Benchmarks with no matching models are dropped from both mappings.
     """
-    skip_uniform = reference_mode == UNIFORM_RELATIVE or aggregate_over == METRIC_AXIS
-    return [
-        benchmark
-        for benchmark in benchmarks
-        if benchmark[0] in frames and not (skip_uniform and benchmark[0] == uniform_key)
-    ]
+    frames: dict[str, pd.DataFrame] = {}
+    splits: dict[str, tuple[str, str]] = {}
+    for key, _name, seen, unseen in benchmarks:
+        benchmark_df = build_benchmark_df(metrics_df, (seen, unseen), metrics, models, show_run_id=False)
+        if benchmark_df.empty:
+            continue
+        frames[key] = benchmark_df.set_index("Model")
+        splits[key] = (seen, unseen)
+    return frames, splits
 
 
 def compute_robustness_scores(  # noqa: PLR0913
@@ -233,14 +232,7 @@ def compute_robustness_scores(  # noqa: PLR0913
         ``Model`` with one score column per surviving entry of the non-collapsed dimension plus a ``Combined`` column.
         All are higher-is-better scores (``1.0`` == on par with the reference).
     """
-    frames: dict[str, pd.DataFrame] = {}
-    splits: dict[str, tuple[str, str]] = {}
-    for key, _name, seen, unseen in benchmarks:
-        benchmark_df = build_benchmark_df(metrics_df, (seen, unseen), metrics, models_to_compare, show_run_id=False)
-        if benchmark_df.empty:
-            continue
-        frames[key] = benchmark_df.set_index("Model")
-        splits[key] = (seen, unseen)
+    frames, splits = _build_frames(metrics_df, benchmarks, metrics, models_to_compare)
 
     scored = _scored_benchmarks(benchmarks, frames, reference_mode, uniform_key, aggregate_over)
 
@@ -286,8 +278,72 @@ def _geometric_mean(left: pd.Series, right: pd.Series) -> pd.Series:
     return np.sqrt((left * right).where(valid))
 
 
-def _geometric_mean_combined(id_df: pd.DataFrame, ood_df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
-    """Combined ranking score: per-column geometric mean of the ID and OOD scores, then mean across columns.
+def _combined_score(id_score: float, ood_score: float) -> float:
+    """Scalar form of :func:`_geometric_mean`: ``sqrt(id * ood)``, NaN unless both terms are positive."""
+    if id_score > 0 and ood_score > 0:  # NaN compares False, so a missing term falls through to NaN
+        return float(np.sqrt(id_score * ood_score))
+    return float("nan")
+
+
+def compute_benchmark_robustness(
+    metrics_df: pd.DataFrame,
+    benchmarks: list[tuple[str, str, str, str]],
+    metrics: list[str],
+    models_to_compare: list[str],
+    *,
+    uniform_key: str = "uniform",
+) -> dict[str, pd.DataFrame]:
+    """Quality and stability scores per ``(benchmark, model)``, without aggregating across benchmarks.
+
+    Same scoring as :func:`compute_robustness_scores` -- per metric ``sqrt(id_score * ood_score)``, then the mean
+    across metrics -- but kept per benchmark, so a model scores differently in each one. :data:`QUALITY_COLUMN` is
+    referenced against the benchmark's own Naive row, :data:`STABILITY_COLUMN` against the model's Uniform row.
+    Unlike the aggregated view the Uniform benchmark is *not* skipped here: its self-referential stability is exactly
+    ``1.0``, which reads as the reference point the other benchmarks are measured against.
+
+    Args:
+        metrics_df: Combined results frame with a ``Name`` (``<dataset>_<model>``) column.
+        benchmarks: ``(key, name, seen_split, unseen_split)`` tuples in display order.
+        metrics: Metric names to score over.
+        models_to_compare: Raw model identifiers to include.
+        uniform_key: Benchmark key used as the stability reference.
+
+    Returns:
+        One frame per benchmark key, indexed by display model name with a quality and a stability column. Benchmarks
+        with no matching models are absent.
+    """
+    frames, splits = _build_frames(metrics_df, benchmarks, metrics, models_to_compare)
+
+    scores: dict[str, pd.DataFrame] = {}
+    for key, frame in frames.items():
+        seen, unseen = splits[key]
+        rows: list[dict[str, float | str]] = []
+        for model in frame.index:
+            record: dict[str, float | str] = {"Model": model}
+            for reference_mode in (NAIVE_RELATIVE, UNIFORM_RELATIVE):
+                per_metric: list[float] = []
+                for metric in metrics:
+                    ref_seen, ref_unseen = _select_reference(
+                        reference_mode,
+                        frames=frames,
+                        splits=splits,
+                        benchmark_key=key,
+                        model=str(model),
+                        metric=metric,
+                        uniform_key=uniform_key,
+                    )
+                    score_id = _score(float(frame.loc[model, f"{seen}/{metric}"]), ref_seen)
+                    score_ood = _score(float(frame.loc[model, f"{unseen}/{metric}"]), ref_unseen)
+                    per_metric.append(_combined_score(score_id, score_ood))
+                valid = [value for value in per_metric if not pd.isna(value)]
+                record[SUMMARY_LABELS[reference_mode]] = float(np.mean(valid)) if valid else float("nan")
+            rows.append(record)
+        scores[key] = pd.DataFrame(rows).set_index("Model")
+    return scores
+
+
+def _geometric_mean_combined(id_df: pd.DataFrame, ood_df: pd.DataFrame, metrics: list[str]) -> pd.DataFrame:
+    """Combined ranking score: per-metric geometric mean of the ID and OOD scores, then mean across metrics.
 
     Per column ``combined_column = sqrt(id_score * ood_score)``; ``Combined`` is the mean across columns (NaN-safe). The
     absolute level rewards quality and, because the geometric mean punishes ID/OOD imbalance, a model that degrades
