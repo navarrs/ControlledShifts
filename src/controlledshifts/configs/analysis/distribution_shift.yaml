@@ -52,5 +52,6 @@ table:
   seen_label: 'In Distribution (\seen)'
   unseen_label: 'Distribution Shift (\unseen)'
   robustness_label: 'Robustness'
+  add_robustness_scores: true # When false, the table drops the trailing quality/stability columns.
   uniform_key: uniform # Benchmark the robustness columns score stability against.
   include_overall_mean: false # When false, the closing overall-mean row is written as commented-out LaTeX.

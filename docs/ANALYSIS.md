@@ -112,7 +112,7 @@ For each model in `models_to_compare`, the seen and unseen values are looked up 
 
 Writes per-benchmark comparison plots under `<output_path>/<benchmark>/` and one combined LaTeX table spanning all benchmarks to `<output_path>/results.tex`. Each benchmark block ends with a mean row (mean seen, mean unseen, mean OOD gap), and the table closes with an overall-mean row. The `table` block holds the paper-specific strings (`caption`, `seen_label`, `unseen_label`, `robustness_label`) and `include_overall_mean`, which defaults to `false` and writes that closing row as commented-out LaTeX.
 
-The table's last two columns are the robustness scores of [Robustness Scores](#robustness-scores), but computed *per benchmark* rather than aggregated across them: quality is scored against that block's Naive row and stability against the model's row in the benchmark named by `table.uniform_key`. Higher is better and the highest per column is bolded; stability inside the Uniform block is `1.000` for every model by construction (it is its own reference), so nothing is bolded there.
+The table's last two columns (`table.add_robustness_scores`, on by default) are the robustness scores of [Robustness Scores](#robustness-scores), but computed *per benchmark* rather than aggregated across them: quality is scored against that block's Naive row and stability against the model's row in the benchmark named by `table.uniform_key`. Higher is better and the highest per column is bolded; stability inside the Uniform block is `1.000` for every model by construction (it is its own reference), so nothing is bolded there.
 
 ### Unshifted Generalization
 

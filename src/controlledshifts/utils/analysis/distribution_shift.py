@@ -66,6 +66,14 @@ BLOCK_BANNER_RULE = "% " + "-" * 56
 ROBUSTNESS_COLUMNS = (QUALITY_COLUMN, STABILITY_COLUMN)
 
 
+def _robustness_columns(benchmark_df: pd.DataFrame) -> tuple[str, ...]:
+    """Robustness columns carried by ``benchmark_df`` -- empty when the analysis ran with them disabled.
+
+    The frame is the single source of truth for whether the group is rendered, so no writer needs the flag itself.
+    """
+    return tuple(column for column in ROBUSTNESS_COLUMNS if column in benchmark_df)
+
+
 def _plot_distribution_shift_comparison(
     summary_df: pd.DataFrame, output_path: Path, colormap: str, id_metric: str, ood_metric: str
 ) -> None:
@@ -414,7 +422,7 @@ def _benchmark_metric_means(
         mean_seen[metric] = float(id_vals.mean())
         mean_unseen[metric] = float(ood_vals.mean())
         mean_gap[metric] = float(gaps.mean())
-    mean_robustness = {column: float(benchmark_df[column].mean()) for column in ROBUSTNESS_COLUMNS}
+    mean_robustness = {column: float(benchmark_df[column].mean()) for column in _robustness_columns(benchmark_df)}
     return _MetricMeans(mean_seen, mean_unseen, mean_gap, mean_robustness)
 
 
@@ -452,10 +460,9 @@ def _build_mean_row(
     row_parts.extend(id_values)
     row_parts.extend(ood_values)
 
-    row_parts.extend(["", ""])  # spacer columns before the robustness group
-    for column in ROBUSTNESS_COLUMNS:
-        score = means.robustness[column]
-        row_parts.append(f"{score:.3f}" if pd.notna(score) else "---")
+    if means.robustness:
+        row_parts.extend(["", ""])  # spacer columns before the robustness group
+        row_parts.extend(f"{score:.3f}" if pd.notna(score) else "---" for score in means.robustness.values())
 
     return f"\\rowcolor[gray]{{{gray_level}}}\n" + " & ".join(row_parts) + " \\\\"
 
@@ -505,7 +512,8 @@ def _build_benchmark_rows(
         gaps: pd.Series = relative_gap_pct(ood_vals, id_vals)  # pyright: ignore[reportAssignmentType, reportArgumentType]
         gap_stats[metric] = (gaps.min(), gaps.max())  # best, worst
 
-    best_score = {column: _best_score(benchmark_df[column]) for column in ROBUSTNESS_COLUMNS}
+    score_columns = _robustness_columns(benchmark_df)
+    best_score = {column: _best_score(benchmark_df[column]) for column in score_columns}
 
     table_rows = []
     first_row = True
@@ -541,8 +549,9 @@ def _build_benchmark_rows(
         ood_values = ["", *ood_values]  # spacer column
         row_parts.extend(ood_values)
 
-        row_parts.extend(["", ""])  # spacer columns before the robustness group
-        row_parts.extend(format_value(row[column], best_score[column]) for column in ROBUSTNESS_COLUMNS)
+        if score_columns:
+            row_parts.extend(["", ""])  # spacer columns before the robustness group
+            row_parts.extend(format_value(row[column], best_score[column]) for column in score_columns)
         table_rows.append(" & ".join(row_parts) + " \\\\")
 
     # Light-gray per-benchmark mean row; benchmark cell left empty so the multirow label stays over the model rows.
@@ -584,7 +593,8 @@ def _write_combined_tex_table(
     acc_id: dict[str, list[pd.Series]] = {metric: [] for metric in metrics}
     acc_ood: dict[str, list[pd.Series]] = {metric: [] for metric in metrics}
     acc_gap: dict[str, list[pd.Series]] = {metric: [] for metric in metrics}
-    acc_score: dict[str, list[pd.Series]] = {column: [] for column in ROBUSTNESS_COLUMNS}
+    score_columns = _robustness_columns(blocks[0][-1])
+    acc_score: dict[str, list[pd.Series]] = {column: [] for column in score_columns}
     for _, _, id_split, ood_split, benchmark_df in blocks:
         for metric in metrics:
             id_vals = benchmark_df[f"{id_split}/{metric}"]
@@ -592,15 +602,13 @@ def _write_combined_tex_table(
             acc_id[metric].append(id_vals)
             acc_ood[metric].append(ood_vals)
             acc_gap[metric].append(pd.Series(relative_gap_pct(ood_vals, id_vals)))
-        for column in ROBUSTNESS_COLUMNS:
+        for column in score_columns:
             acc_score[column].append(benchmark_df[column])
     overall_means = _MetricMeans(
         seen={metric: float(pd.concat(acc_id[metric], ignore_index=True).mean()) for metric in metrics},
         unseen={metric: float(pd.concat(acc_ood[metric], ignore_index=True).mean()) for metric in metrics},
         gap={metric: float(pd.concat(acc_gap[metric], ignore_index=True).mean()) for metric in metrics},
-        robustness={
-            column: float(pd.concat(acc_score[column], ignore_index=True).mean()) for column in ROBUSTNESS_COLUMNS
-        },
+        robustness={column: float(pd.concat(acc_score[column], ignore_index=True).mean()) for column in score_columns},
     )
     # The mean row is two lines (\rowcolor + the row itself), so each line is commented individually.
     overall_row = _build_mean_row("\\textsc{Overall}", "Mean", overall_means, metrics, gray_level=0.89)
@@ -608,10 +616,19 @@ def _write_combined_tex_table(
     body_rows.extend(f"{prefix}{line}" for line in ["\\midrule", *overall_row.split("\n")])
 
     n_metrics = len(metrics)
-    n_scores = len(ROBUSTNESS_COLUMNS)
-    # Two spacer columns precede the unseen and the robustness group; each group's header spans its own pair.
-    col_spec = "l l " + "c" * (2 * n_metrics + n_scores + 4)
+    n_scores = len(score_columns)
+    # Two spacer columns precede the unseen group, and the robustness group when present; each header spans its pair.
+    col_spec = "l l " + "c" * (2 * n_metrics + 2 + (n_scores + 2 if n_scores else 0))
     headers = [METRIC_HEADER_MAP.get(metric, metric) for metric in metrics]
+
+    header_groups = [
+        f"\\multicolumn{{{n_metrics}}}{{c}}{{\\textbf{{{table_config.seen_label}}}}}",
+        f"\\multicolumn{{{n_metrics + 2}}}{{c}}{{\\textbf{{{table_config.unseen_label}}}}}",
+    ]
+    sub_headers = [*headers, "", "", *headers]
+    if n_scores:
+        header_groups.append(f"\\multicolumn{{{n_scores + 2}}}{{c}}{{\\textbf{{{table_config.robustness_label}}}}}")
+        sub_headers.extend(["", "", *score_columns])
 
     latex_lines: list[str] = [
         "\\begin{table*}[t]",
@@ -624,12 +641,11 @@ def _write_combined_tex_table(
         "\\begin{tabular}{" + col_spec + "}",
         "\\toprule",
         (
-            f"\\multirow{{2}}{{*}}{{\\textbf{{Benchmark}}}} & \\multirow{{2}}{{*}}{{\\textbf{{Model}}}} & "
-            f"\\multicolumn{{{n_metrics}}}{{c}}{{\\textbf{{{table_config.seen_label}}}}} & "
-            f"\\multicolumn{{{n_metrics + 2}}}{{c}}{{\\textbf{{{table_config.unseen_label}}}}} & "
-            f"\\multicolumn{{{n_scores + 2}}}{{c}}{{\\textbf{{{table_config.robustness_label}}}}} \\\\"
+            "\\multirow{2}{*}{\\textbf{Benchmark}} & \\multirow{2}{*}{\\textbf{Model}} & "
+            + " & ".join(header_groups)
+            + " \\\\"
         ),
-        "& & " + " & ".join([*headers, "", "", *headers, "", "", *ROBUSTNESS_COLUMNS]) + " \\\\",
+        "& & " + " & ".join(sub_headers) + " \\\\",
         *body_rows,
         "\\bottomrule",
         "\\end{tabular}%",
@@ -675,10 +691,12 @@ def run_distribution_shift_analysis(config: DictConfig, log: Logger, output_path
     models_to_compare = list(config.models_to_compare)
     colormap = config.benchmark_colormap
 
-    benchmarks = [(key, spec.name, spec.seen, spec.unseen) for key, spec in iter_benchmarks(config)]
-    robustness = compute_benchmark_robustness(
-        metrics_df, benchmarks, metrics, models_to_compare, uniform_key=str(config.table.uniform_key)
-    )
+    robustness: dict[str, pd.DataFrame] = {}
+    if config.table.add_robustness_scores:
+        benchmarks = [(key, spec.name, spec.seen, spec.unseen) for key, spec in iter_benchmarks(config)]
+        robustness = compute_benchmark_robustness(
+            metrics_df, benchmarks, metrics, models_to_compare, uniform_key=str(config.table.uniform_key)
+        )
 
     blocks: list[tuple[str, str, str, str, pd.DataFrame]] = []
     for key, spec in iter_benchmarks(config):
@@ -697,11 +715,14 @@ def run_distribution_shift_analysis(config: DictConfig, log: Logger, output_path
         benchmark_output.mkdir(parents=True, exist_ok=True)
         _plot_benchmark(benchmark_df, splits, metrics, colormap, benchmark_output)
 
-        # Table-only columns, attached after plotting so the figures keep seeing the raw metric frame.
-        block_scores = robustness.get(key)
-        model_names = benchmark_df["Model"].str.split("[").str[0]  # scores are keyed without the [run-id] suffix
-        for column in ROBUSTNESS_COLUMNS:
-            benchmark_df[column] = model_names.map(block_scores[column]) if block_scores is not None else float("nan")
+        # Table-only columns, attached after plotting so the figures keep seeing the raw metric frame. Left off
+        # entirely when disabled: their absence is what tells the table writer to drop the group.
+        if config.table.add_robustness_scores:
+            block_scores = robustness.get(key)
+            model_names = benchmark_df["Model"].str.split("[").str[0]  # scores are keyed without the [run-id] suffix
+            for column in ROBUSTNESS_COLUMNS:
+                scores = model_names.map(block_scores[column]) if block_scores is not None else float("nan")
+                benchmark_df[column] = scores
 
         blocks.append((spec.name, spec.latex, spec.seen, spec.unseen, benchmark_df))
 
