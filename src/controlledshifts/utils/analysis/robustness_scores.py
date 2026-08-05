@@ -178,6 +178,27 @@ def _aggregate_term(
     return pd.DataFrame(rows).set_index("Model")
 
 
+def _scored_benchmarks(
+    benchmarks: list[tuple[str, str, str, str]],
+    frames: dict[str, pd.DataFrame],
+    reference_mode: str,
+    uniform_key: str,
+    aggregate_over: str,
+) -> list[tuple[str, str, str, str]]:
+    """Benchmark tuples that actually contribute scores: those with data, minus Uniform where it does not belong.
+
+    Uniform is dropped under ``uniform_relative`` (a model is referenced against its own Uniform row, so scoring it
+    would be a degenerate uniform-vs-uniform comparison) and under :data:`METRIC_AXIS` (it is the unshifted control,
+    not one of the shifts the per-benchmark view compares).
+    """
+    skip_uniform = reference_mode == UNIFORM_RELATIVE or aggregate_over == METRIC_AXIS
+    return [
+        benchmark
+        for benchmark in benchmarks
+        if benchmark[0] in frames and not (skip_uniform and benchmark[0] == uniform_key)
+    ]
+
+
 def _build_frames(
     metrics_df: pd.DataFrame, benchmarks: list[tuple[str, str, str, str]], metrics: list[str], models: list[str]
 ) -> tuple[dict[str, pd.DataFrame], dict[str, tuple[str, str]]]:
@@ -342,8 +363,8 @@ def compute_benchmark_robustness(
     return scores
 
 
-def _geometric_mean_combined(id_df: pd.DataFrame, ood_df: pd.DataFrame, metrics: list[str]) -> pd.DataFrame:
-    """Combined ranking score: per-metric geometric mean of the ID and OOD scores, then mean across metrics.
+def _geometric_mean_combined(id_df: pd.DataFrame, ood_df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    """Combined ranking score: per-column geometric mean of the ID and OOD scores, then mean across columns.
 
     Per column ``combined_column = sqrt(id_score * ood_score)``; ``Combined`` is the mean across columns (NaN-safe). The
     absolute level rewards quality and, because the geometric mean punishes ID/OOD imbalance, a model that degrades
