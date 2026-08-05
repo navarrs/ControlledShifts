@@ -5,7 +5,7 @@ import logging
 import pandas as pd
 from omegaconf import OmegaConf
 
-from controlledshifts.utils.analysis.distribution_shift import build_benchmark_df
+from controlledshifts.utils.analysis.common import build_benchmark_df
 from controlledshifts.utils.analysis.unshifted_generalization import (
     Block,
     _build_block_rows,

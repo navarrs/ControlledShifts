@@ -103,13 +103,16 @@ The first three read a single combined results file (`benchmarks_filepath`, e.g.
 benchmarks:
   - uniform:
       name: Uniform
+      latex: '\uniform'
       seen: "test/waymo-uniform-validation"
       unseen: "test/waymo-uniform-testing"
 ```
 
-For each model in `models_to_compare`, the seen and unseen values are looked up independently and joined by model name, so a benchmark's seen and unseen splits may come from different training runs.
+For each model in `models_to_compare`, the seen and unseen values are looked up independently and joined by model name, so a benchmark's seen and unseen splits may come from different training runs. `latex` is the macro the table prints for the benchmark; models use the macros in `MODEL_MACRO_MAP`.
 
-Writes per-benchmark comparison plots under `<output_path>/<benchmark>/` and one combined LaTeX table spanning all benchmarks to `<output_path>/results.tex`. Each benchmark block ends with a mean row (mean seen, mean unseen, mean OOD gap), and the table closes with an overall-mean row.
+Writes per-benchmark comparison plots under `<output_path>/<benchmark>/` and one combined LaTeX table spanning all benchmarks to `<output_path>/results.tex`. Each benchmark block ends with a mean row (mean seen, mean unseen, mean OOD gap), and the table closes with an overall-mean row. The `table` block holds the paper-specific strings (`caption`, `seen_label`, `unseen_label`, `robustness_label`) and `include_overall_mean`, which defaults to `false` and writes that closing row as commented-out LaTeX.
+
+The table's last two columns (`table.add_robustness_scores`, on by default) are the robustness scores of [Robustness Scores](#robustness-scores), but computed *per benchmark* rather than aggregated across them: quality is scored against that block's Naive row and stability against the model's row in the benchmark named by `table.uniform_key`. Higher is better and the highest per column is bolded; stability inside the Uniform block is `1.000` for every model by construction (it is its own reference), so nothing is bolded there.
 
 ### Unshifted Generalization
 
@@ -163,7 +166,7 @@ For each axis and mode it writes, under `<output_path>/<axis>/<folder>/` (`naive
 Each axis folder also gets `<output_path>/<axis>/robustness_summary.png`: a 3x2 grid whose columns are the two modes (Quality / Stability) and whose rows are the Seen radar, Unseen radar and Combined ranking, under a shared model legend.
 
 > [!NOTE]
-> The LaTeX tables in these three analyses shade rows with `\rowcolor`, so the consuming document must load `\usepackage[table]{xcolor}` (and `\usepackage{multirow}` for the unshifted-generalization table).
+> The LaTeX tables in these three analyses shade rows with `\rowcolor`, so the consuming document must load `\usepackage[table]{xcolor}` (and `\usepackage{multirow}` for the unshifted-generalization table). The distribution-shift table additionally prints benchmark, model and split *macros* rather than plain names, so the document must define them (`\uniform`, `\naive`, `\seen`, `\unseen`, ...).
 
 ### Background Agent Distribution
 

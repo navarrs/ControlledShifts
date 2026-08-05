@@ -59,6 +59,11 @@ METRIC_NAME_MAP = {
 # Column holding the per-model score aggregated across metrics, in the frames the robustness analysis builds.
 COMBINED_COLUMN = "Combined"
 
+# The two robustness axes, named once here because both the robustness analysis and the distribution-shift table
+# label their columns with them: quality is scored against the Naive baseline, stability against the Uniform setting.
+QUALITY_COLUMN = "Quality"
+STABILITY_COLUMN = "Stability"
+
 # Short metric labels for space-constrained axes (e.g. radar rims), spelled out in a caption next to the figure.
 METRIC_ABBREV_MAP = {
     "brierFDE": "BF",
@@ -106,16 +111,6 @@ CBAR_TICK_FONTSIZE = 16
 # annotations drawn over plot content (reference lines, rings and their labels).
 TEXT_COLOR = "#808080"
 GRAY_TEXT_COLOR = "dimgray"
-
-
-MODEL_SIZE_MAP = {
-    "Naive": "624k",
-    "AutoBot": "1.5M",
-    "SceneTransformer": "7.6M",
-    "Wayformer": "15.1M",
-    "Safe-Wayformer": "15.2M",
-    "MTR": "27.2M",  # This is the size with d_model=256. The original MTR with d_model=512 has 65M parameters.
-}
 
 
 def metric_label(metric: str) -> str:
@@ -194,6 +189,63 @@ def load_results_csv(filepath: Path, log: Logger) -> pd.DataFrame | None:
         log.error("CSV must contain a 'Name' column")
         return None
     return metrics_df
+
+
+def build_benchmark_df(
+    metrics_df: pd.DataFrame,
+    splits: tuple[str, ...],
+    metrics: list[str],
+    models_to_compare: list[str],
+    *,
+    show_run_id: bool,
+) -> pd.DataFrame:
+    """Reconstruct a per-model benchmark DataFrame from the combined results file.
+
+    For each model in ``models_to_compare``, the metric values for each split in ``splits`` are looked up independently
+    and joined by model name (typically the seen/unseen pair, but any number of split prefixes is supported). A
+    benchmark's splits may therefore come from different training runs (or even different datasets); each value is taken
+    from the first row that populates the corresponding column.
+
+    Args:
+        metrics_df: Combined results with a ``Name`` (``<dataset>_<model>``) column and ``<split>/<metric>`` columns.
+        splits: Split column prefixes to extract, e.g.
+            ``("test/waymo-uniform-validation", "test/waymo-uniform-testing")``.
+        metrics: Metric names to extract for each split.
+        models_to_compare: Raw model identifiers (as they appear after ``<dataset>_``) to include.
+        show_run_id: Whether to append the source run ID to the displayed model name.
+
+    Returns:
+        One row per model with a ``Model`` column and ``<split>/<metric>`` value columns (NaN when a metric is absent),
+        shape-compatible with the plotting and LaTeX-table helpers.
+    """
+    metrics_df = metrics_df.copy()
+    metrics_df["model_name"] = metrics_df["Name"].str.rsplit("_", n=1).str[-1]
+    if "ID" not in metrics_df.columns:
+        metrics_df["ID"] = np.arange(len(metrics_df))
+
+    rows: list[dict[str, float | str]] = []
+    for model in models_to_compare:
+        model_rows = metrics_df[metrics_df["model_name"] == model]
+        if model_rows.empty:
+            continue
+        display_name = MODEL_NAME_MAP.get(model, model)
+        record: dict[str, float | str] = {}
+        run_id: str | None = None
+        for split in splits:
+            for metric in metrics:
+                col = f"{split}/{metric}"
+                value = float("nan")
+                if col in model_rows.columns:
+                    non_null = model_rows[col].dropna()
+                    if not non_null.empty:
+                        value = float(non_null.iloc[0])
+                        if run_id is None:
+                            run_id = str(model_rows.loc[non_null.index[0], "ID"])
+                record[col] = value
+        record["Model"] = f"{display_name}[{run_id}]" if show_run_id and run_id is not None else display_name
+        rows.append(record)
+
+    return pd.DataFrame(rows)
 
 
 def iter_benchmarks(config: DictConfig) -> Iterator[tuple[str, DictConfig]]:
