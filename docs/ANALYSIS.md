@@ -128,13 +128,22 @@ Writes a per-benchmark LaTeX table to `<output_path>/results.tex` (cells are `va
 
 ### Robustness Scores
 
-[`analysis/robustness.yaml`](../src/controlledshifts/configs/analysis/robustness.yaml) reduces the same results file into comparable *scores* per model per metric, measured against a reference. All metrics are errors, so each model is characterized by two reference-relative axes — dimensionless, **higher is better**, `1.0` == on par with the reference — reduced to a single ranking value by their per-metric geometric mean:
+[`analysis/robustness.yaml`](../src/controlledshifts/configs/analysis/robustness.yaml) reduces the same results file into comparable *scores* per model, measured against a reference. All metrics are errors, so each model is characterized by two reference-relative axes — dimensionless, **higher is better**, `1.0` == on par with the reference — reduced to a single ranking value by their per-column geometric mean:
 
 ```
 id_score  = ref_seen   / model_seen
 ood_score = ref_unseen / model_unseen
 Combined  = mean( sqrt(id_score · ood_score) )
 ```
+
+A score exists for every `(benchmark, model, metric)` cell, and `aggregate_over` picks which of those two dimensions is collapsed — the surviving one becomes the score columns (and the radar axes):
+
+| `aggregate_over` | Aggregates across | Score columns | Output folder |
+|---|---|---|---|
+| `benchmark` | Benchmarks | Metrics | `per_metric/` |
+| `metric` | Metrics | Benchmark names | `per_benchmark/` |
+
+Radar rims are short labels spelled out in an abbreviation key beside the figure: metrics use the built-in `METRIC_ABBREV_MAP`, benchmarks use the optional per-benchmark `abbrev` field in `robustness.yaml` (`BackgroundAgentsHard` → `BAH`). A benchmark without an `abbrev` is labelled in full.
 
 Two reference modes are produced:
 
@@ -146,13 +155,12 @@ Two reference modes are produced:
 > [!NOTE]
 > The full derivation — the MASE / OWA framing of [N-BEATS](https://arxiv.org/pdf/1905.10437), why the geometric mean is used, and the "robustness paradox" this scaling avoids — lives in the module docstring of [`robustness_scores.py`](../src/controlledshifts/utils/analysis/robustness_scores.py).
 
-For each mode it writes, under `<output_path>/<folder>/` (`naive_relative` → `quality_naive`, `uniform_relative` →
-`stability_uniform`):
-- a radar plot, CSV and LaTeX table per axis (`seen_score_*`, `unseen_score_*`), with a dashed `1.0` reference ring;
-- `score_decomposition.png` — one panel per metric placing each model at `(id_score, ood_score)`, reference at `(1, 1)`. The upper-right quadrant beats the reference on both; the dashed `y = x` diagonal marks "degrades like the reference" (above it = more shift-robust);
+For each axis and mode it writes, under `<output_path>/<axis>/<folder>/` (`naive_relative` → `quality_naive`, `uniform_relative` → `stability_uniform`):
+- a radar plot, CSV and LaTeX table per score term (`seen_score_*`, `unseen_score_*`), with a dashed `1.0` reference ring;
+- `score_decomposition.png` — one panel per score column placing each model at `(id_score, ood_score)`, reference at `(1, 1)`. The upper-right quadrant beats the reference on both; the dashed `y = x` diagonal marks "degrades like the reference" (above it = more shift-robust);
 - the combined ranking as a sorted bar chart (`combined_robustness_ranking.png`) plus CSV and LaTeX table.
 
-It also writes `<output_path>/robustness_summary.png`: a 3x2 grid whose columns are the two modes (Quality / Stability) and whose rows are the Seen radar, Unseen radar and Combined ranking, under a shared model legend.
+Each axis folder also gets `<output_path>/<axis>/robustness_summary.png`: a 3x2 grid whose columns are the two modes (Quality / Stability) and whose rows are the Seen radar, Unseen radar and Combined ranking, under a shared model legend.
 
 > [!NOTE]
 > The LaTeX tables in these three analyses shade rows with `\rowcolor`, so the consuming document must load `\usepackage[table]{xcolor}` (and `\usepackage{multirow}` for the unshifted-generalization table).

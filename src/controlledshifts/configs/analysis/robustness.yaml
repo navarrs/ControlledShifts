@@ -6,29 +6,36 @@ analysis_name: robustness
 
 # Combined results file holding every benchmark's metrics (same source as the distribution-shift analysis).
 benchmarks_filepath: ./meta/runs/distribution_shift_results.csv
-output_path: ./outputs/score_analysis
+output_path: ./outputs/robustness_analysis
 score_colormap: Dark2 # Qualitative palette with well-separated hues for the radar's per-model lines.
 
 # Duplicated from distribution_shift.yaml (kept in sync intentionally; small, rarely changes).
+# `abbrev` is the short rim label used when benchmarks are the radar axes (aggregate_over: metric); the full name is
+# spelled out in the figure's abbreviation key. Optional -- an unabbreviated benchmark is labelled in full.
 benchmarks:
   - uniform:
       name: Uniform
+      abbrev: UNI
       seen: "test/waymo-uniform-validation"
       unseen: "test/waymo-uniform-testing"
 #   - background_agents:
 #       name: BackgroundAgents
+#       abbrev: BA
 #       seen: "test/waymo-uniform-testing"
 #       unseen: "test/waymo-remove-noncausal-testing"
   - background_agents_hard:
       name: BackgroundAgentsHard
+      abbrev: BAH
       seen: "test/waymo-background-agents-hard-original-validation"
       unseen: "test/waymo-remove-noncausal-hard-testing"
   - ego_safeshift:
       name: EgoSafeShift
+      abbrev: ESS
       seen: "test/waymo-ego-safeshift-id"
       unseen: "test/waymo-ego-safeshift-ood"
   - environments:
       name: Environments
+      abbrev: ENV
       seen: "test/waymo-environments-id"
       unseen: "test/waymo-environments-ood"
 
@@ -37,5 +44,9 @@ score:
   # (downstream quality ranking); uniform_relative scales each model by its own Uniform-benchmark performance (shift
   # stability). Each mode gets its own combined score = sqrt(id_score * ood_score).
   reference_modes: [naive_relative, uniform_relative]
+  # Which dimension the scores are collapsed over. `benchmark` aggregates across benchmarks so the score columns and
+  # radar axes are metrics (-> per_metric/); `metric` aggregates across metrics so they are benchmarks
+  # (-> per_benchmark/). Each axis gets its own output folder and its own robustness_summary.png.
+  aggregate_over: [benchmark, metric]
   uniform_key: uniform # Benchmark key used as the uniform_relative reference.
-  aggregate: mean # Aggregation across benchmarks (mean|median); the combined always means across metrics.
+  aggregate: mean # Aggregation across the collapsed dimension (mean|median); the combined always means across columns.

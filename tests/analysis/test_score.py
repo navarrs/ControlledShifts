@@ -14,6 +14,7 @@ from controlledshifts.utils.analysis.common import COMBINED_COLUMN, metric_label
 from controlledshifts.utils.analysis.robustness_scores import (
     COMBINED_TERM,
     ID_TERM,
+    METRIC_AXIS,
     OOD_TERM,
     _geometric_mean,
     _geometric_mean_combined,
@@ -119,6 +120,53 @@ def test_nan_propagation_skips_missing_benchmark_cells():
     assert np.isclose(scores[OOD_TERM].at["AutoBot", "m1"], 11.0 / 6.0)
 
 
+def test_metric_axis_columns_are_benchmarks_and_average_metrics():
+    # Two metrics in one benchmark: the METRIC_AXIS column is the benchmark's display name and holds their mean.
+    records = [
+        {"Name": "bench_naive", "s_b/m1": 10.0, "u_b/m1": 12.0, "s_b/m2": 10.0, "u_b/m2": 12.0},
+        {"Name": "bench_autobot", "s_b/m1": 5.0, "u_b/m1": 8.0, "s_b/m2": 2.0, "u_b/m2": 4.0},
+    ]
+    benchmarks = [("bench", "Bench", "s_b", "u_b")]
+    scores = compute_robustness_scores(
+        _metrics_df(records),
+        benchmarks,
+        ["m1", "m2"],
+        ["naive", "autobot"],
+        reference_mode="naive_relative",
+        aggregate_over=METRIC_AXIS,
+    )
+
+    assert list(scores[ID_TERM].columns) == ["Bench", COMBINED_COLUMN]
+    assert np.isclose(scores[ID_TERM].at["AutoBot", "Bench"], np.mean([10.0 / 5.0, 10.0 / 2.0]))
+    assert np.isclose(scores[OOD_TERM].at["AutoBot", "Bench"], np.mean([12.0 / 8.0, 12.0 / 4.0]))
+
+
+def test_metric_axis_drops_uniform_column_under_uniform_relative():
+    records = [
+        {"Name": "uniform_naive", "s_uni/m1": 11.0, "u_uni/m1": 11.0},
+        {"Name": "uniform_autobot", "s_uni/m1": 4.0, "u_uni/m1": 5.0},
+        {"Name": "bench_naive", "s_b/m1": 10.0, "u_b/m1": 12.0},
+        {"Name": "bench_autobot", "s_b/m1": 5.0, "u_b/m1": 8.0},
+    ]
+    benchmarks = [
+        ("uniform", "Uniform", "s_uni", "u_uni"),
+        ("bench", "Bench", "s_b", "u_b"),
+    ]
+    scores = compute_robustness_scores(
+        _metrics_df(records),
+        benchmarks,
+        ["m1"],
+        ["naive", "autobot"],
+        reference_mode="uniform_relative",
+        uniform_key="uniform",
+        aggregate_over=METRIC_AXIS,
+    )
+
+    # The degenerate self-reference benchmark is absent entirely, not an all-NaN column.
+    assert list(scores[ID_TERM].columns) == ["Bench", COMBINED_COLUMN]
+    assert np.isclose(scores[ID_TERM].at["AutoBot", "Bench"], 4.0 / 5.0)
+
+
 def test_geometric_mean_value_and_guards():
     left = pd.Series([4.0, 1.0, np.nan, 2.0, -1.0])
     right = pd.Series([9.0, 0.0, 3.0, np.nan, 5.0])
@@ -180,7 +228,7 @@ def test_metric_label_uses_clean_name():
     assert metric_label("unmapped_metric") == "unmapped_metric"  # falls back to raw name
 
 
-def test_run_score_analysis_writes_artifacts(tmp_path):
+def test_run_robustness_analysis_writes_artifacts(tmp_path):
     records = [
         {"Name": "uniform_naive", "test/s_uni/m1": 11.0, "test/u_uni/m1": 11.0},
         {"Name": "uniform_autobot", "test/s_uni/m1": 4.0, "test/u_uni/m1": 5.0},
@@ -202,6 +250,7 @@ def test_run_score_analysis_writes_artifacts(tmp_path):
             ],
             "score": {
                 "reference_modes": ["naive_relative", "uniform_relative"],
+                "aggregate_over": ["benchmark", "metric"],
                 "uniform_key": "uniform",
                 "aggregate": "mean",
             },
@@ -211,17 +260,17 @@ def test_run_score_analysis_writes_artifacts(tmp_path):
     output_path = tmp_path / "out"
     run_robustness_scores_analysis(config, logging.getLogger("test"), output_path)
 
-    for folder in ("quality_naive", "stability_uniform"):
-        for stem in ("seen_score", "unseen_score"):
-            assert (output_path / folder / f"{stem}_radar.png").exists()
-            assert (output_path / folder / f"{stem}_scores.csv").exists()
-            assert (output_path / folder / f"{stem}_scores.tex").exists()
-        assert (output_path / folder / "score_decomposition.png").exists()
-        assert (output_path / folder / "combined_robustness_ranking.png").exists()
-        assert (output_path / folder / "combined_robustness_scores.csv").exists()
-        assert (output_path / folder / "combined_robustness_scores.tex").exists()
-
-    # Single combined Quality-vs-Stability summary at the top level (no per-mode summary files).
-    assert (output_path / "robustness_summary.png").exists()
-    for folder in ("quality_naive", "stability_uniform"):
-        assert not (output_path / folder / "robustness_summary.png").exists()
+    for axis in ("per_metric", "per_benchmark"):
+        for folder in ("quality_naive", "stability_uniform"):
+            mode_output = output_path / axis / folder
+            for stem in ("seen_score", "unseen_score"):
+                assert (mode_output / f"{stem}_radar.png").exists()
+                assert (mode_output / f"{stem}_scores.csv").exists()
+                assert (mode_output / f"{stem}_scores.tex").exists()
+            assert (mode_output / "score_decomposition.png").exists()
+            assert (mode_output / "combined_robustness_ranking.png").exists()
+            assert (mode_output / "combined_robustness_scores.csv").exists()
+            assert (mode_output / "combined_robustness_scores.tex").exists()
+            # One combined Quality-vs-Stability summary per axis (no per-mode summary files).
+            assert not (mode_output / "robustness_summary.png").exists()
+        assert (output_path / axis / "robustness_summary.png").exists()

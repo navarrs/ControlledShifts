@@ -17,11 +17,16 @@ OOD error stays high on ``ood_score`` regardless of its degradation *factor* -- 
 where a uniformly-weak model that multiplies its error by a small factor looks more robust than a strong model. The
 division is NaN-guarded (a non-finite/non-positive numerator or denominator -> ``NaN``, dropped from aggregation).
 
-To rank models by a single value the two axes are reduced, within the same reference frame, to a ``combined`` score
-that is the per-metric geometric mean::
+Each score is computed per ``(benchmark, model, metric)`` cell, and one of those two dimensions is then collapsed
+(``aggregate_over``): collapsing ``benchmark`` leaves per-model, per-metric frames (the metrics become the score
+columns / radar axes); collapsing ``metric`` leaves per-model, per-benchmark frames. Everything downstream operates on
+"columns other than ``Combined``" and is agnostic to which dimension that is.
 
-    combined_metric = sqrt(id_score * ood_score)
-    Combined        = mean(combined_metric across metrics)
+To rank models by a single value the two axes are reduced, within the same reference frame, to a ``combined`` score
+that is the per-column geometric mean::
+
+    combined_column = sqrt(id_score * ood_score)
+    Combined        = mean(combined_column across columns)
 
 and is NaN-safe (via :func:`_geometric_mean`). The geometric mean does both jobs at once: its absolute level rewards
 quality, and because it punishes ID/OOD imbalance it penalizes shift degradation -- so a single frame captures both,
@@ -71,7 +76,13 @@ COMBINED_TERM = "combined"
 # Reference-mode strings (drive the scoring/skip logic and the config ``reference_modes``); do NOT rename these.
 NAIVE_RELATIVE = "naive_relative"
 UNIFORM_RELATIVE = "uniform_relative"
-# Radar terms only (the per-metric score axes), mapped to their output-file stem and display title.
+# Aggregation axes: the dimension collapsed by ``aggregate`` (drive the config ``aggregate_over``; do NOT rename).
+# The folder/label names describe what is left -- the score columns -- which is the *other* dimension.
+BENCHMARK_AXIS = "benchmark"  # collapse benchmarks -> columns are metrics
+METRIC_AXIS = "metric"  # collapse metrics -> columns are benchmarks
+AXIS_FOLDERS = {BENCHMARK_AXIS: "per_metric", METRIC_AXIS: "per_benchmark"}
+AXIS_LABELS = {BENCHMARK_AXIS: "Per-Metric", METRIC_AXIS: "Per-Benchmark"}
+# Radar terms only (the two per-column score axes), mapped to their output-file stem and display title.
 RADAR_TERM_STEMS = {ID_TERM: "seen_score", OOD_TERM: "unseen_score"}
 COMBINED_FILE_STEM = "combined_robustness"
 COMBINED_TITLE = "Combined Robustness Score"
@@ -131,37 +142,59 @@ def _select_reference(  # noqa: PLR0913
 
 def _aggregate_term(
     accum: dict[str, dict[str, list[float]]],
-    metrics: list[str],
+    columns: list[str],
     ordered_models: list[str],
     agg_fn: Callable[[list[float]], np.floating],
 ) -> pd.DataFrame:
-    """Aggregate per-benchmark scores into a per-model, per-metric frame (NaN-safe) with a ``Combined`` column.
+    """Aggregate the collapsed dimension's scores into a per-model, per-column frame (NaN-safe) with ``Combined``.
 
     Args:
-        accum: ``accum[model][metric]`` -> list of per-benchmark scores.
-        metrics: Metric names, in column order.
+        accum: ``accum[model][column]`` -> list of scores over the collapsed dimension.
+        columns: Score-column names (metrics or benchmarks), in column order.
         ordered_models: Display model names, in row order.
-        agg_fn: NaN-safe reducer applied across benchmarks (``np.nanmean`` or ``np.nanmedian``).
+        agg_fn: NaN-safe reducer applied across the collapsed dimension (``np.nanmean`` or ``np.nanmedian``).
 
     Returns:
-        DataFrame indexed by ``Model`` with one column per metric plus a ``Combined`` column (per-model mean).
+        DataFrame indexed by ``Model`` with one column per entry of ``columns`` plus a ``Combined`` column (per-model
+        mean across them).
     """
     rows: list[dict[str, float | str]] = []
     for model in ordered_models:
         if model not in accum:
             continue
         record: dict[str, float | str] = {"Model": model}
-        metric_scores: list[float] = []
-        for metric in metrics:
-            values = [value for value in accum[model].get(metric, []) if not pd.isna(value)]
+        column_scores: list[float] = []
+        for column in columns:
+            values = [value for value in accum[model].get(column, []) if not pd.isna(value)]
             score = float(agg_fn(values)) if values else float("nan")
-            record[metric] = score
-            metric_scores.append(score)
-        valid = [value for value in metric_scores if not pd.isna(value)]
+            record[column] = score
+            column_scores.append(score)
+        valid = [value for value in column_scores if not pd.isna(value)]
         record[COMBINED_COLUMN] = float(np.mean(valid)) if valid else float("nan")
         rows.append(record)
 
     return pd.DataFrame(rows).set_index("Model")
+
+
+def _scored_benchmarks(
+    benchmarks: list[tuple[str, str, str, str]],
+    frames: dict[str, pd.DataFrame],
+    reference_mode: str,
+    uniform_key: str,
+    aggregate_over: str,
+) -> list[tuple[str, str, str, str]]:
+    """Benchmark tuples that actually contribute scores: those with data, minus Uniform where it does not belong.
+
+    Uniform is dropped under ``uniform_relative`` (a model is referenced against its own Uniform row, so scoring it
+    would be a degenerate uniform-vs-uniform comparison) and under :data:`METRIC_AXIS` (it is the unshifted control,
+    not one of the shifts the per-benchmark view compares).
+    """
+    skip_uniform = reference_mode == UNIFORM_RELATIVE or aggregate_over == METRIC_AXIS
+    return [
+        benchmark
+        for benchmark in benchmarks
+        if benchmark[0] in frames and not (skip_uniform and benchmark[0] == uniform_key)
+    ]
 
 
 def compute_robustness_scores(  # noqa: PLR0913
@@ -173,15 +206,17 @@ def compute_robustness_scores(  # noqa: PLR0913
     reference_mode: str,
     aggregate: str = "mean",
     uniform_key: str = "uniform",
+    aggregate_over: str = BENCHMARK_AXIS,
 ) -> dict[str, pd.DataFrame]:
-    """Compute per-model, per-metric ID/OOD scores and a combined ranking, aggregated across benchmarks.
+    """Compute per-model ID/OOD scores and a combined ranking, aggregated over one of the two score dimensions.
 
     For each benchmark, model and metric two reference-relative MASE-style scores are computed (see the module
     docstring): ``id_score`` (seen) and ``ood_score`` (unseen). The reference is selected by ``reference_mode``. Both
-    are aggregated across benchmarks (NaN-safe) into per-metric frames with a ``Combined`` column holding the per-model
-    mean across metrics. The ``combined`` frame is the per-metric geometric mean ``sqrt(id_score * ood_score)``
-    (:func:`_geometric_mean_combined`). For ``uniform_relative`` the Uniform benchmark is excluded from aggregation
-    (its self-reference is degenerate).
+    are then aggregated (NaN-safe) over the ``aggregate_over`` dimension, leaving frames whose columns are the *other*
+    dimension -- metrics when collapsing benchmarks, benchmark display names when collapsing metrics -- plus a
+    ``Combined`` column holding the per-model mean across those columns. The ``combined`` frame is the per-column
+    geometric mean ``sqrt(id_score * ood_score)`` (:func:`_geometric_mean_combined`). The Uniform benchmark is excluded
+    under ``uniform_relative`` and under :data:`METRIC_AXIS` -- see :func:`_scored_benchmarks`.
 
     Args:
         metrics_df: Combined results frame with a ``Name`` (``<dataset>_<model>``) column.
@@ -189,13 +224,14 @@ def compute_robustness_scores(  # noqa: PLR0913
         metrics: Metric names, in column order.
         models_to_compare: Raw model identifiers to include.
         reference_mode: ``"naive_relative"`` or ``"uniform_relative"``.
-        aggregate: ``"mean"`` or ``"median"`` across benchmarks.
+        aggregate: ``"mean"`` or ``"median"`` across the collapsed dimension.
         uniform_key: Benchmark key used as the ``uniform_relative`` reference.
+        aggregate_over: :data:`BENCHMARK_AXIS` (columns are metrics) or :data:`METRIC_AXIS` (columns are benchmarks).
 
     Returns:
         Dict keyed by :data:`ID_TERM`, :data:`OOD_TERM` and :data:`COMBINED_TERM`; each value is a DataFrame indexed by
-        ``Model`` with one column per metric plus a ``Combined`` column. All are higher-is-better scores (``1.0`` == on
-        par with the reference).
+        ``Model`` with one score column per surviving entry of the non-collapsed dimension plus a ``Combined`` column.
+        All are higher-is-better scores (``1.0`` == on par with the reference).
     """
     frames: dict[str, pd.DataFrame] = {}
     splits: dict[str, tuple[str, str]] = {}
@@ -206,18 +242,15 @@ def compute_robustness_scores(  # noqa: PLR0913
         frames[key] = benchmark_df.set_index("Model")
         splits[key] = (seen, unseen)
 
-    # accum[term][model][metric] -> list of per-benchmark scores
+    scored = _scored_benchmarks(benchmarks, frames, reference_mode, uniform_key, aggregate_over)
+
+    # accum[term][model][column] -> list of scores over the collapsed dimension
     accum: dict[str, dict[str, dict[str, list[float]]]] = {ID_TERM: {}, OOD_TERM: {}}
-    for key, _name, seen, unseen in benchmarks:
-        if key not in frames:
-            continue
-        # Skip the Uniform benchmark entirely under uniform_relative: a model is referenced against its
-        # own Uniform row, so scoring Uniform here would be a degenerate uniform-vs-uniform comparison.
-        if reference_mode == UNIFORM_RELATIVE and key == uniform_key:
-            continue
+    for key, name, seen, unseen in scored:
         frame = frames[key]
         for model in frame.index:
             for metric in metrics:
+                column = metric if aggregate_over == BENCHMARK_AXIS else name
                 model_seen = float(frame.loc[model, f"{seen}/{metric}"])
                 model_unseen = float(frame.loc[model, f"{unseen}/{metric}"])
                 ref_seen, ref_unseen = _select_reference(
@@ -232,13 +265,14 @@ def compute_robustness_scores(  # noqa: PLR0913
                 score_id = _score(model_seen, ref_seen)
                 score_ood = _score(model_unseen, ref_unseen)
                 for term, value in ((ID_TERM, score_id), (OOD_TERM, score_ood)):
-                    accum[term].setdefault(model, {}).setdefault(metric, []).append(value)
+                    accum[term].setdefault(model, {}).setdefault(column, []).append(value)
 
+    columns = metrics if aggregate_over == BENCHMARK_AXIS else [name for _key, name, _seen, _unseen in scored]
     agg_fn = np.nanmedian if aggregate == "median" else np.nanmean
     ordered_models = [MODEL_NAME_MAP.get(model, model) for model in models_to_compare]
-    id_df = _aggregate_term(accum[ID_TERM], metrics, ordered_models, agg_fn)
-    ood_df = _aggregate_term(accum[OOD_TERM], metrics, ordered_models, agg_fn)
-    combined_df = _geometric_mean_combined(id_df, ood_df, metrics)
+    id_df = _aggregate_term(accum[ID_TERM], columns, ordered_models, agg_fn)
+    ood_df = _aggregate_term(accum[OOD_TERM], columns, ordered_models, agg_fn)
+    combined_df = _geometric_mean_combined(id_df, ood_df, columns)
     return {ID_TERM: id_df, OOD_TERM: ood_df, COMBINED_TERM: combined_df}
 
 
@@ -252,25 +286,25 @@ def _geometric_mean(left: pd.Series, right: pd.Series) -> pd.Series:
     return np.sqrt((left * right).where(valid))
 
 
-def _geometric_mean_combined(id_df: pd.DataFrame, ood_df: pd.DataFrame, metrics: list[str]) -> pd.DataFrame:
-    """Combined ranking score: per-metric geometric mean of the ID and OOD scores, then mean across metrics.
+def _geometric_mean_combined(id_df: pd.DataFrame, ood_df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    """Combined ranking score: per-column geometric mean of the ID and OOD scores, then mean across columns.
 
-    Per metric ``combined_metric = sqrt(id_score * ood_score)``; ``Combined`` is the mean across metrics (NaN-safe). The
+    Per column ``combined_column = sqrt(id_score * ood_score)``; ``Combined`` is the mean across columns (NaN-safe). The
     absolute level rewards quality and, because the geometric mean punishes ID/OOD imbalance, a model that degrades
     under shift is penalized -- so a single reference frame captures both. ``1.0`` means on par with the reference.
 
     Args:
-        id_df: Aggregated ID score frame (indexed by ``Model``, metric columns plus ``Combined``).
+        id_df: Aggregated ID score frame (indexed by ``Model``, score columns plus ``Combined``).
         ood_df: Aggregated OOD score frame, same shape/index as ``id_df``.
-        metrics: Metric names (the per-metric columns to combine).
+        columns: Score-column names (metrics or benchmarks) to combine.
 
     Returns:
-        DataFrame indexed by ``Model`` with one combined column per metric plus a ``Combined`` column.
+        DataFrame indexed by ``Model`` with one combined column per entry of ``columns`` plus a ``Combined`` column.
     """
     combined = pd.DataFrame(index=id_df.index)
-    for metric in metrics:
-        combined[metric] = _geometric_mean(id_df[metric], ood_df[metric])
-    combined[COMBINED_COLUMN] = combined[metrics].mean(axis=1, skipna=True)
+    for column in columns:
+        combined[column] = _geometric_mean(id_df[column], ood_df[column])
+    combined[COMBINED_COLUMN] = combined[columns].mean(axis=1, skipna=True)
     return combined
 
 
@@ -323,7 +357,7 @@ def _write_scores_tex(scores_df: pd.DataFrame, output_path: Path, filename: str,
 def _shared_radial(scores: dict[str, pd.DataFrame]) -> tuple[float, float, float, NDArray]:
     """One radial scale spanning both score axes, so the Seen/Unseen radars share rings and bounds.
 
-    The ``Combined`` column is excluded: it is a summary across metrics, not one of the radar's axes.
+    The ``Combined`` column is excluded: it is a summary across the score columns, not one of the radar's axes.
     """
     shared_values = [
         value
@@ -341,7 +375,9 @@ def _write_mode_artifacts(  # noqa: PLR0913
     *,
     reference_mode: str,
     reference_label: str,
+    axis_label: str,
     shared_radial: tuple[float, float, float, NDArray],
+    abbrev: dict[str, str] | None,
 ) -> None:
     """Write one reference mode's artifacts: a radar/CSV/LaTeX trio per score axis, the decomposition scatter, and
     the combined ranking with its own CSV and LaTeX table.
@@ -352,19 +388,23 @@ def _write_mode_artifacts(  # noqa: PLR0913
         colormap: Seaborn/matplotlib palette name.
         reference_mode: Raw mode string, used in the LaTeX captions.
         reference_label: Human-readable mode, used as the plot subtitle.
+        axis_label: Human-readable aggregation axis (from :data:`AXIS_LABELS`), appended to subtitles and captions.
         shared_radial: Radial scale shared by both radars.
+        abbrev: Score column -> short radar rim label; ``None`` when the columns are metrics (the radar's own map).
     """
+    subtitle = f"{reference_label} · {axis_label}"
     for term, stem in RADAR_TERM_STEMS.items():
         term_df = scores[term]
-        term_title = f"{RADAR_TERM_TITLES[term]} ({reference_mode})"
+        term_title = f"{RADAR_TERM_TITLES[term]} ({reference_mode}, {axis_label})"
         plot_score_radar(
             term_df,
             mode_output,
             colormap,
             RADAR_TERM_TITLES[term],
-            reference_label,
+            subtitle,
             f"{stem}_radar",
             radial=shared_radial,
+            abbrev=abbrev,
         )
         _write_scores_csv(term_df, mode_output, f"{stem}_scores", label=RADAR_TERM_TITLES[term])
         _write_scores_tex(term_df, mode_output, f"{stem}_scores", caption=term_title)
@@ -375,19 +415,19 @@ def _write_mode_artifacts(  # noqa: PLR0913
         mode_output,
         colormap,
         "ID/OOD Score Decomposition",
-        reference_label,
+        subtitle,
         "score_decomposition",
     )
 
     # Combined ranking: sorted (best first) bar chart + CSV + LaTeX.
-    combined_title = f"{COMBINED_TITLE} ({reference_mode})"
+    combined_title = f"{COMBINED_TITLE} ({reference_mode}, {axis_label})"
     combined_sorted = scores[COMBINED_TERM].sort_values(COMBINED_COLUMN, ascending=False)
     plot_combined_ranking(
         scores[COMBINED_TERM],
         mode_output,
         colormap,
         COMBINED_TITLE,
-        reference_label,
+        subtitle,
         f"{COMBINED_FILE_STEM}_ranking",
     )
     _write_scores_csv(combined_sorted, mode_output, f"{COMBINED_FILE_STEM}_scores", label=COMBINED_TITLE)
@@ -395,15 +435,16 @@ def _write_mode_artifacts(  # noqa: PLR0913
 
 
 def run_robustness_scores_analysis(config: DictConfig, log: Logger, output_path: Path) -> None:
-    """Run score analysis for each configured reference mode.
+    """Run score analysis for each configured aggregation axis and reference mode.
 
-    For each ``config.score.reference_modes`` entry, computes per-model per-metric ID/OOD scores from the combined
-    results file and, under ``output_path/<folder>/`` (folder from :data:`SUMMARY_FOLDERS`, e.g. ``quality_naive``),
-    writes a radar plot, CSV table and LaTeX table for each of the two axes (stems from :data:`RADAR_TERM_STEMS`, e.g.
+    For each ``config.score.aggregate_over`` axis (folder from :data:`AXIS_FOLDERS`, e.g. ``per_metric``) and each
+    ``config.score.reference_modes`` entry, computes per-model ID/OOD scores from the combined results file and, under
+    ``output_path/<axis>/<folder>/`` (folder from :data:`SUMMARY_FOLDERS`, e.g. ``quality_naive``), writes a radar plot,
+    CSV table and LaTeX table for each of the two score terms (stems from :data:`RADAR_TERM_STEMS`, e.g.
     ``seen_score``/``unseen_score``); an ID-vs-OOD decomposition scatter; and the combined robustness ranking
-    (per-metric ``sqrt(id * ood)``) as a sorted bar chart with its CSV and LaTeX table. Finally, writes a single
-    top-level ``robustness_summary.png`` combining every reference mode as a column (Seen radar / Unseen radar /
-    Combined ranking) with a single shared model legend.
+    (per-column ``sqrt(id * ood)``) as a sorted bar chart with its CSV and LaTeX table. Each axis folder also gets a
+    ``robustness_summary.png`` combining every reference mode as a column (Seen radar / Unseen radar / Combined
+    ranking) with a single shared model legend.
 
     Args:
         config: Analysis configuration (``benchmarks_filepath``, ``benchmarks``, ``models_to_compare``,
@@ -427,47 +468,60 @@ def run_robustness_scores_analysis(config: DictConfig, log: Logger, output_path:
     benchmarks: list[tuple[str, str, str, str]] = [
         (key, spec.name, spec.seen, spec.unseen) for key, spec in iter_benchmarks(config)
     ]
+    # Short rim labels for the benchmark-column radars, keyed by the display name the score columns carry.
+    benchmark_abbrevs = {str(spec.name): str(spec.abbrev) for _key, spec in iter_benchmarks(config) if "abbrev" in spec}
 
     score_cfg = config.score
 
-    # Collected per mode (in config order) to render the single combined Quality-vs-Stability summary after the loop.
-    mode_results: list[tuple[str, pd.DataFrame, pd.DataFrame, pd.DataFrame, tuple[float, float, float, NDArray]]] = []
-    for reference_mode in score_cfg.reference_modes:
-        log.info("Computing scores for reference mode '%s'", reference_mode)
-        scores = compute_robustness_scores(
-            metrics_df,
-            benchmarks,
-            metrics,
-            models_to_compare,
-            reference_mode=reference_mode,
-            aggregate=str(score_cfg.aggregate),
-            uniform_key=str(score_cfg.uniform_key),
-        )
-        if scores[COMBINED_TERM].empty:
-            log.warning("No models scored for reference mode '%s'; skipping.", reference_mode)
-            continue
+    for axis in score_cfg.aggregate_over:
+        aggregate_over = str(axis)
+        axis_output = output_path / AXIS_FOLDERS.get(aggregate_over, aggregate_over)
+        axis_label = AXIS_LABELS.get(aggregate_over, aggregate_over)
+        abbrev = benchmark_abbrevs if aggregate_over == METRIC_AXIS else None
 
-        mode_output = output_path / str(SUMMARY_FOLDERS.get(reference_mode, reference_mode))
-        reference_label = _reference_label(reference_mode)  # plot subtitle, e.g. "Naive-Relative"
-        print(f"\n=== Scores: {reference_mode} ({len(scores[ID_TERM])} models) ===")
+        # Collected per mode (in config order) to render this axis' combined Quality-vs-Stability summary.
+        mode_results: list[
+            tuple[str, pd.DataFrame, pd.DataFrame, pd.DataFrame, tuple[float, float, float, NDArray]]
+        ] = []
+        for reference_mode in score_cfg.reference_modes:
+            log.info("Computing scores for reference mode '%s' aggregated over %s", reference_mode, aggregate_over)
+            scores = compute_robustness_scores(
+                metrics_df,
+                benchmarks,
+                metrics,
+                models_to_compare,
+                reference_mode=reference_mode,
+                aggregate=str(score_cfg.aggregate),
+                uniform_key=str(score_cfg.uniform_key),
+                aggregate_over=aggregate_over,
+            )
+            if scores[COMBINED_TERM].empty:
+                log.warning("No models scored for reference mode '%s'; skipping.", reference_mode)
+                continue
 
-        shared_radial = _shared_radial(scores)
-        _write_mode_artifacts(
-            scores,
-            mode_output,
-            colormap,
-            reference_mode=reference_mode,
-            reference_label=reference_label,
-            shared_radial=shared_radial,
-        )
+            mode_output = axis_output / str(SUMMARY_FOLDERS.get(reference_mode, reference_mode))
+            reference_label = _reference_label(reference_mode)  # plot subtitle, e.g. "Naive-Relative"
+            print(f"\n=== Scores: {reference_mode} / {aggregate_over} ({len(scores[ID_TERM])} models) ===")
 
-        # The summary renders finished header text, so resolve the mode's display label here rather than there.
-        mode_label = SUMMARY_LABELS.get(reference_mode, reference_label)
-        column_title = f"{mode_label} ({reference_label})"
-        mode_results.append((column_title, scores[ID_TERM], scores[OOD_TERM], scores[COMBINED_TERM], shared_radial))
+            shared_radial = _shared_radial(scores)
+            _write_mode_artifacts(
+                scores,
+                mode_output,
+                colormap,
+                reference_mode=reference_mode,
+                reference_label=reference_label,
+                axis_label=axis_label,
+                shared_radial=shared_radial,
+                abbrev=abbrev,
+            )
 
-    # Single combined summary spanning all reference modes (columns), written at the top level.
-    plot_combined_summary(mode_results, output_path, colormap, SUMMARY_FILE_STEM)
+            # The summary renders finished header text, so resolve the mode's display label here rather than there.
+            mode_label = SUMMARY_LABELS.get(reference_mode, reference_label)
+            column_title = f"{mode_label} ({reference_label})"
+            mode_results.append((column_title, scores[ID_TERM], scores[OOD_TERM], scores[COMBINED_TERM], shared_radial))
+
+        # Single combined summary spanning all reference modes (columns), written at this axis' top level.
+        plot_combined_summary(mode_results, axis_output, colormap, SUMMARY_FILE_STEM, abbrev=abbrev)
 
     print("\n✓ Robustness score analysis complete!")
     log.info("Robustness score analysis complete!")
