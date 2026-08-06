@@ -2,6 +2,10 @@
 
 A *benchmark* defines a train→test **distribution shift** over the single canonical scenario pool (`variants/base`, produced in [DATA_PREPARATION.md](DATA_PREPARATION.md)). It does this by deciding how the pool is re-split into train/validation/testing and — for the perturbation benchmarks — by generating perturbed copies of the scenes. See [DATA_PREPARATION.md](DATA_PREPARATION.md) for the full from-scratch pipeline (decode → benchmark → build agent-centric cache → train).
 
+<p align="center">
+  <img width="50%" alt="Image" src="https://github.com/user-attachments/assets/0fe00e2d-f8f5-4d38-92d3-1d6d8a308746" />
+</p>
+
 ## How benchmarks are created and consumed
 
 Benchmark creation only computes a **split** (lists of scenario IDs) and, for the background benchmarks, writes **perturbed variant stores** — it never copies or duplicates the scenario data.
