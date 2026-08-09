@@ -17,7 +17,7 @@
 
 # ![WIP](https://img.shields.io/badge/status-WIP-orange) ControlledShifts
 
-A framework for the **standardized evaluation of trajectory prediction models under distribution shift**. Measuring robustness is largely ad hoc — each method commits to its own axis of generalization, so results cannot be compared. Rather than collecting new data, ControlledShifts re-splits an existing corpus into **seen** and **unseen** partitions through a shared characterization-and-splitting formulation, instantiated across heterogeneous axes of variation. Three layers implement it:
+A framework for the **standardized evaluation of trajectory prediction models under distribution shift**. Measuring robustness is largely ad hoc — each method commits to its own axis of generalization, making robustness comparison difficult. Rather than collecting new data, ControlledShifts re-splits an existing corpus into **seen** and **unseen** partitions through a shared characterization-and-splitting formulation, instantiated across heterogeneous axes of variation. Three layers implement it:
 
 1. **Characterization and splitting**: a characterization function scores each scenario along an axis of variation; a splitting function partitions the pool into seen (train/validation) and unseen (test) sets. Where the shift is a scene edit rather than a partition, perturbed variants are generated and paired with their originals under the same split.
 2. **Training and evaluation**: Hydra-configured, Lightning-based training on the seen partition and evaluation on both.
@@ -28,8 +28,7 @@ Axes of variation and models are independent config groups, so either can be add
 This project was a collaboration between **LavoroAI** and **StackAV**.
 
 <!-- TODO: replace with the framework diagram -->
-<img width="100%" alt="ControlledShifts framework diagram" src="" />
-
+<img width="100%" alt="Teaser" src="https://github.com/user-attachments/assets/1f420704-81bd-468e-8eb3-89cc7665d3c7" />
 ## Installation
 
 Clone the repository and install the package in editable mode:
