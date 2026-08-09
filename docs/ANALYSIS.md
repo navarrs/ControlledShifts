@@ -23,7 +23,11 @@ The available [`visualization`](../src/controlledshifts/configs/visualization/) 
 | `viz_non_background_gt` | `non_background_gt` | Only the ground-truth non-background agents, from the label JSONs (`dataset.config.causal_labels_path`). Needs no model outputs. |
 | `viz_trajpred` | `trajpred` | One comparison pane per model: the shared scene context (map, agent history, dimmed ground-truth future) plus that model's predictions. Needs cached model outputs; see `models` below. |
 
-Each config declares a `panes_to_plot` list (values from `SupportedPanes`: `ALL_AGENTS`, `HIGHLIGHT_RELEVANT`, `NON_BACKGROUND_AGENTS_GT`, `NON_BACKGROUND_AGENTS_PRED`, `TRAJECTORY_PREDICTION`) controlling which panes are rendered, one window per pane. In the non-background panes the ego agent is blue, background agents are orange and dimmed to `background_alpha`, and non-background agents keep their regular agent-type color.
+Each config declares a `panes_to_plot` list (values from `SupportedPanes`: `ALL_AGENTS`, `HIGHLIGHT_RELEVANT`, `NON_BACKGROUND_AGENTS_GT`, `NON_BACKGROUND_AGENTS_PRED`, `TRAJECTORY_PREDICTION`) controlling which panes are rendered, one window per pane. In the non-background panes the ego agent is blue, background agents are orange and dimmed to `background_alpha`, and non-background agents keep their regular agent-type color — below, the same scene rendered as `ALL_AGENTS` (left) and `NON_BACKGROUND_AGENTS_GT` (right).
+
+<p align="center">
+<img width="100%" alt="Scenario Panes" src="https://github.com/user-attachments/assets/c8b3e407-01ab-4252-a037-aec08430d591" />
+</p>
 
 Key options:
 
@@ -37,7 +41,11 @@ Key options:
 | `model_experiment` | For generic `model_output` visualizations, the tag used as the output `pane_type` folder. |
 | `models` | For `trajpred`, a list of `{name, batch_cache_path}` entries, one pane each. Scenarios are sampled from the intersection of IDs available across all models so the panes stay aligned. When null, a single top-level `batch_cache_path` renders one pane. |
 
-Outputs are written under `output_dir/<render>/<split_type>/<split>/<pane_type>`, where `render` is `static`/`animated`, `split_type` is the benchmark name, `split` is `train`/`val`/`test`, and `pane_type` is one of `scenario`, `scenario_scored`, `non_background_scenario`, `non_background_scenario_gt`, `trajectory_prediction` (or the `model_experiment` tag).
+Outputs are written under `output_dir/<render>/<split_type>/<split>/<pane_type>`, where `render` is `static`/`animated`, `split_type` is the benchmark name, `split` is `train`/`val`/`test`, and `pane_type` is one of `scenario`, `scenario_scored`, `non_background_scenario`, `non_background_scenario_gt`, `trajectory_prediction` (or the `model_experiment` tag). A `trajpred` render of one scene across every model, each pane sharing the same map, history and dimmed ground-truth future:
+
+<p align="center">
+<img width="4847" height="1877" alt="All Benchmarks Trajpred" src="https://github.com/user-attachments/assets/16a573e0-3e52-46d9-acbb-a8468baf9a2b"  />
+</p>
 
 <details>
 <summary><b>Producing a model-output cache</b> — needed for the <code>trajpred</code> and <code>model_output</code> visualizations.</summary>
@@ -110,7 +118,33 @@ benchmarks:
 
 For each model in `models_to_compare`, the seen and unseen values are looked up independently and joined by model name, so a benchmark's seen and unseen splits may come from different training runs. `latex` is the macro the table prints for the benchmark; models use the macros in `MODEL_MACRO_MAP`.
 
-Writes per-benchmark comparison plots under `<output_path>/<benchmark>/` and one combined LaTeX table spanning all benchmarks to `<output_path>/results.tex`. Each benchmark block ends with a mean row (mean seen, mean unseen, mean OOD gap), and the table closes with an overall-mean row. The `table` block holds the paper-specific strings (`caption`, `seen_label`, `unseen_label`, `robustness_label`) and `include_overall_mean`, which defaults to `false` and writes that closing row as commented-out LaTeX.
+Writes four comparison plots per benchmark under `<output_path>/<benchmark>/` — `distribution_shift_comparison.png` (seen, unseen and the OOD gap side by side), `benchmark_comparison.png`, `grouped_comparison.png` and `performance_gaps.png` — and one combined LaTeX table spanning all benchmarks to `<output_path>/results.tex`. Each benchmark block ends with a mean row (mean seen, mean unseen, mean OOD gap), and the table closes with an overall-mean row. The `table` block holds the paper-specific strings (`caption`, `seen_label`, `unseen_label`, `robustness_label`) and `include_overall_mean`, which defaults to `false` and writes that closing row as commented-out LaTeX.
+
+`distribution_shift_comparison.png` for each of the four benchmarks the config enables. Uniform is the no-shift control, so its gap panel is the noise floor the other three should be read against:
+
+**Uniform**
+
+<p align="center">
+<img width="6646" height="1741" alt="Uniform Distribution Shift Comparison" src="https://github.com/user-attachments/assets/7746d5e7-6775-4574-9e0c-81f9ac4d0be0" />
+</p>
+
+**BackgroundAgentsHard**
+
+<p align="center">
+<img width="6647" height="1741" alt="BackgroundAgentsHard Distribution Shift Comparison"  src="https://github.com/user-attachments/assets/69df6794-ee2b-4461-a5b9-d062dd1884a7" />
+</p>
+
+**EgoSafeShift**
+
+<p align="center">
+<img width="6647" height="1741" alt="EgoSafeShift Distribution Shift Comparison" src="https://github.com/user-attachments/assets/a293c385-7b8e-43be-a28d-ee3ae02a44f0" />
+</p>
+
+**Environments**
+
+<p align="center">
+<img width="6645" height="1741" alt="Environments Distribution Shift Comparison" src="https://github.com/user-attachments/assets/ac160cda-4131-4d46-a3f3-b62c0d8820ac" />
+</p>
 
 The table's last two columns (`table.add_robustness_scores`, on by default) are the robustness scores of [Robustness Scores](#robustness-scores), but computed *per benchmark* rather than aggregated across them: quality is scored against that block's Naive row and stability against the model's row in the benchmark named by `table.uniform_key`. Higher is better and the highest per column is bolded; stability inside the Uniform block is `1.000` for every model by construction (it is its own reference), so nothing is bolded there.
 
@@ -161,7 +195,11 @@ Two reference modes are produced:
 For each axis and mode it writes, under `<output_path>/<axis>/<folder>/` (`naive_relative` → `quality_naive`, `uniform_relative` → `stability_uniform`):
 - a radar plot, CSV and LaTeX table per score term (`seen_score_*`, `unseen_score_*`), with a dashed `1.0` reference ring;
 - `score_decomposition.png` — one panel per score column placing each model at `(id_score, ood_score)`, reference at `(1, 1)`. The upper-right quadrant beats the reference on both; the dashed `y = x` diagonal marks "degrades like the reference" (above it = more shift-robust);
-- the combined ranking as a sorted bar chart (`combined_robustness_ranking.png`) plus CSV and LaTeX table.
+- the combined ranking as a sorted bar chart (`combined_robustness_ranking.png`, below) plus CSV and LaTeX table.
+
+<p align="center">
+<img width="4847" height="1877" alt="Robustness Ranking" src="https://github.com/user-attachments/assets/1d5744d3-8743-475c-a89a-9965b270e46a" />
+</p>
 
 Each axis folder also gets `<output_path>/<axis>/robustness_summary.png`: a 3x2 grid whose columns are the two modes (Quality / Stability) and whose rows are the Seen radar, Unseen radar and Combined ranking, under a shared model legend.
 
@@ -182,7 +220,11 @@ benchmarks:
 
 Counts (non-background = `causal_ids` + ego; background = everything else, via the same `get_background_mask` the benchmarks use) are intrinsic to a scenario, so they are computed once over `num_workers` processes and cached to `<output_path>/per_scenario_counts.csv`.
 
-Writes, under `<output_path>/` (`outputs/background_agents_distribution_analysis/`): the cached `per_scenario_counts.csv`, the bucketed `background_agents_distribution.csv`, a per-benchmark/per-split `summary.csv`, and the [distribution plots](#shared-conventions) for each quantity in `quantities` (`n_non_background`, `n_background`, `frac_background`, `n_total`).
+Writes, under `<output_path>/` (`outputs/background_agents_distribution_analysis/`): the cached `per_scenario_counts.csv`, the bucketed `background_agents_distribution.csv`, a per-benchmark/per-split `summary.csv`, and the [distribution plots](#shared-conventions) for each quantity in `quantities` (`n_non_background`, `n_background`, `frac_background`, `n_total`). The expected signature is visible below: `background_agents` overlaps across its three splits, while `background_agents_hard` pushes its test split toward higher background-agent counts.
+
+<p align="center">
+  <img width="3200" height="2844" alt="Background Agents" src="https://github.com/user-attachments/assets/6f20ee72-cfa2-4afa-8587-b5286066bcb4" />
+</p>
 
 ### Ego-SafeShift Score Distribution
 
@@ -197,7 +239,11 @@ benchmarks:
 ```
 
 Writes, under `<output_path>/`: `ego_safeshift_distribution.csv`, a per-benchmark/per-split `summary.csv`, and the
-[distribution plots](#shared-conventions) for each quantity in `quantities`.
+[distribution plots](#shared-conventions) for each quantity in `quantities` — below, the `ego_safeshift` test split sits above its train and validation splits, while the `uniform` splits coincide.
+
+<p align="center">
+<img width="3982" height="1746" alt="Ego SafeShift" src="https://github.com/user-attachments/assets/99a04cb7-d6f3-4878-b3d0-19c24a54648e" />
+</p>
 
 ### Environments Distribution
 
@@ -214,7 +260,17 @@ clustering_algorithm: ward
 uv run -m controlledshifts.run_analysis analysis=environments_distribution
 ```
 
-Writes, under `<output_path>/`: `environments_embedding.csv`, `tsne.png` (the embedding stacked vertically — coloured by cluster on top, by train/validation/testing split on the bottom), and `silhouette.png` (per-cluster bars with the overall mean marked). Set `show_axes: true` to render the TSNE subplots with axes and labels; by default they are a bare scatter.
+Writes, under `<output_path>/`: `environments_embedding.csv`, `tsne.png` (two side-by-side panels sharing the y-axis — coloured by cluster on the left, by train/validation/testing split on the right, each with its own legend below), and `silhouette.png` (per-cluster bars with the overall mean marked). Set `show_axes: true` to render the TSNE subplots with axes and labels; by default they are a bare scatter.
+
+<p align="center">
+<img width="5636" height="2303" alt="Environments" src="https://github.com/user-attachments/assets/152910f8-8c86-421f-b96a-09313e4c3a67" />
+</p>
+
+The road-topology graphs the descriptors are computed from can be inspected per cluster, but they come from benchmark creation rather than this analysis: set `visualize_cluster_graphs=true` in [`benchmark/environments.yaml`](../src/controlledshifts/configs/benchmark/environments.yaml) and up to `n_examples` graphs per cluster are written to `<cache_path>/cluster_<id>/` (see [BENCHMARKS.md](BENCHMARKS.md#environments)).
+
+<p align="center">
+<img width="3292" height="7512" alt="Graph Analysis" src="https://github.com/user-attachments/assets/19e43124-2d53-41a9-a35f-cff896d97a20" />
+</p>
 
 ### Scenario Overlap
 
@@ -232,7 +288,11 @@ benchmarks:
 
 For each split it builds a symmetric benchmark x benchmark matrix of the Jaccard index `|A ∩ B| / |A ∪ B|` over scenario IDs. Benchmarks built on a shared reference split (e.g. `background_agents` vs `uniform`) land near 1.0; benchmarks that resample the population (e.g. `background_agents_hard`) drop well below.
 
-Writes, under `<output_path>/`: `scenario_overlap.png` (one annotated Jaccard heatmap per split, sharing a colorbar), a tidy `scenario_overlap.csv` with the raw intersection counts, and an `overlaps/` subdirectory holding the overlapping scenario IDs as JSON — one `<BenchmarkA>_<BenchmarkB>.json` per pair plus `all_benchmarks.json` for the intersection common to every benchmark.
+Writes, under `<output_path>/`: `scenario_overlap.png` (one annotated Jaccard heatmap per split, sharing a colorbar), a tidy `scenario_overlap.csv` with the raw intersection counts, and an `overlaps/` subdirectory holding the overlapping scenario IDs as JSON — one `<BenchmarkA>_<BenchmarkB>.json` per pair plus `all_benchmarks.json` for the intersection common to every benchmark. In the heatmaps below, the near-1.0 cells are the benchmarks sharing a reference split and the low cells are the ones that resample the population.
+
+<p align="center">
+<img width="4225" height="1728" alt="Benchmark Overlap" src="https://github.com/user-attachments/assets/a09bd0d1-ead3-4717-8f8b-7e11249d6016" />
+</p>
 
 ### Shared conventions
 
