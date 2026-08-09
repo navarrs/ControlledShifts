@@ -29,6 +29,7 @@ This project was a collaboration between **LavoroAI** and **StackAV**.
 
 <!-- TODO: replace with the framework diagram -->
 <img width="100%" alt="Teaser" src="https://github.com/user-attachments/assets/1f420704-81bd-468e-8eb3-89cc7665d3c7" />
+
 ## Installation
 
 Clone the repository and install the package in editable mode:
