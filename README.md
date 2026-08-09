@@ -17,6 +17,8 @@
 
 # ![WIP](https://img.shields.io/badge/status-WIP-orange) ControlledShifts
 
+<img width="100%" alt="Teaser" src="https://github.com/user-attachments/assets/1f420704-81bd-468e-8eb3-89cc7665d3c7" />
+
 A framework for the **standardized evaluation of trajectory prediction models under distribution shift**. Measuring robustness is largely ad hoc — each method commits to its own axis of generalization, making robustness comparison difficult. Rather than collecting new data, ControlledShifts re-splits an existing corpus into **seen** and **unseen** partitions through a shared characterization-and-splitting formulation, instantiated across heterogeneous axes of variation. Three layers implement it:
 
 1. **Characterization and splitting**: a characterization function scores each scenario along an axis of variation; a splitting function partitions the pool into seen (train/validation) and unseen (test) sets. Where the shift is a scene edit rather than a partition, perturbed variants are generated and paired with their originals under the same split.
@@ -26,9 +28,6 @@ A framework for the **standardized evaluation of trajectory prediction models un
 Axes of variation and models are independent config groups, so either can be added without touching the other. Three complementary benchmarks target behavioral and topological shifts relevant to the ego agent — Background Agents, Ego-SafeShift, and Environments — alongside an IID control and additional variants; see [BENCHMARKS.md](docs/BENCHMARKS.md). Demonstrated on [Waymo Open Motion](https://waymo.com/open); scenario scoring builds on [SafeShift](https://github.com/cmubig/SafeShift) via [ScenarioCharacterization](https://github.com/navarrs/ScenarioCharacterization).
 
 This project was a collaboration between **LavoroAI** and **StackAV**.
-
-<!-- TODO: replace with the framework diagram -->
-<img width="100%" alt="Teaser" src="https://github.com/user-attachments/assets/1f420704-81bd-468e-8eb3-89cc7665d3c7" />
 
 ## Installation
 
