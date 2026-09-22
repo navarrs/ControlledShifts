@@ -70,4 +70,14 @@ Run `./tests/run_tests.sh` to run the test suite (`-c <category>` for a single c
 ## Citing
 
 ```
+@misc{navarro2026controlledshifts,
+  title        = {{ControlledShifts}: Towards Standardizing Robustness Evaluation in Trajectory Prediction Under Distribution Shifts},
+  author       = {Navarro, Ingrid and Ortega-Kral, Pablo and Duan, Yutong and Francis, Jonathan and Oh, Jean},
+  year         = {2026},
+  eprint       = {2608.17882},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.RO},
+  url          = {https://arxiv.org/abs/2608.17882},
+  note         = {Preprint: arXiv:2608.17882}
+}
 ```
